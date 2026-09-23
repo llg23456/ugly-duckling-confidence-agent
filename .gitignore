@@ -1,0 +1,58 @@
+# Android / Gradle build outputs
+.gradle/
+.gradle-user/
+.android-user/
+.kotlin/
+**/build/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Local Android SDK and IDE state
+local.properties
+*.iml
+.idea/
+
+# Signing credentials
+*.jks
+*.keystore
+keystore.properties
+
+# Secrets and local environment files (keep templates)
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Python environments and caches
+.venv/
+venv/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local databases, runtime uploads and generated test media
+*.db
+*.sqlite
+*.sqlite3
+server/uploads/
+server/tmp/
+server/tts-test.*
+
+# Packaged apps and logs
+*.apk
+*.aab
+*.log
+
+# OS/editor leftovers
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.tmp
