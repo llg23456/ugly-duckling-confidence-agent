@@ -1,6 +1,7 @@
 package com.testconnection.confidence_agent.data.remote
 
 import com.testconnection.confidence_agent.BuildConfig
+import com.testconnection.confidence_agent.data.model.UserProfile
 import java.io.DataOutputStream
 import java.io.File
 import java.net.HttpURLConnection
@@ -15,6 +16,13 @@ data class ChatApiReply(
     val isMock: Boolean,
     val userText: String? = null,
     val modality: String = "text",
+)
+
+data class OnboardingReply(
+    val profile: UserProfile,
+    val missingFields: List<String>,
+    val followUp: String?,
+    val complete: Boolean,
 )
 
 class ChatApiClient(
@@ -104,13 +112,76 @@ class ChatApiClient(
         }
     }
 
+    suspend fun transcribeAudio(file: File): String = withContext(Dispatchers.IO) {
+        val response = sendMultipartRaw(
+            path = "/api/v1/multimodal/transcribe",
+            fields = emptyMap(),
+            fileName = file.name,
+            mimeType = "audio/wav",
+            fileBytes = file.readBytes(),
+        )
+        JSONObject(response).getString("transcript")
+    }
+
+    suspend fun analyzeOnboarding(transcript: String, profile: UserProfile): OnboardingReply = withContext(Dispatchers.IO) {
+        val connection = (URL("${baseUrl.trimEnd('/')}/api/v1/onboarding/analyze").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 10_000
+            readTimeout = 60_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            val body = JSONObject()
+                .put("transcript", transcript)
+                .put("existing_profile", profile.toJson())
+                .toString()
+            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val status = connection.responseCode
+            val responseText = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (status !in 200..299) throw IllegalStateException("画像服务返回 $status")
+            val json = JSONObject(responseText)
+            val missingJson = json.optJSONArray("missing_fields")
+            val missing = buildList {
+                if (missingJson != null) for (index in 0 until missingJson.length()) add(missingJson.getString(index))
+            }
+            OnboardingReply(
+                profile = UserProfile.fromJson(json.getJSONObject("profile")),
+                missingFields = missing,
+                followUp = json.optString("follow_up").takeIf { it.isNotBlank() && it != "null" },
+                complete = json.optBoolean("complete"),
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private suspend fun sendMultipart(
         path: String,
         fields: Map<String, String>,
         fileName: String,
         mimeType: String,
         fileBytes: ByteArray,
-    ): ChatApiReply = withContext(Dispatchers.IO) {
+    ): ChatApiReply {
+        val responseText = sendMultipartRaw(path, fields, fileName, mimeType, fileBytes)
+        val json = JSONObject(responseText)
+        return ChatApiReply(
+            text = json.getString("reply"),
+            isMock = json.optBoolean("mock", false),
+            userText = json.optString("user_text").takeIf { it.isNotBlank() },
+            modality = json.optString("modality", "text"),
+        )
+    }
+
+    private suspend fun sendMultipartRaw(
+        path: String,
+        fields: Map<String, String>,
+        fileName: String,
+        mimeType: String,
+        fileBytes: ByteArray,
+    ): String = withContext(Dispatchers.IO) {
         val boundary = "DuckBoundary${UUID.randomUUID()}"
         val connection = (URL("${baseUrl.trimEnd('/')}$path").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -147,13 +218,7 @@ class ChatApiClient(
                 val detail = runCatching { JSONObject(responseText).optString("detail") }.getOrNull()
                 throw IllegalStateException(detail?.takeIf { it.isNotBlank() } ?: "服务返回 $status")
             }
-            val json = JSONObject(responseText)
-            ChatApiReply(
-                text = json.getString("reply"),
-                isMock = json.optBoolean("mock", false),
-                userText = json.optString("user_text").takeIf { it.isNotBlank() },
-                modality = json.optString("modality", "text"),
-            )
+            responseText
         } finally {
             connection.disconnect()
         }

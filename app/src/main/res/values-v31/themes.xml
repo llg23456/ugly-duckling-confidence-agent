@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
     <style name="Theme.Confidence_agent" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowSplashScreenBackground">#FFF8EB</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/duck_main</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#FFF8EB</item>
         <item name="android:windowBackground">#FFF8EB</item>
-        <item name="android:colorAccent">#557565</item>
         <item name="android:navigationBarColor">#FFF8EB</item>
         <item name="android:statusBarColor">#FFF8EB</item>
         <item name="android:windowLightStatusBar">true</item>

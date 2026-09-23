@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import chat_router, events_router, multimodal_router, reviews_router, support_router
+from app.api.routes import chat_router, events_router, multimodal_router, onboarding_router, reviews_router, support_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -42,5 +42,6 @@ def health() -> dict[str, str | bool]:
 app.include_router(chat_router, prefix=settings.api_prefix)
 app.include_router(events_router, prefix=settings.api_prefix)
 app.include_router(multimodal_router, prefix=settings.api_prefix)
+app.include_router(onboarding_router, prefix=settings.api_prefix)
 app.include_router(support_router, prefix=settings.api_prefix)
 app.include_router(reviews_router, prefix=settings.api_prefix)

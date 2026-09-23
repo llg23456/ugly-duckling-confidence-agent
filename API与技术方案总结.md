@@ -93,6 +93,9 @@ server/
 - `POST /api/v1/multimodal/image`
 - `POST /api/v1/multimodal/audio`
 - `POST /api/v1/multimodal/speech`：JSON `text` + `voice`，直接返回音频字节
+- `POST /api/v1/multimodal/transcribe`：只转写语音，不生成聊天回复
+- `GET /api/v1/onboarding/schema`：初始画像字段和开场文案
+- `POST /api/v1/onboarding/analyze`：合并本轮回答、返回缺项和下一句追问
 - `POST /api/v1/events/extract`
 - `POST /api/v1/support/suggest`
 - `GET /api/v1/reviews/{period}`
@@ -100,6 +103,13 @@ server/
 `/multimodal/speech` 只允许 `Serena` 和 `Ethan`，服务端使用同一百炼 Key 获取短时音频 URL，再下载并代理给 Android，Key 和供应商 URL 均不会进入 APK。Android 本地持久化音色、自动朗读和提示音偏好。
 
 队友后续只替换 service 层或新增可选字段，不改变 Android 已使用的响应结构。主线落地契约见 `../小丑鸭_队友主干功能接手指南.md`。
+
+## 7.1 初始画像边界
+
+- 不通过声音或照片猜测性别、年龄和身份，只提取用户明确表达的信息。
+- 每个字段都有状态：真实值、`unknown`、`prefer_not_to_say` 或 `none`。
+- 后端模型负责提取，程序根据字段表判断是否完成；缺项才继续追问。
+- Android 使用本地 JSON 保存当前画像，正式数据库由后续主干任务迁移。
 
 ## 7. 暂不实现
 

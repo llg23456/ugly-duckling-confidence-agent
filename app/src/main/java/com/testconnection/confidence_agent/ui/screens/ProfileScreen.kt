@@ -2,6 +2,7 @@ package com.testconnection.confidence_agent.ui.screens
 
 import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
@@ -46,6 +48,7 @@ import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.WarmCard
 import com.testconnection.confidence_agent.ui.theme.Danger
+import com.testconnection.confidence_agent.ui.theme.Cream
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
@@ -56,8 +59,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun ProfileScreen(
     contentPadding: PaddingValues,
+    userName: String,
     voicePreferences: VoicePreferences,
     onVoicePreferencesChange: (VoicePreferences) -> Unit,
+    onOpenMemoryCenter: () -> Unit,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -133,7 +138,7 @@ fun ProfileScreen(
                 ) {
                     DuckArt(R.drawable.duck_welcome, "小鸭头像", Modifier.size(118.dp))
                     Column(modifier = Modifier.padding(start = 14.dp).weight(1f)) {
-                        Text("林林", style = MaterialTheme.typography.headlineMedium)
+                        Text(userName, style = MaterialTheme.typography.headlineMedium)
                         Text("小鸭正在慢慢了解你", style = MaterialTheme.typography.bodyMedium, color = InkMuted)
                         Spacer(Modifier.height(12.dp))
                         Button(
@@ -151,7 +156,10 @@ fun ProfileScreen(
                 Column {
                     FakeConfidenceRepository.settings.forEachIndexed { index, entry ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = entry.title == "记忆中心") { onOpenMemoryCenter() }
+                                .padding(horizontal = 18.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Box(
@@ -196,6 +204,8 @@ private fun VoiceSettingsDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = Cream,
+        shape = RoundedCornerShape(30.dp),
         title = { Text("小鸭声音") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

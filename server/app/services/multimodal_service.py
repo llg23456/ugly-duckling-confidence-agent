@@ -92,6 +92,29 @@ def chat_with_audio(
     settings: Settings | None = None,
 ) -> MultimodalChatResponse:
     active_settings = settings or get_settings()
+    transcript = transcribe_audio(audio_bytes, mime_type, audio_format, active_settings)
+
+    chat_response = chat_with_fallback(
+        ChatRequest(device_id=device_id, message=transcript, mode="listen"),
+        settings=active_settings,
+    )
+    if chat_response.mock:
+        raise RuntimeError(chat_response.mock_reason or "Chat fallback was used")
+    return MultimodalChatResponse(
+        modality="audio",
+        user_text=transcript,
+        reply=chat_response.reply,
+        model=active_settings.chat_model,
+    )
+
+
+def transcribe_audio(
+    audio_bytes: bytes,
+    mime_type: str,
+    audio_format: str,
+    settings: Settings | None = None,
+) -> str:
+    active_settings = settings or get_settings()
     response = _client(active_settings).responses.create(
         model=active_settings.chat_model,
         input=[
@@ -111,19 +134,7 @@ def chat_with_audio(
     transcript = response.output_text.strip()
     if not transcript:
         raise RuntimeError("Audio model returned empty transcription")
-
-    chat_response = chat_with_fallback(
-        ChatRequest(device_id=device_id, message=transcript, mode="listen"),
-        settings=active_settings,
-    )
-    if chat_response.mock:
-        raise RuntimeError(chat_response.mock_reason or "Chat fallback was used")
-    return MultimodalChatResponse(
-        modality="audio",
-        user_text=transcript,
-        reply=chat_response.reply,
-        model=active_settings.chat_model,
-    )
+    return transcript
 
 
 def synthesize_speech(

@@ -58,6 +58,7 @@ import kotlinx.coroutines.withContext
 fun HomeScreen(
     contentPadding: PaddingValues,
     viewModel: HomeViewModel,
+    userName: String,
     onOpenVoice: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -111,7 +112,7 @@ fun HomeScreen(
                         }
                     }
                     Surface(shape = CircleShape, color = SagePale, modifier = Modifier.size(42.dp)) {
-                        Box(contentAlignment = Alignment.Center) { Text("林", color = SageDark) }
+                        Box(contentAlignment = Alignment.Center) { Text(userName.take(1), color = SageDark) }
                     }
                 }
             }
@@ -120,7 +121,7 @@ fun HomeScreen(
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("晚上好，林林", style = MaterialTheme.typography.displaySmall)
+                    Text("晚上好，$userName", style = MaterialTheme.typography.displaySmall)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "不管今天怎样，你都已经很努力了。",

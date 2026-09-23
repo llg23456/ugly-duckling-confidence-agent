@@ -2,6 +2,8 @@ package com.testconnection.confidence_agent.data.repository
 
 import com.testconnection.confidence_agent.data.remote.ChatApiClient
 import com.testconnection.confidence_agent.data.remote.ChatApiReply
+import com.testconnection.confidence_agent.data.remote.OnboardingReply
+import com.testconnection.confidence_agent.data.model.UserProfile
 import java.io.File
 
 class ChatRepository(
@@ -22,4 +24,9 @@ class ChatRepository(
 
     suspend fun synthesizeSpeech(text: String, voice: String): ByteArray =
         apiClient.synthesizeSpeech(text, voice)
+
+    suspend fun transcribe(file: File): String = apiClient.transcribeAudio(file)
+
+    suspend fun analyzeOnboarding(text: String, profile: UserProfile): OnboardingReply =
+        apiClient.analyzeOnboarding(text, profile)
 }

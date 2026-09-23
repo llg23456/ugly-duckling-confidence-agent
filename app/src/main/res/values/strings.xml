@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">小丑鸭</string>
+    <string name="widget_today_description">小丑鸭今日成长</string>
+    <string name="widget_month_description">小丑鸭本月足迹</string>
+    <string name="widget_quick_description">小丑鸭快速记录</string>
+    <string name="widget_today_name">小丑鸭·今日成长</string>
+    <string name="widget_month_name">小丑鸭·本月足迹</string>
+    <string name="widget_quick_name">小丑鸭·快速记录</string>
 </resources>
