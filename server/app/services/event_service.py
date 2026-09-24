@@ -51,15 +51,17 @@ def decision(candidate: EventCandidate) -> tuple[float, str]:
 
 def extract_candidate(text: str, existing: list[str]) -> EventCandidate:
     settings = get_settings()
-    client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.dashscope_base_url, timeout=25, max_retries=1)
+    client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.dashscope_base_url, timeout=35, max_retries=0)
     response = client.chat.completions.create(
         model=settings.extraction_model,
         messages=[
-            {"role": "system", "content": "从用户原话提取一件真实成长事件，仅输出 JSON 对象。没有具体事件时 fact 为空。不得补造事实。评估五项 0-1 分；涉及健康、关系冲突、隐私时 sensitivity 为 medium 或 high；与已有记忆矛盾时 is_conflicting=true。字段：fact,feeling,attempt,support_received,people,confidence,sensitivity,is_conflicting,long_term_value,growth_significance,specificity,future_reuse,support_value。"},
+            {"role": "system", "content": "从用户原话提取一件真实成长事件，仅输出 JSON 对象，不得补造事实。没有具体事件时 fact 为空字符串。字段及类型必须严格如下：fact、feeling、attempt、support_received 是描述原话的字符串，后三项允许 null；people 是字符串数组；confidence、long_term_value、growth_significance、specificity、future_reuse、support_value 是 0 到 1 的数字；sensitivity 是 low、medium、high 之一；is_conflicting 是布尔值。仅对 long_term_value、growth_significance、specificity、future_reuse、support_value 这五项评分。涉及健康、关系冲突、隐私时 sensitivity 为 medium 或 high；与已有记忆矛盾时 is_conflicting 为 true。所有字段都必须出现。"},
             {"role": "user", "content": json.dumps({"message": text, "existing_memories": existing[:10]}, ensure_ascii=False)},
         ],
         response_format={"type": "json_object"},
         temperature=0,
+        reasoning_effort="none",
+        max_tokens=550,
     )
     return EventCandidate.model_validate_json(response.choices[0].message.content or "")
 
