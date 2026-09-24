@@ -6,6 +6,9 @@ data class ChatMessage(
     val text: String,
     val fromUser: Boolean,
     val imageBytes: ByteArray? = null,
+    val imagePath: String? = null,
+    val id: Long? = null,
+    val modality: String = "text",
 )
 
 data class GrowthMoment(

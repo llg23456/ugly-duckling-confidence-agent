@@ -6,7 +6,8 @@
 
 - `GET /health`：服务和模型配置状态。
 - `POST /api/v1/chat`：文字聊天。
-- `POST /api/v1/multimodal/image`：`multipart/form-data`，字段为 `file` 与 `prompt`；支持 JPEG、PNG、WebP，最大 8 MB。
+- `GET /api/v1/conversations/{device_id}/messages`：按时间顺序读取设备会话历史；不存在的设备返回空列表。
+- `POST /api/v1/multimodal/image`：`multipart/form-data`，字段为 `file`、`prompt` 与 `device_id`；支持 JPEG、PNG、WebP，最大 8 MB。旧客户端可省略 `device_id`。
 - `POST /api/v1/multimodal/audio`：`multipart/form-data`，字段为 `file` 与 `device_id`；支持 WAV、MP3、AAC、AMR、3GP，最大 6 MB。
 - `POST /api/v1/multimodal/speech`：JSON 字段为 `text` 与 `voice`，`voice` 只允许 `Serena` 或 `Ethan`，成功时直接返回 WAV 音频。
 - `POST /api/v1/multimodal/transcribe`：上传音频，只返回转写，不生成陪伴回复。
@@ -16,6 +17,8 @@
 - `POST /api/v1/support/suggest`：支持圈建议，当前仍为 Mock。
 - `GET /api/v1/reviews/{period}`：周期回顾，当前仍为 Mock。
 
+文字、图片和语音聊天现在共用按 `device_id` 区分的 SQLite 会话。生成回复前读取最近 12 条消息；成功后把用户消息和回复写入 `messages`，响应额外返回两个消息 ID。数据库在首次访问时自动创建于 `DATABASE_URL` 指定位置（默认 `server/confidence_agent.db`）。上传的原始图片、音频不写入服务端数据库，`media_ref` 仅保存 SHA-256 来源标识。
+
 音频接口先让 `qwen3.8-omni-flash`输出转写，再把转写送入统一的小鸭对话服务，因此 Android 可以把“用户转写 + 小鸭回复”写回同一会话。第一版是轮次式录音，不是 WebSocket 全双工电话。
 
 回复朗读使用 `qwen3-tts-flash`。后端先获取有效期 24 小时的临时音频 URL，再立即下载并把音频字节代理给 Android；客户端不接触百炼 Key，也不依赖临时 URL 的有效期。
@@ -24,10 +27,9 @@
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-Copy-Item .env.example .env
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 - 健康检查：`http://127.0.0.1:8000/health`

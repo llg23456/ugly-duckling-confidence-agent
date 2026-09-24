@@ -1,12 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
-
-
-client = TestClient(app)
-
-
-def test_chat_contract() -> None:
+def test_chat_contract(client: TestClient) -> None:
     response = client.post(
         "/api/v1/chat",
         json={"device_id": "demo-device", "message": "我明天要答辩", "mode": "listen"},
@@ -17,7 +11,7 @@ def test_chat_contract() -> None:
     assert payload["strategy"] == "seek_support"
 
 
-def test_support_never_auto_sends() -> None:
+def test_support_never_auto_sends(client: TestClient) -> None:
     response = client.post(
         "/api/v1/support/suggest",
         json={"situation": "想找人陪练", "preferred_supporters": ["classmate"]},

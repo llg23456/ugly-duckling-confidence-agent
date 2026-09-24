@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,7 +56,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.testconnection.confidence_agent.R
-import com.testconnection.confidence_agent.data.repository.FakeConfidenceRepository
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.SectionHeading
@@ -161,9 +161,9 @@ fun HomeScreen(
         )
     }
 
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.size > FakeConfidenceRepository.conversation.size) {
-            listState.animateScrollToItem(2)
+    LaunchedEffect(state.messages.size, state.pendingMessage) {
+        if (state.messages.isNotEmpty() || state.pendingMessage != null) {
+            listState.animateScrollToItem(1 + state.messages.size + if (state.pendingMessage != null) 1 else 0)
         }
     }
 
@@ -219,42 +219,50 @@ fun HomeScreen(
             }
         }
 
-        item {
-            state.messages.forEach { message ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                    horizontalArrangement = if (message.fromUser) Arrangement.Start else Arrangement.End,
+        items(
+            items = state.messages + listOfNotNull(state.pendingMessage),
+            key = { it.id ?: Long.MIN_VALUE },
+        ) { message ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                horizontalArrangement = if (message.fromUser) Arrangement.Start else Arrangement.End,
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(0.84f),
+                    shape = RoundedCornerShape(24.dp),
+                    color = if (message.fromUser) CreamDeep else MaterialTheme.colorScheme.surface,
+                    border = if (message.fromUser) null else BorderStroke(1.dp, WarmOutline),
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(0.84f),
-                        shape = RoundedCornerShape(24.dp),
-                        color = if (message.fromUser) CreamDeep else MaterialTheme.colorScheme.surface,
-                        border = if (message.fromUser) null else BorderStroke(1.dp, WarmOutline),
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            message.imageBytes?.let { bytes ->
-                                val bitmap = remember(bytes) {
-                                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                                }
-                                if (bitmap != null) {
-                                    Image(
-                                        bitmap = bitmap,
-                                        contentDescription = "对话中的图片",
-                                        modifier = Modifier.fillMaxWidth().height(190.dp),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                }
-                            }
-                            if (message.text.isNotBlank()) {
-                                Text(message.text, style = MaterialTheme.typography.bodyLarge)
-                            }
+                        val bitmap = remember(message.imageBytes, message.imagePath) {
+                            when {
+                                message.imageBytes != null -> BitmapFactory.decodeByteArray(
+                                    message.imageBytes, 0, message.imageBytes.size,
+                                )
+                                message.imagePath != null -> BitmapFactory.decodeFile(message.imagePath)
+                                else -> null
+                            }?.asImageBitmap()
+                        }
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "对话中的图片",
+                                modifier = Modifier.fillMaxWidth().height(190.dp),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
+                        if (message.text.isNotBlank()) {
+                            Text(message.text, style = MaterialTheme.typography.bodyLarge)
                         }
                     }
                 }
             }
+        }
+
+        item {
             if (state.sending) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),

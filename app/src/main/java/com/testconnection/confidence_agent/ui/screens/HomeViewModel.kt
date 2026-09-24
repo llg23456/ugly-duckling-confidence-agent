@@ -1,10 +1,10 @@
 package com.testconnection.confidence_agent.ui.screens
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.testconnection.confidence_agent.data.model.ChatMessage
 import com.testconnection.confidence_agent.data.repository.ChatRepository
-import com.testconnection.confidence_agent.data.repository.FakeConfidenceRepository
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -13,7 +13,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
-    val messages: List<ChatMessage> = FakeConfidenceRepository.conversation,
+    val messages: List<ChatMessage> = emptyList(),
+    val pendingMessage: ChatMessage? = null,
     val draft: String = "",
     val sending: Boolean = false,
     val error: String? = null,
@@ -30,11 +31,26 @@ data class PendingChatImage(
     val bytes: ByteArray,
 )
 
-class HomeViewModel(
-    private val repository: ChatRepository = ChatRepository(),
-) : ViewModel() {
+class HomeViewModel(application: Application) : AndroidViewModel(application) {
+    private val repository = ChatRepository(application)
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            repository.observeHistory().collect { messages ->
+                _uiState.update { it.copy(messages = messages) }
+            }
+        }
+        viewModelScope.launch {
+            runCatching { repository.syncHistory() }
+                .onFailure {
+                    _uiState.update { state ->
+                        state.copy(error = "会话暂时无法同步，已显示本地历史。")
+                    }
+                }
+        }
+    }
 
     fun updateDraft(value: String) {
         _uiState.update { it.copy(draft = value, error = null) }
@@ -61,7 +77,7 @@ class HomeViewModel(
 
         _uiState.update {
             it.copy(
-                messages = it.messages + ChatMessage(
+                pendingMessage = ChatMessage(
                     text = message,
                     fromUser = true,
                     imageBytes = image?.bytes,
@@ -81,7 +97,7 @@ class HomeViewModel(
                 .onSuccess { response ->
                     _uiState.update {
                         it.copy(
-                            messages = it.messages + ChatMessage(response.text, fromUser = false),
+                            pendingMessage = null,
                             sending = false,
                             lastReplyWasMock = response.isMock,
                         )
@@ -90,6 +106,9 @@ class HomeViewModel(
                 .onFailure {
                     _uiState.update { state ->
                         state.copy(
+                            pendingMessage = null,
+                            draft = message,
+                            pendingImage = image,
                             sending = false,
                             error = "暂时连不上小鸭服务，请确认电脑端服务已启动。",
                         )
@@ -107,9 +126,6 @@ class HomeViewModel(
                 val transcript = response.userText ?: "[语音消息]"
                 _uiState.update {
                     it.copy(
-                        messages = it.messages +
-                            ChatMessage(transcript, fromUser = true) +
-                            ChatMessage(response.text, fromUser = false),
                         sending = false,
                         lastReplyWasMock = response.isMock,
                         lastVoiceTranscript = transcript,

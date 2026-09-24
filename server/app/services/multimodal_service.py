@@ -53,12 +53,14 @@ def chat_with_image(
     mime_type: str,
     prompt: str,
     settings: Settings | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> MultimodalChatResponse:
     active_settings = settings or get_settings()
     completion = _client(active_settings).chat.completions.create(
         model=active_settings.chat_model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
+            *(history or []),
             {
                 "role": "user",
                 "content": [
@@ -90,6 +92,7 @@ def chat_with_audio(
     audio_format: str,
     device_id: str,
     settings: Settings | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> MultimodalChatResponse:
     active_settings = settings or get_settings()
     transcript = transcribe_audio(audio_bytes, mime_type, audio_format, active_settings)
@@ -97,6 +100,7 @@ def chat_with_audio(
     chat_response = chat_with_fallback(
         ChatRequest(device_id=device_id, message=transcript, mode="listen"),
         settings=active_settings,
+        history=history,
     )
     if chat_response.mock:
         raise RuntimeError(chat_response.mock_reason or "Chat fallback was used")

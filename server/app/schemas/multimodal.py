@@ -9,6 +9,8 @@ class MultimodalChatResponse(BaseModel):
     reply: str
     model: str
     mock: bool = False
+    user_message_id: int | None = None
+    assistant_message_id: int | None = None
 
 
 class SpeechSynthesisRequest(BaseModel):
