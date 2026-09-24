@@ -53,7 +53,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 @Composable
-fun GrowthScreen(contentPadding: PaddingValues, onOpenSource: (Long) -> Unit = {}, onOpenFeedback: () -> Unit = {}, growthViewModel: GrowthViewModel = viewModel()) {
+fun GrowthScreen(contentPadding: PaddingValues, onOpenSource: (Long) -> Unit = {}, onOpenFeedback: () -> Unit = {}, growthViewModel: GrowthViewModel = viewModel(), onOpenVideoStudio: () -> Unit = {}) {
     val state by growthViewModel.state.collectAsState()
     var selectedRecord by remember { mutableStateOf<RecordDraft?>(null) }
     var missingRecordText by remember { mutableStateOf<String?>(null) }
@@ -240,8 +240,8 @@ fun GrowthScreen(contentPadding: PaddingValues, onOpenSource: (Long) -> Unit = {
 
         item {
             OutlinedButton(
-                onClick = {},
-                enabled = false,
+                onClick = onOpenVideoStudio,
+                enabled = state.events.isNotEmpty(),
                 modifier = Modifier.fillMaxWidth().height(54.dp),
                 shape = AppButtonShape,
             ) { Text("生成成长小片", fontWeight = FontWeight.SemiBold) }

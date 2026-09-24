@@ -35,7 +35,9 @@ import androidx.glance.unit.ColorProvider
 import com.testconnection.confidence_agent.MainActivity
 import com.testconnection.confidence_agent.R
 import com.testconnection.confidence_agent.data.model.RecordMode
-import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
+import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
+import com.testconnection.confidence_agent.data.remote.GrowthEvent
+import com.testconnection.confidence_agent.data.remote.ReviewApiClient
 
 private val cream = ColorProvider(Color(0xFFFFFBF2))
 private val ink = ColorProvider(Color(0xFF202421))
@@ -45,7 +47,12 @@ private val sagePale = ColorProvider(Color(0xFFE4EEE7))
 private val peach = ColorProvider(Color(0xFFF5E2D6))
 
 object WidgetUpdater {
-    suspend fun refreshGrowthWidgets(context: Context) {
+    suspend fun refreshGrowthWidgets(context: Context, events: List<GrowthEvent>? = null) {
+        val store = WidgetPrivacyStore(context)
+        if (store.isAllowed()) {
+            val fresh = events ?: runCatching { ReviewApiClient().events(DeviceIdStore(context).get()) }.getOrNull()
+            if (fresh != null) store.update(fresh)
+        }
         TodayGrowthWidget().updateAll(context)
         MonthlyFootprintWidget().updateAll(context)
     }
@@ -64,7 +71,9 @@ private fun Title(text: String) = Text(text, style = TextStyle(color = ink, font
 
 class TodayGrowthWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val latest = LocalRecordRepository(context).load().firstOrNull()
+        val store = WidgetPrivacyStore(context)
+        if (store.isAllowed()) runCatching { store.update(ReviewApiClient().events(DeviceIdStore(context).get())) }
+        val snapshot = store.snapshot()
         provideContent {
             val appContext = LocalContext.current
             Row(
@@ -75,8 +84,8 @@ class TodayGrowthWidget : GlanceAppWidget() {
                     Title("今天也看见自己的进步")
                     Spacer(GlanceModifier.height(8.dp))
                     Text(
-                        latest?.let { it.photoComment.ifBlank { it.text }.ifBlank { "留下一张值得记住的照片" } }
-                            ?: "今天还没有记录，慢慢来也可以。",
+                        if (!snapshot.allowed) "桌面展示尚未开启，打开应用后可自行选择。"
+                        else snapshot.todayText.ifBlank { "今天还没有适合公开展示的事件。" },
                         style = TextStyle(color = muted, fontSize = 14.sp),
                         maxLines = 3,
                     )
@@ -95,7 +104,9 @@ class TodayGrowthWidgetReceiver : GlanceAppWidgetReceiver() {
 
 class MonthlyFootprintWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val count = LocalRecordRepository(context).load().count()
+        val store = WidgetPrivacyStore(context)
+        if (store.isAllowed()) runCatching { store.update(ReviewApiClient().events(DeviceIdStore(context).get())) }
+        val snapshot = store.snapshot()
         provideContent {
             val appContext = LocalContext.current
             Column(
@@ -107,8 +118,8 @@ class MonthlyFootprintWidget : GlanceAppWidget() {
                 Row {
                     Image(ImageProvider(R.drawable.duck_step), "向前走的小鸭", modifier = GlanceModifier.size(70.dp))
                     Column(modifier = GlanceModifier.padding(start = 10.dp)) {
-                        Text("$count 个真实记录", style = TextStyle(color = sage, fontSize = 18.sp, fontWeight = FontWeight.Bold))
-                        Text("我的尝试会慢慢积累", style = TextStyle(color = muted, fontSize = 13.sp))
+                        Text(if (snapshot.allowed) "${snapshot.monthCount} 个可展示事件" else "桌面展示未开启", style = TextStyle(color = sage, fontSize = 18.sp, fontWeight = FontWeight.Bold))
+                        Text(if (snapshot.allowed) "只统计适合公开的真实经历" else "打开应用后可自行选择", style = TextStyle(color = muted, fontSize = 13.sp))
                     }
                 }
             }

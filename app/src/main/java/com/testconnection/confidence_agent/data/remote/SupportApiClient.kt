@@ -34,6 +34,8 @@ data class GrowthEvent(
     val sourceId: Long?,
     val sourceFeedbackId: Long?,
     val sourceRecordId: Long?,
+    val sensitivity: String?,
+    val people: List<String>,
     val createdAt: String,
 )
 

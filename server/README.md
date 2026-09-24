@@ -29,6 +29,9 @@
 - `POST /api/v1/reviews/generate`：按设备、周期及可选起止日期生成并保存回望；空数据不写入总结。
 - `POST /api/v1/reviews/generate-pending-daily`：补生成有真实事件的过去日期的日回望，重复调用不会产生重复总结。
 - `GET /api/v1/reviews/{period}?device_id=...`：读取日、近七天或当月回望及来源 ID；不传 `device_id` 保留旧版 Mock 示例。
+- `POST /api/v1/videos/scripts`：提交 `device_id` 和 1～6 个同设备、非敏感成长事件 ID，生成五段可编辑脚本并保存来源。
+- `GET /api/v1/videos/scripts/{id}?device_id=...`：读取该设备已保存的脚本。
+- `PATCH /api/v1/videos/scripts/{id}`：保存删改后的 2～5 个片段，保留阶段顺序和来源限制。
 
 文字、图片和语音聊天现在共用按 `device_id` 区分的 SQLite 会话。生成回复前读取最近 12 条消息；成功后把用户消息和回复写入 `messages`，响应额外返回两个消息 ID。数据库在首次访问时自动创建于 `DATABASE_URL` 指定位置（默认 `server/confidence_agent.db`）。上传的原始图片、音频不写入服务端数据库，`media_ref` 仅保存 SHA-256 来源标识。
 
@@ -37,6 +40,8 @@ P1 在每轮回复保存后独立提取成长事件。程序按交接文档的�
 P2 在用户主动求助、持续受阻或面临高难任务时把聊天策略设为 `seek_support`。建议从用户自己维护的支持圈中选择对象；没有人选时只给泛称，不假定真实关系。Android 可编辑、复制或主动打开系统分享面板，服务端不会联系任何人。反馈与建议关联，只有用户确认实际得到帮助后才写入 `support_received`；自己的尝试单独写入 `own_effort`。成长页读取真实事件，支持反馈也能追溯到原始反馈。P1 数据库首次启动时自动增补 P2 字段和新表。
 
 P3 在打开应用后同步本地记录并补生成跨日回望；生成失败可在成长页重试。周回望分别呈现自己的尝试、实际帮助、停顿或重新开始及下一步建议；月故事从真实事件中选最多六个关键节点，优先保留受阻经历。每份非空回望存入 `reviews`，记录 `source_event_ids`；同一日期重复生成会复用并在内容变化时更新。Android 节点能打开本机原始文字、转写、照片或语音；数据库自动增补 P3 字段和表。
+
+P4 脚本由真实成长事件生成，记录模型、提示版本、来源和用户修改状态。未启用真实模型时返回明确标记的可编辑模板；模型响应格式无效时返回错误且不写库。Android 使用 Media3 Transformer 1.5.1 在本机合成 15～20 秒、720×1280 的 H.264 MP4，分享必须由用户主动触发。桌面组件默认不公开事件，开启后仅显示低敏感且未命中人物和明显敏感信息过滤的内容；该过滤不能保证识别所有私人信息，开启后应检查预览。
 
 音频接口先让 `qwen3.8-omni-flash`输出转写，再把转写送入统一的小鸭对话服务，因此 Android 可以把“用户转写 + 小鸭回复”写回同一会话。第一版是轮次式录音，不是 WebSocket 全双工电话。
 
@@ -48,7 +53,7 @@ P3 在打开应用后同步本地记录并补生成跨日回望；生成失败�
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+    .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 - 健康检查：`http://127.0.0.1:8000/health`

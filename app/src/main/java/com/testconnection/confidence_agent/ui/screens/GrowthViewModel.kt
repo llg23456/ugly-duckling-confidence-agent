@@ -9,6 +9,7 @@ import com.testconnection.confidence_agent.data.remote.GrowthEvent
 import com.testconnection.confidence_agent.data.remote.ReviewApiClient
 import com.testconnection.confidence_agent.data.remote.ReviewSummary
 import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
+import com.testconnection.confidence_agent.widget.WidgetUpdater
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -43,8 +44,9 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
             var failed = false
             val synced = runCatching { api.syncRecords(deviceId, localRecords.load()) }
                 .onFailure { failed = true }.getOrDefault(emptyList())
-            val events = runCatching { api.events(deviceId) }
-                .onFailure { failed = true }.getOrDefault(_state.value.events)
+            val eventsResult = runCatching { api.events(deviceId) }.onFailure { failed = true }
+            val events = eventsResult.getOrDefault(_state.value.events)
+            if (eventsResult.isSuccess) runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication(), events) }
             val daily = runCatching { api.pendingDaily(deviceId) }
                 .onFailure { failed = true }.getOrDefault(emptyList())
             val period = _state.value.period

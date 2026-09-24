@@ -9,6 +9,7 @@ import com.testconnection.confidence_agent.data.remote.MemoryEvidence
 import com.testconnection.confidence_agent.data.remote.SupportApiClient
 import com.testconnection.confidence_agent.data.remote.SupportSuggestion
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
+import com.testconnection.confidence_agent.widget.WidgetUpdater
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -192,7 +193,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(supportFeedbackLoading = true, error = null) }
         viewModelScope.launch {
             runCatching { supportApi.feedback(deviceId, suggestionId, outcome, ownEffort, supportReceived) }
-                .onSuccess { _uiState.update { it.copy(supportFeedbackLoading = false, supportFeedbackOutcome = outcome) } }
+                .onSuccess {
+                    _uiState.update { it.copy(supportFeedbackLoading = false, supportFeedbackOutcome = outcome) }
+                    runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication()) }
+                }
                 .onFailure { _uiState.update { it.copy(supportFeedbackLoading = false, error = "反馈暂时没有保存，请重试。") } }
         }
     }

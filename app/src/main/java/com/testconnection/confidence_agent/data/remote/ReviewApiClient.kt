@@ -79,6 +79,8 @@ class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
                 row.optLong("source_id").takeIf { it > 0 },
                 row.optLong("source_feedback_id").takeIf { it > 0 },
                 row.optLong("source_record_id").takeIf { it > 0 },
+                row.optString("sensitivity").takeIf { it.isNotBlank() && it != "null" },
+                row.optJSONArray("people")?.let { people -> (0 until people.length()).map { people.getString(it) } } ?: emptyList(),
                 row.getString("created_at"),
             )
         }

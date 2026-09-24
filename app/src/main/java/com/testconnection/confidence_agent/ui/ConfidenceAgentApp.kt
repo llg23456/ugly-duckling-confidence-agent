@@ -28,6 +28,7 @@ import com.testconnection.confidence_agent.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.testconnection.confidence_agent.ui.screens.GrowthScreen
 import com.testconnection.confidence_agent.ui.screens.GrowthViewModel
+import com.testconnection.confidence_agent.ui.screens.VideoStudioScreen
 import com.testconnection.confidence_agent.ui.screens.AppCoverScreen
 import com.testconnection.confidence_agent.ui.screens.HomeScreen
 import com.testconnection.confidence_agent.ui.screens.HomeViewModel
@@ -65,6 +66,7 @@ fun ConfidenceAgentApp(
     var showVoiceCall by rememberSaveable { mutableStateOf(false) }
     var showMemoryCenter by rememberSaveable { mutableStateOf(false) }
     var showSupportCircle by rememberSaveable { mutableStateOf(false) }
+    var showVideoStudio by rememberSaveable { mutableStateOf(false) }
     var sourceMessageId by rememberSaveable { mutableStateOf<Long?>(null) }
     var requestedRecordMode by remember { mutableStateOf(RecordMode.TEXT) }
     var cameraLaunchToken by remember { mutableIntStateOf(0) }
@@ -138,6 +140,11 @@ fun ConfidenceAgentApp(
         return
     }
 
+    if (showVideoStudio) {
+        VideoStudioScreen(events = growthViewModel.state.collectAsState().value.events, onBack = { showVideoStudio = false })
+        return
+    }
+
     LaunchedEffect(externalDestination) {
         externalDestination?.let {
             selectedTab = it.tab.coerceIn(0, tabs.lastIndex)
@@ -204,6 +211,7 @@ fun ConfidenceAgentApp(
                     onOpenSource = { sourceMessageId = it; selectedTab = 0 },
                     onOpenFeedback = { showSupportCircle = true },
                     growthViewModel = growthViewModel,
+                    onOpenVideoStudio = { showVideoStudio = true },
                 )
                 2 -> RecordScreen(
                     contentPadding = padding,

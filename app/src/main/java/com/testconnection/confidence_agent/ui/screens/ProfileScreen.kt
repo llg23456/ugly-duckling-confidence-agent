@@ -54,6 +54,8 @@ import com.testconnection.confidence_agent.ui.theme.Cream
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
+import com.testconnection.confidence_agent.widget.WidgetPrivacyStore
+import com.testconnection.confidence_agent.widget.WidgetUpdater
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -79,6 +81,35 @@ fun ProfileScreen(
         }
     }
     var showVoiceSettings by remember { mutableStateOf(false) }
+    val widgetPrivacy = remember { WidgetPrivacyStore(context.applicationContext) }
+    var showWidgetPrivacy by remember { mutableStateOf(false) }
+    var widgetAllowed by remember { mutableStateOf(widgetPrivacy.isAllowed()) }
+    var widgetPreview by remember { mutableStateOf(widgetPrivacy.snapshot()) }
+
+    if (showWidgetPrivacy) AlertDialog(
+        onDismissRequest = { showWidgetPrivacy = false },
+        title = { Text("桌面展示许可") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("桌面组件可能被身边的人看见。开启后只展示标记为低敏感、未关联人物且未命中明显敏感信息过滤的真实成长事件；原始照片和录音不会出现在组件上。开启后请查看预览，不合适可随时关闭。")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("允许桌面展示", modifier = Modifier.weight(1f))
+                    Switch(checked = widgetAllowed, onCheckedChange = { allowed ->
+                        widgetPrivacy.setAllowed(allowed)
+                        widgetAllowed = allowed
+                        widgetPreview = widgetPrivacy.snapshot()
+                        coroutineScope.launch {
+                            runCatching { WidgetUpdater.refreshGrowthWidgets(context.applicationContext) }
+                            widgetPreview = widgetPrivacy.snapshot()
+                        }
+                    })
+                }
+                Text(if (widgetAllowed) "今日预览：${widgetPreview.todayText.ifBlank { "没有适合展示的事件" }}\n本月可展示：${widgetPreview.monthCount} 条"
+                    else "当前组件只显示通用提示，不展示你的经历。")
+            }
+        },
+        confirmButton = { TextButton(onClick = { showWidgetPrivacy = false }) { Text("完成") } },
+    )
 
     DisposableEffect(Unit) {
         onDispose {
@@ -161,8 +192,12 @@ fun ProfileScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈") {
-                                    if (entry.title == "记忆中心") onOpenMemoryCenter() else onOpenSupportCircle()
+                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限") {
+                                    when (entry.title) {
+                                        "记忆中心" -> onOpenMemoryCenter()
+                                        "支持圈" -> onOpenSupportCircle()
+                                        "隐私与权限" -> { widgetAllowed = widgetPrivacy.isAllowed(); widgetPreview = widgetPrivacy.snapshot(); showWidgetPrivacy = true }
+                                    }
                                 }
                                 .padding(horizontal = 18.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,

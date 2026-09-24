@@ -35,6 +35,7 @@ class EventItem(BaseModel):
     confidence: float | None
     value_score: float | None
     memory_decision: str | None
+    sensitivity: str | None = None
     source_id: int | None
     source_feedback_id: int | None
     source_record_id: int | None
