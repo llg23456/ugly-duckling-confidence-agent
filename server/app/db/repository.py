@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.models import Conversation, Message
+from app.db.models import Conversation, Message, Memory, MemoryDeletion
 from app.schemas.chat import ConversationMessage
 
 
@@ -30,13 +30,21 @@ def get_or_create_conversation(session: Session, device_id: str) -> Conversation
 
 
 def recent_messages(session: Session, conversation_id: int, limit: int = 12) -> list[Message]:
+    blocked_sources = set()
+    blocked_memory_ids = set()
+    for deletion in session.scalars(select(MemoryDeletion).where(MemoryDeletion.conversation_id == conversation_id)):
+        blocked_sources.update(deletion.source_message_ids or [])
+        blocked_memory_ids.add(deletion.deleted_memory_id)
+    for memory in session.scalars(select(Memory).where(Memory.conversation_id == conversation_id, Memory.is_user_edited == True)):
+        blocked_sources.update(memory.source_message_ids or [])
+        blocked_memory_ids.add(memory.id)
     newest_first = session.scalars(
         select(Message)
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.id.desc())
-        .limit(limit)
     ).all()
-    return list(reversed(newest_first))
+    safe = [item for item in newest_first if item.id not in blocked_sources and not blocked_memory_ids.intersection(item.used_memory_ids or [])]
+    return list(reversed(safe[:limit]))
 
 
 def all_messages(session: Session, conversation_id: int) -> list[Message]:
@@ -67,6 +75,7 @@ def append_exchange(
     modality: str,
     media_ref: str | None = None,
     is_mock: bool = False,
+    used_memory_ids: list[int] | None = None,
 ) -> tuple[Message, Message]:
     user_message = Message(
         conversation_id=conversation.id,
@@ -81,6 +90,7 @@ def append_exchange(
         modality=modality,
         content=assistant_content,
         is_mock=is_mock,
+        used_memory_ids=used_memory_ids or [],
     )
     session.add_all((user_message, assistant_message))
     conversation.updated_at = datetime.now(UTC)

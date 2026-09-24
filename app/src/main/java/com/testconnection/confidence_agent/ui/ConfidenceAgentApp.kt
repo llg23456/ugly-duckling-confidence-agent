@@ -62,6 +62,7 @@ fun ConfidenceAgentApp(
     var showCover by rememberSaveable { mutableStateOf(true) }
     var showVoiceCall by rememberSaveable { mutableStateOf(false) }
     var showMemoryCenter by rememberSaveable { mutableStateOf(false) }
+    var sourceMessageId by rememberSaveable { mutableStateOf<Long?>(null) }
     var requestedRecordMode by remember { mutableStateOf(RecordMode.TEXT) }
     var cameraLaunchToken by remember { mutableIntStateOf(0) }
     val voicePreferencesStore = androidx.compose.runtime.remember {
@@ -110,6 +111,11 @@ fun ConfidenceAgentApp(
         MemoryCenterScreen(
             profile = userProfile,
             onBack = { showMemoryCenter = false },
+            onOpenSource = { sourceId ->
+                sourceMessageId = sourceId
+                selectedTab = 0
+                showMemoryCenter = false
+            },
             onRestartOnboarding = {
                 onboardingStore.reset()
                 showMemoryCenter = false
@@ -177,6 +183,8 @@ fun ConfidenceAgentApp(
                     viewModel = homeViewModel,
                     userName = displayName,
                     onOpenVoice = { showVoiceCall = true },
+                    sourceMessageId = sourceMessageId,
+                    onSourceLocated = { sourceMessageId = null },
                 )
                 1 -> GrowthScreen(contentPadding = padding)
                 2 -> RecordScreen(

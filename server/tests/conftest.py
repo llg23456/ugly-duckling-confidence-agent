@@ -15,6 +15,7 @@ from app.main import app
 def client(tmp_path, monkeypatch) -> Iterator[TestClient]:
     settings = Settings(_env_file=None, enable_live_ai=False, dashscope_api_key="")
     monkeypatch.setattr("app.services.chat_service.get_settings", lambda: settings)
+    monkeypatch.setattr("app.services.event_service.get_settings", lambda: settings)
     monkeypatch.setattr("app.main.settings", settings)
     engine = create_engine(f"sqlite:///{tmp_path / 'test.db'}", connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)

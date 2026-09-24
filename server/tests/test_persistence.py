@@ -45,7 +45,7 @@ def test_conversation_persists_and_uses_only_last_12_messages(client: TestClient
     chat_route = import_module("app.api.routes.chat")
     received_history = []
 
-    def fake_chat(request, history=None):
+    def fake_chat(request, history=None, evidence=None):
         received_history.append(history)
         return ChatResponse(reply=f"reply {request.message}", strategy="listen", mock=False)
 
@@ -77,11 +77,11 @@ def test_image_and_audio_share_conversation_and_keep_source_refs(client: TestCli
     multimodal_route = import_module("app.api.routes.multimodal")
     observed_history = []
 
-    def fake_image(_content, _mime, prompt, history=None):
+    def fake_image(_content, _mime, prompt, history=None, evidence=None):
         observed_history.append(history)
         return MultimodalChatResponse(modality="image", user_text=prompt, reply="图片里有一本书", model="test")
 
-    def fake_audio(_content, _mime, _format, _device_id, history=None):
+    def fake_audio(_content, _mime, _format, _device_id, history=None, recall_for_text=None):
         observed_history.append(history)
         return MultimodalChatResponse(modality="audio", user_text="我读完了", reply="你读完了这本书", model="test")
 

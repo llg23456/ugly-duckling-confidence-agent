@@ -8,17 +8,14 @@ from app.schemas import (
     SupportSuggestionRequest,
     SupportSuggestionResponse,
 )
-from app.schemas.chat import MemoryEvidence
 from app.schemas.review import ReviewMoment
 
 
 def mock_chat(request: ChatRequest) -> ChatResponse:
     return ChatResponse(
-        reply="紧张是真的，但你不是从零开始。上周你已经完整练习过三次。",
+        reply="听起来你现在有些紧张。愿意说说最担心的那一小部分吗？",
         strategy="seek_support" if "答辩" in request.message else "listen",
-        evidence=[
-            MemoryEvidence(summary="完成了三次完整练习", source_date="2026-09-16", source_type="record")
-        ],
+        evidence=[],
     )
 
 

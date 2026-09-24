@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.testconnection.confidence_agent.data.model.ChatMessage
 import com.testconnection.confidence_agent.data.repository.ChatRepository
+import com.testconnection.confidence_agent.data.remote.MemoryEvidence
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +24,7 @@ data class HomeUiState(
     val lastVoiceReply: String? = null,
     val voiceTurnId: Int = 0,
     val pendingImage: PendingChatImage? = null,
+    val lastEvidence: List<MemoryEvidence> = emptyList(),
 )
 
 data class PendingChatImage(
@@ -100,6 +102,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             pendingMessage = null,
                             sending = false,
                             lastReplyWasMock = response.isMock,
+                            lastEvidence = response.evidence,
                         )
                     }
                 }
@@ -128,6 +131,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     it.copy(
                         sending = false,
                         lastReplyWasMock = response.isMock,
+                        lastEvidence = response.evidence,
                         lastVoiceTranscript = transcript,
                         lastVoiceReply = response.text,
                         voiceTurnId = it.voiceTurnId + 1,
@@ -149,6 +153,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearError() {
         _uiState.update { it.copy(error = null) }
+    }
+
+    fun refreshHistory() {
+        viewModelScope.launch { runCatching { repository.syncHistory() } }
     }
 
     suspend fun synthesizeSpeech(text: String, voice: String): ByteArray =

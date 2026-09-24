@@ -76,9 +76,12 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     userName: String,
     onOpenVoice: () -> Unit,
+    sourceMessageId: Long? = null,
+    onSourceLocated: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    var requestedSourceId by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showImageSourceDialog by remember { mutableStateOf(false) }
@@ -162,8 +165,24 @@ fun HomeScreen(
     }
 
     LaunchedEffect(state.messages.size, state.pendingMessage) {
-        if (state.messages.isNotEmpty() || state.pendingMessage != null) {
+        if (sourceMessageId == null && requestedSourceId == null && (state.messages.isNotEmpty() || state.pendingMessage != null)) {
             listState.animateScrollToItem(1 + state.messages.size + if (state.pendingMessage != null) 1 else 0)
+        }
+    }
+    LaunchedEffect(sourceMessageId) {
+        if (sourceMessageId != null) {
+            requestedSourceId = sourceMessageId
+            viewModel.refreshHistory()
+        }
+    }
+    LaunchedEffect(requestedSourceId, state.messages.size) {
+        if (requestedSourceId != null) {
+            val index = state.messages.indexOfFirst { it.id == requestedSourceId }
+            if (index >= 0) {
+                listState.animateScrollToItem(index + 2)
+                requestedSourceId = null
+                if (sourceMessageId != null) onSourceLocated()
+            }
         }
     }
 
@@ -293,16 +312,20 @@ fun HomeScreen(
             }
         }
 
-        item {
+        if (state.lastEvidence.isNotEmpty()) item {
             WarmCard {
                 Row(
                     modifier = Modifier.padding(20.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionHeading("想起一件事", "上周你已经完整练习过 3 次")
+                        SectionHeading("想起一件事", state.lastEvidence.first().summary)
                         Button(
-                            onClick = {},
+                            onClick = {
+                                val sourceId = state.lastEvidence.first().sourceId
+                                requestedSourceId = sourceId
+                                if (state.messages.none { it.id == sourceId }) viewModel.refreshHistory()
+                            },
                             shape = AppButtonShape,
                             colors = ButtonDefaults.buttonColors(containerColor = SageDark),
                         ) { Text("查看来源") }

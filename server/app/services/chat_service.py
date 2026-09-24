@@ -4,6 +4,8 @@ from typing import Any
 from app.core.config import Settings, get_settings
 from app.schemas import ChatRequest, ChatResponse
 from app.services.mock_service import mock_chat
+from app.schemas.chat import MemoryEvidence
+from app.services.memory_service import memory_prompt
 
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,7 @@ def _live_chat(
     request: ChatRequest,
     settings: Settings,
     history: list[dict[str, str]] | None = None,
+    evidence: list[MemoryEvidence] | None = None,
 ) -> ChatResponse:
     # 延迟导入：未安装模型 SDK 或未配置 Key 时，Mock 服务仍可独立运行。
     from openai import OpenAI
@@ -60,7 +63,7 @@ def _live_chat(
     )
     completion = client.chat.completions.create(
         model=settings.chat_model,
-        messages=[{"role": "system", "content": SYSTEM_PROMPT},
+        messages=[{"role": "system", "content": SYSTEM_PROMPT + "\n" + memory_prompt(evidence or [])},
                   *(history or []),
                   {"role": "user", "content": request.message}],
         temperature=0.7,
@@ -72,7 +75,7 @@ def _live_chat(
     return ChatResponse(
         reply=reply,
         strategy=_strategy_for(request),
-        evidence=[],
+        evidence=evidence or [],
         mock=False,
         model=settings.chat_model,
     )
@@ -82,6 +85,7 @@ def chat_with_fallback(
     request: ChatRequest,
     settings: Settings | None = None,
     history: list[dict[str, str]] | None = None,
+    evidence: list[MemoryEvidence] | None = None,
 ) -> ChatResponse:
     active_settings = settings or get_settings()
     if not active_settings.enable_live_ai:
@@ -94,7 +98,7 @@ def chat_with_fallback(
         return response
 
     try:
-        return _live_chat(request, active_settings, history)
+        return _live_chat(request, active_settings, history, evidence)
     except Exception as exc:  # 外部服务失败时保证演示仍可继续。
         logger.exception("DashScope chat failed: %s", type(exc).__name__)
         response = mock_chat(request)

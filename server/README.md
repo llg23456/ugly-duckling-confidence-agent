@@ -13,11 +13,19 @@
 - `POST /api/v1/multimodal/transcribe`：上传音频，只返回转写，不生成陪伴回复。
 - `GET /api/v1/onboarding/schema`：首次认识字段表。
 - `POST /api/v1/onboarding/analyze`：合并自然介绍与已有画像，返回缺项、追问和完成状态。
-- `POST /api/v1/events/extract`：成长事件提取，当前仍为 Mock。
+- `POST /api/v1/events/extract`：成长事件提取；已配置真实模型时使用结构化提取，否则返回标记为 Mock 的结果。
+- `GET /api/v1/events?device_id=...`：查看后台提取的成长事件及其原始消息 ID。
+- `GET /api/v1/events/daily-summaries?device_id=...`：查看中等价值事件生成的当日摘要草稿。
+- `GET /api/v1/memories?device_id=...`：查看长期记忆和待确认记忆。
+- `PATCH /api/v1/memories/{id}`：提交 `device_id`、`content` 修改记忆。
+- `POST /api/v1/memories/{id}/confirm?device_id=...`：确认敏感、矛盾或低置信度记忆。
+- `DELETE /api/v1/memories/{id}?device_id=...`：删除记忆并从后续召回、上下文中排除旧内容。
 - `POST /api/v1/support/suggest`：支持圈建议，当前仍为 Mock。
 - `GET /api/v1/reviews/{period}`：周期回顾，当前仍为 Mock。
 
 文字、图片和语音聊天现在共用按 `device_id` 区分的 SQLite 会话。生成回复前读取最近 12 条消息；成功后把用户消息和回复写入 `messages`，响应额外返回两个消息 ID。数据库在首次访问时自动创建于 `DATABASE_URL` 指定位置（默认 `server/confidence_agent.db`）。上传的原始图片、音频不写入服务端数据库，`media_ref` 仅保存 SHA-256 来源标识。
+
+P1 在每轮回复保存后独立提取成长事件。程序按交接文档的五项权重和阈值裁决：高价值低敏感事件自动进入长期记忆，中等价值进入当日草稿，敏感、矛盾或低置信度事件等待用户确认。提取失败会记录服务端日志，不影响本轮回复；未启用真实模型时不自动写入事件。召回只使用带有效原始消息 ID 的已确认记忆，最多四条，`/chat` 和多模态响应中的 `evidence` 附有来源 ID、日期、类型和记忆 ID。旧 SQLite 数据库首次启动时自动补齐 P1 字段，现有消息保留。
 
 音频接口先让 `qwen3.8-omni-flash`输出转写，再把转写送入统一的小鸭对话服务，因此 Android 可以把“用户转写 + 小鸭回复”写回同一会话。第一版是轮次式录音，不是 WebSocket 全双工电话。
 

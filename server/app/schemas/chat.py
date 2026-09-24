@@ -14,6 +14,8 @@ class MemoryEvidence(BaseModel):
     summary: str
     source_date: str
     source_type: Literal["record", "chat", "photo", "voice"]
+    source_id: int | None = None
+    memory_id: int | None = None
 
 
 class ChatResponse(BaseModel):

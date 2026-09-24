@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -9,6 +9,8 @@ from app.db.repository import (
 from app.db.session import get_db
 from app.schemas import MultimodalChatResponse, SpeechSynthesisRequest, TranscriptionResponse
 from app.services.multimodal_service import chat_with_audio, chat_with_image, synthesize_speech, transcribe_audio
+from app.services.event_service import process_turn
+from app.services.memory_service import recall
 
 
 router = APIRouter(prefix="/multimodal", tags=["multimodal"])
@@ -38,6 +40,7 @@ async def _read_limited(upload: UploadFile, limit: int) -> bytes:
 
 @router.post("/image", response_model=MultimodalChatResponse)
 async def image_chat(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     prompt: str = Form("请看看这张图片，告诉我你注意到了什么。"),
     device_id: str = Form("android-demo", min_length=1, max_length=128),
@@ -50,7 +53,8 @@ async def image_chat(
     conversation = get_conversation(db, device_id)
     history = model_history(recent_messages(db, conversation.id)) if conversation else []
     try:
-        result = chat_with_image(content, mime_type, prompt.strip(), history=history)
+        evidence = recall(db, conversation.id, prompt) if conversation else []
+        result = chat_with_image(content, mime_type, prompt.strip(), history=history, evidence=evidence)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"图片理解失败：{type(exc).__name__}") from exc
     conversation = conversation or get_or_create_conversation(db, device_id)
@@ -61,14 +65,17 @@ async def image_chat(
         modality="image",
         media_ref=media_fingerprint(content),
         is_mock=result.mock,
+        used_memory_ids=[item.memory_id for item in result.evidence if item.memory_id],
     )
     result.user_message_id = user_message.id
     result.assistant_message_id = assistant_message.id
+    background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
     return result
 
 
 @router.post("/audio", response_model=MultimodalChatResponse)
 async def audio_chat(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     device_id: str = Form("android-demo", min_length=1, max_length=128),
     db: Session = Depends(get_db),
@@ -81,7 +88,10 @@ async def audio_chat(
     conversation = get_conversation(db, device_id)
     history = model_history(recent_messages(db, conversation.id)) if conversation else []
     try:
-        result = chat_with_audio(content, mime_type, audio_format, device_id, history=history)
+        result = chat_with_audio(
+            content, mime_type, audio_format, device_id, history=history,
+            recall_for_text=(lambda transcript: recall(db, conversation.id, transcript)) if conversation else None,
+        )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"语音理解失败：{type(exc).__name__}") from exc
     conversation = conversation or get_or_create_conversation(db, device_id)
@@ -92,9 +102,11 @@ async def audio_chat(
         modality="audio",
         media_ref=media_fingerprint(content),
         is_mock=result.mock,
+        used_memory_ids=[item.memory_id for item in result.evidence if item.memory_id],
     )
     result.user_message_id = user_message.id
     result.assistant_message_id = assistant_message.id
+    background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
     return result
 
 

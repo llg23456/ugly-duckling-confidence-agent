@@ -19,7 +19,23 @@ data class ChatApiReply(
     val modality: String = "text",
     val userMessageId: Long? = null,
     val assistantMessageId: Long? = null,
+    val evidence: List<MemoryEvidence> = emptyList(),
 )
+
+data class MemoryEvidence(val summary: String, val sourceDate: String, val sourceType: String, val sourceId: Long?, val memoryId: Long?)
+
+private fun parseEvidence(json: JSONObject): List<MemoryEvidence> {
+    val array = json.optJSONArray("evidence") ?: return emptyList()
+    return buildList {
+        for (index in 0 until array.length()) {
+            val item = array.getJSONObject(index)
+            add(MemoryEvidence(
+                item.getString("summary"), item.getString("source_date"), item.getString("source_type"),
+                item.optLong("source_id").takeIf { it > 0 }, item.optLong("memory_id").takeIf { it > 0 },
+            ))
+        }
+    }
+}
 
 data class ServerChatMessage(
     val id: Long,
@@ -108,6 +124,7 @@ class ChatApiClient(
                 userText = message,
                 userMessageId = json.optLong("user_message_id").takeIf { it > 0 },
                 assistantMessageId = json.optLong("assistant_message_id").takeIf { it > 0 },
+                evidence = parseEvidence(json),
             )
         } finally {
             connection.disconnect()
@@ -223,6 +240,7 @@ class ChatApiClient(
             modality = json.optString("modality", "text"),
             userMessageId = json.optLong("user_message_id").takeIf { it > 0 },
             assistantMessageId = json.optLong("assistant_message_id").takeIf { it > 0 },
+            evidence = parseEvidence(json),
         )
     }
 

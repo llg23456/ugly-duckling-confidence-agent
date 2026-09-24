@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, BackgroundTasks, Depends, Path
 from sqlalchemy.orm import Session
 
 from app.db.repository import (
@@ -9,15 +9,18 @@ from app.db.session import get_db
 from app.schemas import ChatRequest, ChatResponse
 from app.schemas.chat import ConversationMessagesResponse
 from app.services.chat_service import chat_with_fallback
+from app.services.event_service import process_turn
+from app.services.memory_service import recall
 
 router = APIRouter(tags=["chat"])
 
 
 @router.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
+def chat(request: ChatRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> ChatResponse:
     conversation = get_conversation(db, request.device_id)
     history = model_history(recent_messages(db, conversation.id)) if conversation else []
-    response = chat_with_fallback(request, history=history)
+    evidence = recall(db, conversation.id, request.message) if conversation else []
+    response = chat_with_fallback(request, history=history, evidence=evidence)
     conversation = conversation or get_or_create_conversation(db, request.device_id)
     user_message, assistant_message = append_exchange(
         db, conversation,
@@ -25,9 +28,11 @@ def chat(request: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
         assistant_content=response.reply,
         modality="text",
         is_mock=response.mock,
+        used_memory_ids=[item.memory_id for item in response.evidence if item.memory_id],
     )
     response.user_message_id = user_message.id
     response.assistant_message_id = assistant_message.id
+    background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
     return response
 
 
