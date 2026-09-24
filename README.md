@@ -33,8 +33,8 @@
 
 1. 使用 Android Studio 打开本目录。
 2. 等待 Gradle Sync 完成。
-3. 手机开启开发者选项和 USB 调试并连接电脑。
-4. 在设备列表选中手机，点击 **Run app**。
+3. 通过 Android Studio 的设备列表安装运行，或把调试 APK 安装到手机。
+4. 手机与运行后端的电脑连接同一个 Wi-Fi，并按下文配置电脑的 WLAN IPv4 地址。
 
 建议使用绿色三角形 **Run app**，不要长期使用 Debug 运行。若真机在 Android Studio 打开时出现触摸卡住，可在 `Settings → Tools → Device Mirroring` 关闭自动设备镜像，并确认 Debug 面板没有停在断点。
 
@@ -70,15 +70,37 @@ Invoke-RestMethod http://127.0.0.1:8000/health |
 
 真实模型正常时应看到 `status=ok`、`mock=False`、`ai_configured=True`。
 
-### 3. USB 真机端口转发
+### 3. 通过同一 Wi-Fi 连接手机与后端
+
+先查询电脑当前网络地址：
 
 ```powershell
-D:\jdk-11.0.28\platform-tools\adb.exe reverse --remove-all
-D:\jdk-11.0.28\platform-tools\adb.exe reverse tcp:8000 tcp:8000
-D:\jdk-11.0.28\platform-tools\adb.exe reverse --list
+ipconfig
 ```
 
-不要直接输入 `adb`，本机 PATH 中优先找到的是雷电模拟器版本。
+找到正在使用的 **无线局域网适配器 WLAN**，记录其中的 IPv4 地址，例如：
+
+```text
+10.113.21.33
+```
+
+不要使用 VMware、WSL、蓝牙或已断开网卡的地址。然后修改 `app/build.gradle.kts`：
+
+```kotlin
+buildConfigField("String", "API_BASE_URL", "\"http://10.113.21.33:8000\"")
+```
+
+将示例 IP 换成电脑当前的 WLAN IPv4。项目在开发测试阶段已经允许访问任意 HTTP 地址，因此不需要再修改 `network_security_config.xml`。
+
+修改后执行 Gradle Sync，并重新运行或安装 App。旧安装包不会自动获得新地址。
+
+最后在手机浏览器中访问：
+
+```text
+http://10.113.21.33:8000/health
+```
+
+能看到 `status: ok` 后，App 才具备通过 Wi-Fi 访问后端的网络条件。若手机浏览器打不开，请检查 Windows 防火墙、手机和电脑是否确实连接同一 Wi-Fi，以及当前网络是否启用了设备隔离。电脑重新联网后 IPv4 可能变化，届时只需重新执行 `ipconfig`、修改 `API_BASE_URL` 并重新安装 App。
 
 ### 4. 安全关闭占用 8000 的后端
 

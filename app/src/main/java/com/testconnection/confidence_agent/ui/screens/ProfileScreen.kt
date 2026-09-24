@@ -2,7 +2,7 @@ package com.testconnection.confidence_agent.ui.screens
 
 import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.testconnection.confidence_agent.R
@@ -46,6 +47,7 @@ import com.testconnection.confidence_agent.data.repository.ChatRepository
 import com.testconnection.confidence_agent.data.repository.FakeConfidenceRepository
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
+import com.testconnection.confidence_agent.ui.components.noRippleClickable
 import com.testconnection.confidence_agent.ui.components.WarmCard
 import com.testconnection.confidence_agent.ui.theme.Danger
 import com.testconnection.confidence_agent.ui.theme.Cream
@@ -158,7 +160,7 @@ fun ProfileScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable(enabled = entry.title == "记忆中心") { onOpenMemoryCenter() }
+                                .noRippleClickable(enabled = entry.title == "记忆中心") { onOpenMemoryCenter() }
                                 .padding(horizontal = 18.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -166,7 +168,11 @@ fun ProfileScreen(
                                 modifier = Modifier.size(46.dp).background(SagePale, CircleShape),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text(entry.symbol, color = SageDark, style = MaterialTheme.typography.titleLarge)
+                                Image(
+                                    painter = painterResource(entry.iconRes),
+                                    contentDescription = entry.title,
+                                    modifier = Modifier.size(25.dp),
+                                )
                             }
                             Column(modifier = Modifier.padding(start = 14.dp).weight(1f)) {
                                 Text(entry.title, style = MaterialTheme.typography.titleMedium)

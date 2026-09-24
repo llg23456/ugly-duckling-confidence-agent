@@ -1,8 +1,10 @@
 package com.testconnection.confidence_agent.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -20,7 +22,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import com.testconnection.confidence_agent.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.testconnection.confidence_agent.ui.screens.GrowthScreen
 import com.testconnection.confidence_agent.ui.screens.AppCoverScreen
@@ -39,13 +43,13 @@ import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
 import kotlinx.coroutines.delay
 
-private data class AppTab(val label: String, val symbol: String)
+private data class AppTab(val label: String, val iconRes: Int)
 
 private val tabs = listOf(
-    AppTab("首页", "⌂"),
-    AppTab("成长", "▥"),
-    AppTab("记录", "▤"),
-    AppTab("我的", "♙"),
+    AppTab("首页", R.drawable.ic_nav_home),
+    AppTab("成长", R.drawable.ic_nav_growth),
+    AppTab("记录", R.drawable.ic_nav_record),
+    AppTab("我的", R.drawable.ic_nav_profile),
 )
 
 @Composable
@@ -147,10 +151,10 @@ fun ConfidenceAgentApp(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
                         icon = {
-                            Text(
-                                text = tab.symbol,
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Normal,
+                            Image(
+                                painter = painterResource(tab.iconRes),
+                                contentDescription = tab.label,
+                                modifier = Modifier.size(26.dp),
                             )
                         },
                         label = { Text(tab.label) },

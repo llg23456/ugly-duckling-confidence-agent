@@ -1,8 +1,11 @@
 package com.testconnection.confidence_agent.data.model
 
+import androidx.annotation.DrawableRes
+
 data class ChatMessage(
     val text: String,
     val fromUser: Boolean,
+    val imageBytes: ByteArray? = null,
 )
 
 data class GrowthMoment(
@@ -18,7 +21,7 @@ data class OriginalRecord(
 )
 
 data class SettingEntry(
-    val symbol: String,
+    @DrawableRes val iconRes: Int,
     val title: String,
     val subtitle: String,
 )

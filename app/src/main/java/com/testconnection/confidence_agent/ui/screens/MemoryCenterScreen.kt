@@ -1,7 +1,6 @@
 package com.testconnection.confidence_agent.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import com.testconnection.confidence_agent.R
 import com.testconnection.confidence_agent.data.model.UserProfile
 import com.testconnection.confidence_agent.ui.components.DuckArt
+import com.testconnection.confidence_agent.ui.components.noRippleClickable
 import com.testconnection.confidence_agent.ui.theme.Cream
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
@@ -65,7 +65,7 @@ fun MemoryCenterScreen(
         modifier = Modifier.fillMaxSize().background(Cream).padding(horizontal = 20.dp, vertical = 22.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("‹", modifier = Modifier.clickable(onClick = onBack).padding(10.dp), style = MaterialTheme.typography.headlineLarge)
+            Text("‹", modifier = Modifier.noRippleClickable(onClick = onBack).padding(10.dp), style = MaterialTheme.typography.headlineLarge)
             Text("记忆中心", style = MaterialTheme.typography.displaySmall)
         }
         Text("这些是你亲口告诉小鸭的。左右翻一翻，点开可以放大查看。", style = MaterialTheme.typography.bodyLarge, color = SageDark)
@@ -87,7 +87,7 @@ fun MemoryCenterScreen(
                         modifier = Modifier
                             .size(size)
                             .background(colors[index % colors.size], CircleShape)
-                            .clickable { selected = item }
+                            .noRippleClickable { selected = item }
                             .padding(18.dp),
                         contentAlignment = Alignment.Center,
                     ) {

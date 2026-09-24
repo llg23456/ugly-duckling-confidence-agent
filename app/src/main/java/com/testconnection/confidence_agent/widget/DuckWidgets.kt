@@ -11,12 +11,14 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
+import androidx.glance.ButtonDefaults
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
+import androidx.glance.appwidget.components.FilledButton
 import androidx.glance.background
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
@@ -127,7 +129,7 @@ class QuickRecordWidget : GlanceAppWidget() {
 @Composable
 private fun QuickRecordContent() {
     val context = LocalContext.current
-    Column(modifier = GlanceModifier.fillMaxSize().background(cream).padding(16.dp)) {
+    Column(modifier = GlanceModifier.fillMaxSize().background(cream).padding(horizontal = 18.dp, vertical = 20.dp)) {
         Row(modifier = GlanceModifier.fillMaxWidth()) {
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Title("今天想留下一点什么？")
@@ -135,21 +137,26 @@ private fun QuickRecordContent() {
             }
             Image(ImageProvider(R.drawable.duck_welcome), "陪伴记录的小鸭", modifier = GlanceModifier.size(64.dp))
         }
-        Spacer(GlanceModifier.height(8.dp))
+        Spacer(GlanceModifier.height(12.dp))
         Row(modifier = GlanceModifier.fillMaxWidth()) {
-            QuickAction("● 说一句", sagePale, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, 2, RecordMode.VOICE)))
-            QuickAction("▤ 写一句", sagePale, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, 2, RecordMode.TEXT)))
-            QuickAction("▧ 拍一张", peach, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, 2, RecordMode.PHOTO, camera = true)))
+            QuickAction("说一句", R.drawable.ic_record_voice, sagePale, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, 2, RecordMode.VOICE)))
+            QuickAction("写一句", R.drawable.ic_record_write, sagePale, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, 2, RecordMode.TEXT)))
+            QuickAction("拍一张", R.drawable.ic_record_photo, peach, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, 2, RecordMode.PHOTO, camera = true)))
         }
     }
 }
 
 @Composable
-private fun QuickAction(text: String, background: ColorProvider, modifier: GlanceModifier, action: androidx.glance.action.Action) {
-    Text(
-        text,
-        modifier = modifier.padding(horizontal = 3.dp).background(background).padding(10.dp).clickable(action),
-        style = TextStyle(color = ink, fontSize = 14.sp, fontWeight = FontWeight.Bold),
+private fun QuickAction(text: String, iconRes: Int, background: ColorProvider, modifier: GlanceModifier, action: androidx.glance.action.Action) {
+    FilledButton(
+        text = text,
+        onClick = action,
+        icon = ImageProvider(iconRes),
+        modifier = modifier.padding(horizontal = 6.dp).height(46.dp),
+        colors = ButtonDefaults.buttonColors(
+            backgroundColor = background,
+            contentColor = ink,
+        ),
         maxLines = 1,
     )
 }

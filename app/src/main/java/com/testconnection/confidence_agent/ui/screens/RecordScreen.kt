@@ -10,7 +10,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -46,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -60,6 +60,7 @@ import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.SectionHeading
 import com.testconnection.confidence_agent.ui.components.WarmCard
+import com.testconnection.confidence_agent.ui.components.noRippleClickable
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.Cream
 import com.testconnection.confidence_agent.ui.theme.WarmWhite
@@ -246,9 +247,9 @@ fun RecordScreen(
                 Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(SimpleDateFormat("M月d日  EEEE", Locale.SIMPLIFIED_CHINESE).format(Date()), style = MaterialTheme.typography.titleLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        RecordModeButton("▤", "写一句", mode == RecordMode.TEXT, Modifier.weight(1f)) { mode = RecordMode.TEXT }
-                        RecordModeButton("♬", "说一句", mode == RecordMode.VOICE, Modifier.weight(1f)) { mode = RecordMode.VOICE }
-                        RecordModeButton("▧", "拍一张", mode == RecordMode.PHOTO, Modifier.weight(1f)) { mode = RecordMode.PHOTO }
+                        RecordModeButton(R.drawable.ic_record_write, "写一句", mode == RecordMode.TEXT, Modifier.weight(1f)) { mode = RecordMode.TEXT }
+                        RecordModeButton(R.drawable.ic_record_voice, "说一句", mode == RecordMode.VOICE, Modifier.weight(1f)) { mode = RecordMode.VOICE }
+                        RecordModeButton(R.drawable.ic_record_photo, "拍一张", mode == RecordMode.PHOTO, Modifier.weight(1f)) { mode = RecordMode.PHOTO }
                     }
                     when (mode) {
                         RecordMode.TEXT -> RecordTextField(note, { note = it }, "今天发生了什么？此刻的你是什么感受？")
@@ -288,7 +289,7 @@ fun RecordScreen(
                     if (records.isEmpty()) Text("还没有记录，第一笔可以很短。", color = InkMuted)
                     records.take(5).forEach { record ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().clickable { selectedRecord = record }.padding(vertical = 8.dp),
+                            modifier = Modifier.fillMaxWidth().noRippleClickable { selectedRecord = record }.padding(vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(if (record.mode == RecordMode.PHOTO) "照片" else if (record.mode == RecordMode.VOICE) "语音" else "文字", modifier = Modifier.weight(0.2f), color = SageDark)
@@ -443,7 +444,7 @@ private fun PhotoRecordEditor(
 }
 
 @Composable
-private fun RecordModeButton(symbol: String, label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+private fun RecordModeButton(iconRes: Int, label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.height(76.dp),
@@ -452,7 +453,11 @@ private fun RecordModeButton(symbol: String, label: String, selected: Boolean, m
         colors = ButtonDefaults.outlinedButtonColors(containerColor = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(symbol, style = MaterialTheme.typography.titleLarge, color = SageDark)
+            Image(
+                painter = painterResource(iconRes),
+                contentDescription = label,
+                modifier = Modifier.size(25.dp),
+            )
             Text(label, style = MaterialTheme.typography.labelLarge)
         }
     }

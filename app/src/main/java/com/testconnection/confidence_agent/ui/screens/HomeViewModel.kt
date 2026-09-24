@@ -21,6 +21,13 @@ data class HomeUiState(
     val lastVoiceTranscript: String? = null,
     val lastVoiceReply: String? = null,
     val voiceTurnId: Int = 0,
+    val pendingImage: PendingChatImage? = null,
+)
+
+data class PendingChatImage(
+    val fileName: String,
+    val mimeType: String,
+    val bytes: ByteArray,
 )
 
 class HomeViewModel(
@@ -33,21 +40,44 @@ class HomeViewModel(
         _uiState.update { it.copy(draft = value, error = null) }
     }
 
+    fun selectImage(fileName: String, mimeType: String, imageBytes: ByteArray) {
+        _uiState.update {
+            it.copy(
+                pendingImage = PendingChatImage(fileName, mimeType, imageBytes),
+                error = null,
+            )
+        }
+    }
+
+    fun removeSelectedImage() {
+        _uiState.update { it.copy(pendingImage = null) }
+    }
+
     fun send() {
         val message = _uiState.value.draft.trim()
-        if (message.isEmpty() || _uiState.value.sending) return
+        val image = _uiState.value.pendingImage
+        if ((message.isEmpty() && image == null) || _uiState.value.sending) return
+        val prompt = message.ifBlank { "请看看这张图片，结合我现在的处境温柔地回应。" }
 
         _uiState.update {
             it.copy(
-                messages = it.messages + ChatMessage(message, fromUser = true),
+                messages = it.messages + ChatMessage(
+                    text = message,
+                    fromUser = true,
+                    imageBytes = image?.bytes,
+                ),
                 draft = "",
+                pendingImage = null,
                 sending = true,
                 error = null,
             )
         }
 
         viewModelScope.launch {
-            runCatching { repository.send(message) }
+            runCatching {
+                if (image == null) repository.send(message)
+                else repository.sendImage(prompt, image.fileName, image.mimeType, image.bytes)
+            }
                 .onSuccess { response ->
                     _uiState.update {
                         it.copy(
@@ -98,43 +128,6 @@ class HomeViewModel(
             } finally {
                 file.delete()
             }
-        }
-    }
-
-    fun sendImage(
-        fileName: String,
-        mimeType: String,
-        imageBytes: ByteArray,
-        prompt: String = "请看看这张图片，结合我现在的处境温柔地回应。",
-    ) {
-        if (_uiState.value.sending) return
-        _uiState.update {
-            it.copy(
-                messages = it.messages + ChatMessage("[图片] $prompt", fromUser = true),
-                sending = true,
-                error = null,
-            )
-        }
-        viewModelScope.launch {
-            runCatching { repository.sendImage(prompt, fileName, mimeType, imageBytes) }
-                .onSuccess { response ->
-                    _uiState.update {
-                        it.copy(
-                            messages = it.messages + ChatMessage(response.text, fromUser = false),
-                            sending = false,
-                            lastReplyWasMock = response.isMock,
-                        )
-                    }
-                }
-                .onFailure { error ->
-                    _uiState.update {
-                        it.copy(
-                            sending = false,
-                            error = error.message?.takeIf(String::isNotBlank)
-                                ?: "图片暂时没有看清，请换一张试试。",
-                        )
-                    }
-                }
         }
     }
 

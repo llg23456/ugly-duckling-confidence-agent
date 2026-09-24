@@ -1,5 +1,6 @@
 package com.testconnection.confidence_agent.data.repository
 
+import com.testconnection.confidence_agent.R
 import com.testconnection.confidence_agent.data.model.ChatMessage
 import com.testconnection.confidence_agent.data.model.GrowthMoment
 import com.testconnection.confidence_agent.data.model.OriginalRecord
@@ -27,10 +28,10 @@ object FakeConfidenceRepository {
     )
 
     val settings = listOf(
-        SettingEntry("◎", "支持圈", "管理老师、同学、朋友等可选支持对象"),
-        SettingEntry("◇", "记忆中心", "查看、修改或删除小鸭记住的内容"),
-        SettingEntry("▣", "隐私与权限", "图片、语音、云端处理与桌面展示"),
-        SettingEntry("⇩", "数据导出", "导出自己的记录与成长故事"),
-        SettingEntry("○", "帮助与求助资源", "需要时找到可信联系人和专业支持"),
+        SettingEntry(R.drawable.ic_profile_support, "支持圈", "管理老师、同学、朋友等可选支持对象"),
+        SettingEntry(R.drawable.ic_profile_memory, "记忆中心", "查看、修改或删除小鸭记住的内容"),
+        SettingEntry(R.drawable.ic_profile_privacy, "隐私与权限", "图片、语音、云端处理与桌面展示"),
+        SettingEntry(R.drawable.ic_profile_export, "数据导出", "导出自己的记录与成长故事"),
+        SettingEntry(R.drawable.ic_profile_help, "帮助与求助资源", "需要时找到可信联系人和专业支持"),
     )
 }
