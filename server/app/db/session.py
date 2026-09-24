@@ -16,6 +16,8 @@ SQLITE_ADDITIONS = {
         "feeling": "TEXT",
         "attempt": "TEXT",
         "support_received": "TEXT",
+        "own_effort": "TEXT",
+        "source_feedback_id": "INTEGER",
         "people": "JSON",
         "confidence": "FLOAT",
         "value_score": "FLOAT",
@@ -33,6 +35,10 @@ SQLITE_ADDITIONS = {
         "model": "VARCHAR(100)",
         "prompt_version": "VARCHAR(32)",
         "updated_at": "DATETIME",
+    },
+    "support_people": {
+        "kind": "VARCHAR(24)",
+        "scenarios": "JSON",
     },
 }
 
@@ -53,6 +59,10 @@ def upgrade_existing_sqlite(engine) -> None:
         ))
         connection.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_memories_event_id ON memories (event_id)"
+        ))
+        connection.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_growth_events_source_feedback_id "
+            "ON growth_events (source_feedback_id)"
         ))
 
 

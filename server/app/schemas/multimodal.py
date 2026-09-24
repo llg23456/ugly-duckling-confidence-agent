@@ -13,6 +13,7 @@ class MultimodalChatResponse(BaseModel):
     user_message_id: int | None = None
     assistant_message_id: int | None = None
     evidence: list[MemoryEvidence] = Field(default_factory=list)
+    strategy: str | None = None
 
 
 class SpeechSynthesisRequest(BaseModel):

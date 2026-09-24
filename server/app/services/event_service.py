@@ -20,6 +20,7 @@ class EventCandidate(BaseModel):
     fact: str = Field(max_length=500)
     feeling: str | None = None
     attempt: str | None = None
+    own_effort: str | None = None
     support_received: str | None = None
     people: list[str] = Field(default_factory=list)
     confidence: float = Field(ge=0, le=1)
@@ -55,7 +56,7 @@ def extract_candidate(text: str, existing: list[str]) -> EventCandidate:
     response = client.chat.completions.create(
         model=settings.extraction_model,
         messages=[
-            {"role": "system", "content": "从用户原话提取一件真实成长事件，仅输出 JSON 对象，不得补造事实。没有具体事件时 fact 为空字符串。字段及类型必须严格如下：fact、feeling、attempt、support_received 是描述原话的字符串，后三项允许 null；people 是字符串数组；confidence、long_term_value、growth_significance、specificity、future_reuse、support_value 是 0 到 1 的数字；sensitivity 是 low、medium、high 之一；is_conflicting 是布尔值。仅对 long_term_value、growth_significance、specificity、future_reuse、support_value 这五项评分。涉及健康、关系冲突、隐私时 sensitivity 为 medium 或 high；与已有记忆矛盾时 is_conflicting 为 true。所有字段都必须出现。"},
+            {"role": "system", "content": "从用户原话提取一件真实成长事件，仅输出 JSON 对象，不得补造事实。没有具体事件时 fact 为空字符串。字段及类型必须严格如下：fact、feeling、attempt、own_effort、support_received 是描述原话的字符串，后四项允许 null；own_effort 只写用户明确做过的尝试，support_received 只写明确已经收到的帮助，不把建议当成事实；people 是字符串数组；confidence、long_term_value、growth_significance、specificity、future_reuse、support_value 是 0 到 1 的数字；sensitivity 是 low、medium、high 之一；is_conflicting 是布尔值。仅对 long_term_value、growth_significance、specificity、future_reuse、support_value 这五项评分。涉及健康、关系冲突、隐私时 sensitivity 为 medium 或 high；与已有记忆矛盾时 is_conflicting 为 true。所有字段都必须出现。"},
             {"role": "user", "content": json.dumps({"message": text, "existing_memories": existing[:10]}, ensure_ascii=False)},
         ],
         response_format={"type": "json_object"},
@@ -88,7 +89,8 @@ def process_turn(database_url: str, conversation_id: int, user_message_id: int, 
                 conversation_id=conversation_id, fact=candidate.fact, source_message_ids=[user_message_id, assistant_message_id],
                 source_user_message_id=user_message_id,
                 source_type={"text": "chat", "image": "photo", "audio": "voice"}.get(user_message.modality, "chat"),
-                feeling=candidate.feeling, attempt=candidate.attempt, support_received=candidate.support_received,
+                feeling=candidate.feeling, attempt=candidate.attempt, own_effort=candidate.own_effort or candidate.attempt,
+                support_received=candidate.support_received,
                 people=candidate.people, confidence=candidate.confidence, value_score=score,
                 sensitivity=candidate.sensitivity, memory_decision=outcome,
                 model=settings.extraction_model, prompt_version=PROMPT_VERSION,

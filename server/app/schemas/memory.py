@@ -29,12 +29,14 @@ class EventItem(BaseModel):
     fact: str
     feeling: str | None
     attempt: str | None
+    own_effort: str | None
     support_received: str | None
     people: list[str]
     confidence: float | None
     value_score: float | None
     memory_decision: str | None
     source_id: int | None
+    source_feedback_id: int | None
     source_type: str | None
     created_at: datetime
 

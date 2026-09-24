@@ -7,6 +7,8 @@ class ReviewMoment(BaseModel):
     date: str
     title: str
     source: str
+    source_id: int | None = None
+    source_feedback_id: int | None = None
 
 
 class ReviewResponse(BaseModel):

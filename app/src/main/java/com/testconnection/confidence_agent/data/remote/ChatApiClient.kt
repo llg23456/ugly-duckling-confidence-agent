@@ -20,6 +20,7 @@ data class ChatApiReply(
     val userMessageId: Long? = null,
     val assistantMessageId: Long? = null,
     val evidence: List<MemoryEvidence> = emptyList(),
+    val strategy: String? = null,
 )
 
 data class MemoryEvidence(val summary: String, val sourceDate: String, val sourceType: String, val sourceId: Long?, val memoryId: Long?)
@@ -125,6 +126,7 @@ class ChatApiClient(
                 userMessageId = json.optLong("user_message_id").takeIf { it > 0 },
                 assistantMessageId = json.optLong("assistant_message_id").takeIf { it > 0 },
                 evidence = parseEvidence(json),
+                strategy = json.optString("strategy").takeIf { it.isNotBlank() },
             )
         } finally {
             connection.disconnect()
@@ -241,6 +243,7 @@ class ChatApiClient(
             userMessageId = json.optLong("user_message_id").takeIf { it > 0 },
             assistantMessageId = json.optLong("assistant_message_id").takeIf { it > 0 },
             evidence = parseEvidence(json),
+            strategy = json.optString("strategy").takeIf { it.isNotBlank() },
         )
     }
 

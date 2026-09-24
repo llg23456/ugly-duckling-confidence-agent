@@ -65,6 +65,7 @@ fun ProfileScreen(
     voicePreferences: VoicePreferences,
     onVoicePreferencesChange: (VoicePreferences) -> Unit,
     onOpenMemoryCenter: () -> Unit,
+    onOpenSupportCircle: () -> Unit,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -160,7 +161,9 @@ fun ProfileScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .noRippleClickable(enabled = entry.title == "记忆中心") { onOpenMemoryCenter() }
+                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈") {
+                                    if (entry.title == "记忆中心") onOpenMemoryCenter() else onOpenSupportCircle()
+                                }
                                 .padding(horizontal = 18.dp, vertical = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

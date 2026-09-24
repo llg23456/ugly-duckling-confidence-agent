@@ -5,5 +5,6 @@ from .memories import router as memories_router
 from .onboarding import router as onboarding_router
 from .reviews import router as reviews_router
 from .support import router as support_router
+from .support_people import router as support_people_router
 
-__all__ = ["chat_router", "events_router", "multimodal_router", "memories_router", "onboarding_router", "reviews_router", "support_router"]
+__all__ = ["chat_router", "events_router", "multimodal_router", "memories_router", "onboarding_router", "reviews_router", "support_router", "support_people_router"]

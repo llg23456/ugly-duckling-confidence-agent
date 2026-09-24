@@ -5,8 +5,6 @@ from app.schemas import (
     EventExtractionResponse,
     GrowthEvent,
     ReviewResponse,
-    SupportSuggestionRequest,
-    SupportSuggestionResponse,
 )
 from app.schemas.review import ReviewMoment
 
@@ -30,15 +28,6 @@ def mock_extract(request: EventExtractionRequest) -> EventExtractionResponse:
         ),
         memory_decision="daily",
         reason="包含一次具体尝试，但是否具有长期价值仍需后续经历验证。",
-    )
-
-
-def mock_support(request: SupportSuggestionRequest) -> SupportSuggestionResponse:
-    supporter = request.preferred_supporters[0] if request.preferred_supporters else "classmate"
-    return SupportSuggestionResponse(
-        supporter_type=supporter,
-        reason="找熟悉的同学进行短时间陪练，压力通常比正式模拟更低。",
-        editable_message="我明天要答辩，有点紧张。你愿意听我练一下30秒开场吗？",
     )
 
 

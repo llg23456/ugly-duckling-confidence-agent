@@ -48,7 +48,9 @@ class GrowthEvent(Base):
     source_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     feeling: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    own_effort: Mapped[str | None] = mapped_column(Text, nullable=True)
     support_received: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_feedback_id: Mapped[int | None] = mapped_column(ForeignKey("support_feedback.id"), unique=True, nullable=True)
     people: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     value_score: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -106,6 +108,37 @@ class SupportPerson(Base):
     conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
     name: Mapped[str] = mapped_column(String(120))
     relationship: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    kind: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    scenarios: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class SupportSuggestion(Base):
+    __tablename__ = "support_suggestions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    support_person_id: Mapped[int | None] = mapped_column(ForeignKey("support_people.id"), nullable=True)
+    source_message_id: Mapped[int | None] = mapped_column(ForeignKey("messages.id"), nullable=True)
+    situation: Mapped[str] = mapped_column(Text)
+    supporter_type: Mapped[str] = mapped_column(String(24))
+    supporter_name: Mapped[str] = mapped_column(String(120))
+    reason: Mapped[str] = mapped_column(Text)
+    editable_message: Mapped[str] = mapped_column(Text)
+    small_step: Mapped[str] = mapped_column(Text)
+    lighter_option: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class SupportFeedback(Base):
+    __tablename__ = "support_feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    suggestion_id: Mapped[int] = mapped_column(ForeignKey("support_suggestions.id"), unique=True)
+    outcome: Mapped[str] = mapped_column(String(24))
+    own_effort: Mapped[str | None] = mapped_column(Text, nullable=True)
+    support_received: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

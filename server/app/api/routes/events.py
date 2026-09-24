@@ -25,6 +25,7 @@ def extract_event(request: EventExtractionRequest) -> EventExtractionResponse:
     return EventExtractionResponse(
         event=GrowthEventSchema(
             fact=candidate.fact, feeling=candidate.feeling, attempt=candidate.attempt,
+            own_effort=candidate.own_effort or candidate.attempt,
             support_received=candidate.support_received, confidence=candidate.confidence,
         ), memory_decision=outcome,
         reason=f"规则评分 {score:.3f}；敏感度 {candidate.sensitivity}。",
@@ -40,9 +41,10 @@ def list_events(device_id: str = Query(min_length=1, max_length=128), db: Sessio
     events = db.scalars(select(GrowthEvent).where(GrowthEvent.conversation_id == conversation.id).order_by(GrowthEvent.id.desc())).all()
     return EventListResponse(events=[EventItem(
         id=event.id, fact=event.fact, feeling=event.feeling, attempt=event.attempt,
-        support_received=event.support_received, people=event.people or [],
+        own_effort=event.own_effort, support_received=event.support_received, people=event.people or [],
         confidence=event.confidence, value_score=event.value_score,
         memory_decision=event.memory_decision, source_id=event.source_user_message_id,
+        source_feedback_id=event.source_feedback_id,
         source_type=event.source_type, created_at=event.created_at,
     ) for event in events])
 

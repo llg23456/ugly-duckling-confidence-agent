@@ -3,6 +3,10 @@ package com.testconnection.confidence_agent.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -30,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -88,6 +93,30 @@ fun HomeScreen(
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
     var imageLoadError by remember { mutableStateOf<String?>(null) }
+    var editableSupportMessage by remember(state.supportSuggestion?.id) {
+        mutableStateOf(state.supportSuggestion?.editableMessage.orEmpty())
+    }
+    var feedbackChoice by remember { mutableStateOf<String?>(null) }
+    var effortText by remember { mutableStateOf("") }
+    var helpText by remember { mutableStateOf("") }
+
+    feedbackChoice?.let { choice ->
+        AlertDialog(
+            onDismissRequest = { feedbackChoice = null },
+            title = { Text(if (choice == "helped") "记录这次帮助" else "记录这次尝试") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = effortText, onValueChange = { effortText = it }, label = { Text("我自己做了什么（选填）") })
+                    if (choice == "helped") OutlinedTextField(value = helpText, onValueChange = { helpText = it }, label = { Text("对方怎样帮到了我（选填）") })
+                }
+            },
+            confirmButton = { TextButton(onClick = {
+                viewModel.submitSupportFeedback(choice, effortText, helpText)
+                feedbackChoice = null
+            }) { Text("保存反馈") } },
+            dismissButton = { TextButton(onClick = { feedbackChoice = null }) { Text("取消") } },
+        )
+    }
 
     fun acceptChatImage(uri: Uri, fallbackName: String, deleteAfterRead: Boolean = false) {
         scope.launch {
@@ -345,19 +374,49 @@ fun HomeScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    SectionHeading("要不要一起想下一步？", "不用完美，我们可以一点点来。")
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SectionHeading("要不要一起想下一步？", "可以自己试一小步，也可以请人帮忙。")
+                    state.supportSuggestion?.let { suggestion ->
+                        Text("我自己先试：${suggestion.smallStep}", style = MaterialTheme.typography.bodyLarge)
+                        Text("可以找谁：${suggestion.supporterName}。${suggestion.reason}", style = MaterialTheme.typography.bodyLarge)
+                        Text("更轻的选择：${suggestion.lighterOption}", style = MaterialTheme.typography.bodyMedium)
+                        OutlinedTextField(
+                            value = editableSupportMessage,
+                            onValueChange = { editableSupportMessage = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("可修改的求助话术") },
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("求助话术", editableSupportMessage))
+                            }, modifier = Modifier.weight(1f), shape = AppButtonShape) { Text("复制") }
+                            OutlinedButton(onClick = {
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, editableSupportMessage)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "选择分享方式"))
+                            }, modifier = Modifier.weight(1f), shape = AppButtonShape) { Text("分享") }
+                        }
+                        if (state.supportFeedbackOutcome == null && suggestion.id != null) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                TextButton(onClick = { effortText = ""; helpText = ""; feedbackChoice = "helped" }, modifier = Modifier.weight(1f)) { Text("帮到了") }
+                                TextButton(onClick = { effortText = ""; helpText = ""; feedbackChoice = "not_helped" }, modifier = Modifier.weight(1f)) { Text("没帮到") }
+                                TextButton(onClick = { viewModel.submitSupportFeedback("not_contacted", null, null) }, modifier = Modifier.weight(1f)) { Text("没有联系") }
+                            }
+                        } else if (state.supportFeedbackOutcome != null) {
+                            Text("这次反馈已记录。", style = MaterialTheme.typography.bodyMedium, color = SageDark)
+                        }
+                    }
+                    if (state.supportLoading) CircularProgressIndicator(modifier = Modifier.size(22.dp))
+                    if (state.supportSuggestion == null && !state.supportLoading) {
+                        val latest = state.messages.lastOrNull { it.fromUser }
                         Button(
-                            onClick = {},
-                            modifier = Modifier.weight(1f),
+                            onClick = { latest?.let { viewModel.requestSupport(it.text, it.id) } },
+                            enabled = latest != null,
                             shape = AppButtonShape,
                             colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                        ) { Text("先练 30 秒") }
-                        OutlinedButton(
-                            onClick = {},
-                            modifier = Modifier.weight(1f),
-                            shape = AppButtonShape,
-                        ) { Text("请同学陪练") }
+                        ) { Text("一起想办法") }
                     }
                     Text(
                         "只提供建议，不会自动给任何人发送消息。",

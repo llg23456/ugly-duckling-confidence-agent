@@ -20,12 +20,17 @@
 - `PATCH /api/v1/memories/{id}`：提交 `device_id`、`content` 修改记忆。
 - `POST /api/v1/memories/{id}/confirm?device_id=...`：确认敏感、矛盾或低置信度记忆。
 - `DELETE /api/v1/memories/{id}?device_id=...`：删除记忆并从后续召回、上下文中排除旧内容。
-- `POST /api/v1/support/suggest`：支持圈建议，当前仍为 Mock。
-- `GET /api/v1/reviews/{period}`：周期回顾，当前仍为 Mock。
+- `GET/POST/PATCH/DELETE /api/v1/support-people`：按设备维护用户手填的支持对象、关系与适合场景。
+- `POST /api/v1/support/suggest`：返回可信对象、理由、自己的小步骤、可编辑话术和更轻的备选方案；提供 `device_id` 时保存建议，供后续反馈引用。
+- `POST /api/v1/support/feedback`：记录“帮到了 / 没帮到 / 没有联系”；确实联系后的反馈会进入成长事件。
+- `GET /api/v1/support/feedback?device_id=...`：读取已保存的求助反馈。
+- `GET /api/v1/reviews/{period}?device_id=...`：基于真实成长事件的日、近七天、当月回顾，包含自己的尝试、收到的帮助及来源 ID；不传 `device_id` 保留旧版 Mock 示例。
 
 文字、图片和语音聊天现在共用按 `device_id` 区分的 SQLite 会话。生成回复前读取最近 12 条消息；成功后把用户消息和回复写入 `messages`，响应额外返回两个消息 ID。数据库在首次访问时自动创建于 `DATABASE_URL` 指定位置（默认 `server/confidence_agent.db`）。上传的原始图片、音频不写入服务端数据库，`media_ref` 仅保存 SHA-256 来源标识。
 
 P1 在每轮回复保存后独立提取成长事件。程序按交接文档的五项权重和阈值裁决：高价值低敏感事件自动进入长期记忆，中等价值进入当日草稿，敏感、矛盾或低置信度事件等待用户确认。提取失败会记录服务端日志，不影响本轮回复；未启用真实模型时不自动写入事件。召回只使用带有效原始消息 ID 的已确认记忆，最多四条，`/chat` 和多模态响应中的 `evidence` 附有来源 ID、日期、类型和记忆 ID。旧 SQLite 数据库首次启动时自动补齐 P1 字段，现有消息保留。
+
+P2 在用户主动求助、持续受阻或面临高难任务时把聊天策略设为 `seek_support`。建议从用户自己维护的支持圈中选择对象；没有人选时只给泛称，不假定真实关系。Android 可编辑、复制或主动打开系统分享面板，服务端不会联系任何人。反馈与建议关联，只有用户确认实际得到帮助后才写入 `support_received`；自己的尝试单独写入 `own_effort`。成长页读取真实事件，支持反馈也能追溯到原始反馈。P1 数据库首次启动时自动增补 P2 字段和新表。
 
 音频接口先让 `qwen3.8-omni-flash`输出转写，再把转写送入统一的小鸭对话服务，因此 Android 可以把“用户转写 + 小鸭回复”写回同一会话。第一版是轮次式录音，不是 WebSocket 全双工电话。
 

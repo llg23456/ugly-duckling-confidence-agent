@@ -120,6 +120,7 @@ def chat_with_audio(
         reply=chat_response.reply,
         model=active_settings.chat_model,
         evidence=chat_response.evidence,
+        strategy=chat_response.strategy,
     )
 
 

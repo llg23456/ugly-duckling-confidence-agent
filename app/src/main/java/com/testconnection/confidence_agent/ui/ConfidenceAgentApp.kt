@@ -37,6 +37,7 @@ import com.testconnection.confidence_agent.data.preferences.VoicePreferencesStor
 import com.testconnection.confidence_agent.data.preferences.OnboardingStore
 import com.testconnection.confidence_agent.data.model.RecordMode
 import com.testconnection.confidence_agent.ui.screens.MemoryCenterScreen
+import com.testconnection.confidence_agent.ui.screens.SupportCircleScreen
 import com.testconnection.confidence_agent.ui.screens.OnboardingScreen
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
@@ -62,6 +63,7 @@ fun ConfidenceAgentApp(
     var showCover by rememberSaveable { mutableStateOf(true) }
     var showVoiceCall by rememberSaveable { mutableStateOf(false) }
     var showMemoryCenter by rememberSaveable { mutableStateOf(false) }
+    var showSupportCircle by rememberSaveable { mutableStateOf(false) }
     var sourceMessageId by rememberSaveable { mutableStateOf<Long?>(null) }
     var requestedRecordMode by remember { mutableStateOf(RecordMode.TEXT) }
     var cameraLaunchToken by remember { mutableIntStateOf(0) }
@@ -122,6 +124,11 @@ fun ConfidenceAgentApp(
                 showOnboarding = true
             },
         )
+        return
+    }
+
+    if (showSupportCircle) {
+        SupportCircleScreen(onBack = { showSupportCircle = false })
         return
     }
 
@@ -186,7 +193,11 @@ fun ConfidenceAgentApp(
                     sourceMessageId = sourceMessageId,
                     onSourceLocated = { sourceMessageId = null },
                 )
-                1 -> GrowthScreen(contentPadding = padding)
+                1 -> GrowthScreen(
+                    contentPadding = padding,
+                    onOpenSource = { sourceMessageId = it; selectedTab = 0 },
+                    onOpenFeedback = { showSupportCircle = true },
+                )
                 2 -> RecordScreen(
                     contentPadding = padding,
                     requestedMode = requestedRecordMode,
@@ -201,6 +212,7 @@ fun ConfidenceAgentApp(
                         voicePreferencesStore.save(it)
                     },
                     onOpenMemoryCenter = { showMemoryCenter = true },
+                    onOpenSupportCircle = { showSupportCircle = true },
                 )
             }
         }

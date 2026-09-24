@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.testconnection.confidence_agent.data.model.ChatMessage
 import com.testconnection.confidence_agent.data.repository.ChatRepository
 import com.testconnection.confidence_agent.data.remote.MemoryEvidence
+import com.testconnection.confidence_agent.data.remote.SupportApiClient
+import com.testconnection.confidence_agent.data.remote.SupportSuggestion
+import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -25,6 +28,10 @@ data class HomeUiState(
     val voiceTurnId: Int = 0,
     val pendingImage: PendingChatImage? = null,
     val lastEvidence: List<MemoryEvidence> = emptyList(),
+    val supportSuggestion: SupportSuggestion? = null,
+    val supportLoading: Boolean = false,
+    val supportFeedbackLoading: Boolean = false,
+    val supportFeedbackOutcome: String? = null,
 )
 
 data class PendingChatImage(
@@ -35,6 +42,8 @@ data class PendingChatImage(
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChatRepository(application)
+    private val supportApi = SupportApiClient()
+    private val deviceId = DeviceIdStore(application).get()
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
@@ -88,6 +97,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 pendingImage = null,
                 sending = true,
                 error = null,
+                supportSuggestion = null,
+                supportFeedbackOutcome = null,
             )
         }
 
@@ -105,6 +116,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                             lastEvidence = response.evidence,
                         )
                     }
+                    if (response.strategy == "seek_support") requestSupport(message, response.userMessageId)
                 }
                 .onFailure {
                     _uiState.update { state ->
@@ -122,7 +134,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendAudio(file: File) {
         if (_uiState.value.sending) return
-        _uiState.update { it.copy(sending = true, error = null) }
+        _uiState.update { it.copy(sending = true, error = null, supportSuggestion = null, supportFeedbackOutcome = null) }
         viewModelScope.launch {
             try {
                 val response = repository.sendAudio(file)
@@ -137,6 +149,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         voiceTurnId = it.voiceTurnId + 1,
                     )
                 }
+                if (response.strategy == "seek_support") requestSupport(transcript, response.userMessageId)
             } catch (error: Throwable) {
                 _uiState.update {
                     it.copy(
@@ -157,6 +170,31 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshHistory() {
         viewModelScope.launch { runCatching { repository.syncHistory() } }
+    }
+
+    fun requestSupport(situation: String, sourceMessageId: Long? = null) {
+        if (situation.isBlank() || _uiState.value.supportLoading) return
+        _uiState.update { it.copy(supportLoading = true, supportSuggestion = null, supportFeedbackOutcome = null, error = null) }
+        viewModelScope.launch {
+            runCatching { supportApi.suggest(deviceId, situation, sourceMessageId) }
+                .onSuccess { proposal ->
+                    _uiState.update { it.copy(supportSuggestion = proposal, supportLoading = false) }
+                }
+                .onFailure {
+                    _uiState.update { it.copy(supportLoading = false, error = "暂时无法生成求助建议，请稍后重试。") }
+                }
+        }
+    }
+
+    fun submitSupportFeedback(outcome: String, ownEffort: String?, supportReceived: String?) {
+        val suggestionId = _uiState.value.supportSuggestion?.id ?: return
+        if (_uiState.value.supportFeedbackLoading) return
+        _uiState.update { it.copy(supportFeedbackLoading = true, error = null) }
+        viewModelScope.launch {
+            runCatching { supportApi.feedback(deviceId, suggestionId, outcome, ownEffort, supportReceived) }
+                .onSuccess { _uiState.update { it.copy(supportFeedbackLoading = false, supportFeedbackOutcome = outcome) } }
+                .onFailure { _uiState.update { it.copy(supportFeedbackLoading = false, error = "反馈暂时没有保存，请重试。") } }
+        }
     }
 
     suspend fun synthesizeSpeech(text: String, voice: String): ByteArray =
