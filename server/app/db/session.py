@@ -18,6 +18,7 @@ SQLITE_ADDITIONS = {
         "support_received": "TEXT",
         "own_effort": "TEXT",
         "source_feedback_id": "INTEGER",
+        "source_record_id": "INTEGER",
         "people": "JSON",
         "confidence": "FLOAT",
         "value_score": "FLOAT",
@@ -39,6 +40,11 @@ SQLITE_ADDITIONS = {
     "support_people": {
         "kind": "VARCHAR(24)",
         "scenarios": "JSON",
+    },
+    "reviews": {
+        "range_start": "VARCHAR(10)",
+        "range_end": "VARCHAR(10)",
+        "updated_at": "DATETIME",
     },
 }
 
@@ -63,6 +69,14 @@ def upgrade_existing_sqlite(engine) -> None:
         connection.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_growth_events_source_feedback_id "
             "ON growth_events (source_feedback_id)"
+        ))
+        connection.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_growth_events_source_record_id "
+            "ON growth_events (source_record_id)"
+        ))
+        connection.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ix_reviews_period_range "
+            "ON reviews (conversation_id, period, range_start, range_end)"
         ))
 
 

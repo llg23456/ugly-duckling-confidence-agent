@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.testconnection.confidence_agent.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.testconnection.confidence_agent.ui.screens.GrowthScreen
+import com.testconnection.confidence_agent.ui.screens.GrowthViewModel
 import com.testconnection.confidence_agent.ui.screens.AppCoverScreen
 import com.testconnection.confidence_agent.ui.screens.HomeScreen
 import com.testconnection.confidence_agent.ui.screens.HomeViewModel
@@ -80,7 +81,12 @@ fun ConfidenceAgentApp(
         ?.takeUnless { it == "unknown" || it == "prefer_not_to_say" || it.isBlank() }
         ?: "你"
     val homeViewModel: HomeViewModel = viewModel()
+    val growthViewModel: GrowthViewModel = viewModel()
     val homeState by homeViewModel.uiState.collectAsState()
+
+    LaunchedEffect(showCover, showOnboarding) {
+        if (!showCover && !showOnboarding) growthViewModel.refresh()
+    }
 
     LaunchedEffect(Unit) {
         delay(1_800)
@@ -197,6 +203,7 @@ fun ConfidenceAgentApp(
                     contentPadding = padding,
                     onOpenSource = { sourceMessageId = it; selectedTab = 0 },
                     onOpenFeedback = { showSupportCircle = true },
+                    growthViewModel = growthViewModel,
                 )
                 2 -> RecordScreen(
                     contentPadding = padding,

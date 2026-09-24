@@ -37,6 +37,7 @@ class EventItem(BaseModel):
     memory_decision: str | None
     source_id: int | None
     source_feedback_id: int | None
+    source_record_id: int | None
     source_type: str | None
     created_at: datetime
 

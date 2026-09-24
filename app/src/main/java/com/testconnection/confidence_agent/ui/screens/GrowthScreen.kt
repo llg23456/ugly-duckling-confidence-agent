@@ -16,13 +16,17 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,10 +35,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.testconnection.confidence_agent.R
-import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
-import com.testconnection.confidence_agent.data.remote.GrowthEvent
-import com.testconnection.confidence_agent.data.remote.SupportApiClient
+import com.testconnection.confidence_agent.data.model.RecordDraft
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.SectionHeading
@@ -50,22 +53,29 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 
 @Composable
-fun GrowthScreen(contentPadding: PaddingValues, onOpenSource: (Long) -> Unit = {}, onOpenFeedback: () -> Unit = {}) {
-    val context = LocalContext.current
-    val deviceId = remember { DeviceIdStore(context.applicationContext).get() }
-    val api = remember { SupportApiClient() }
-    var events by remember { mutableStateOf<List<GrowthEvent>>(emptyList()) }
-    var loadError by remember { mutableStateOf<String?>(null) }
-    var period by remember { mutableStateOf("月") }
-    LaunchedEffect(Unit) {
-        runCatching { api.events(deviceId) }
-            .onSuccess { events = it; loadError = null }
-            .onFailure { loadError = "成长事件暂时无法加载。" }
+fun GrowthScreen(contentPadding: PaddingValues, onOpenSource: (Long) -> Unit = {}, onOpenFeedback: () -> Unit = {}, growthViewModel: GrowthViewModel = viewModel()) {
+    val state by growthViewModel.state.collectAsState()
+    var selectedRecord by remember { mutableStateOf<RecordDraft?>(null) }
+    var missingRecordText by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { growthViewModel.refresh() }
+    selectedRecord?.let { RecordDetailDialog(it, onDismiss = { selectedRecord = null }) }
+    missingRecordText?.let { content -> AlertDialog(
+        onDismissRequest = { missingRecordText = null },
+        title = { Text("记录来源") },
+        text = { Text("$content\n\n原始照片或录音不在本机时，只能查看保存的说明。") },
+        confirmButton = { TextButton(onClick = { missingRecordText = null }) { Text("收好") } },
+    ) }
+    fun openMoment(messageId: Long?, feedbackId: Long?, recordId: Long?, title: String) {
+        if (recordId != null) {
+            selectedRecord = growthViewModel.localRecordFor(recordId)
+            if (selectedRecord == null) missingRecordText = title
+        } else if (feedbackId != null) onOpenFeedback()
+        else messageId?.let(onOpenSource)
     }
     val today = LocalDate.now()
-    val visibleEvents = events.filter { event ->
+    val visibleEvents = state.events.filter { event ->
         val date = eventLocalDay(event.createdAt) ?: return@filter false
-        when (period) {
+        when (state.period) {
             "日" -> date == today
             "周" -> !date.isBefore(today.minusDays(6)) && !date.isAfter(today)
             else -> YearMonth.from(date) == YearMonth.from(today)
@@ -96,9 +106,10 @@ fun GrowthScreen(contentPadding: PaddingValues, onOpenSource: (Long) -> Unit = {
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 listOf("日", "周", "月").forEach { label ->
-                    val selected = label == period
+                    val selected = label == state.period
                     Button(
-                        onClick = { period = label },
+                        onClick = { growthViewModel.selectPeriod(label) },
+                        enabled = !state.loading,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(19.dp),
                         colors = ButtonDefaults.buttonColors(
@@ -113,9 +124,44 @@ fun GrowthScreen(contentPadding: PaddingValues, onOpenSource: (Long) -> Unit = {
 
         item {
             WarmCard {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SectionHeading(state.review?.title ?: "这一段的回望", "由已记录的经历组成，可查看来源")
+                    if (state.loading) CircularProgressIndicator(modifier = Modifier.size(22.dp))
+                    state.error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                        OutlinedButton(onClick = { growthViewModel.refresh() }) { Text("重试同步与生成") }
+                    }
+                    state.review?.let { review ->
+                        Text(if (review.story.isBlank()) "这段时间还没有成长事件，慢慢来就好。" else review.story,
+                            style = MaterialTheme.typography.bodyLarge)
+                        if (review.moments.isNotEmpty()) {
+                            Text("停顿与重新开始：${review.pauseOrRestart}", style = MaterialTheme.typography.bodyMedium)
+                            Text("下一步：${review.nextStep}", style = MaterialTheme.typography.bodyMedium)
+                            review.moments.forEach { moment ->
+                                TextButton(onClick = { openMoment(moment.sourceMessageId, moment.sourceFeedbackId, moment.sourceRecordId, moment.title) }) {
+                                    Text("${moment.date} · ${moment.title}  ›")
+                                }
+                            }
+                            Text("已保存 ${review.sourceEventIds.size} 条来源", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (state.pastDaily != null && state.period == "日") item {
+            WarmCard {
+                Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("上一次日回望 · ${state.pastDaily?.rangeStart.orEmpty()}", style = MaterialTheme.typography.titleMedium)
+                    Text(state.pastDaily?.story.orEmpty(), style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+        }
+
+        item {
+            WarmCard {
                 Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     SectionHeading("这段时间的成长事件", "只展示已经记录的经历")
-                    loadError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     if (visibleEvents.isEmpty()) Text("这段时间还没有成长事件，慢慢来就好。", style = MaterialTheme.typography.bodyLarge)
                     visibleEvents.forEachIndexed { index, moment ->
                         Row(verticalAlignment = Alignment.Top) {
@@ -136,14 +182,13 @@ fun GrowthScreen(contentPadding: PaddingValues, onOpenSource: (Long) -> Unit = {
                             }
                             Surface(
                                 onClick = {
-                                    moment.sourceId?.let(onOpenSource)
-                                    if (moment.sourceId == null && moment.sourceFeedbackId != null) onOpenFeedback()
+                                    openMoment(moment.sourceId, moment.sourceFeedbackId, moment.sourceRecordId, moment.fact)
                                 },
                                 shape = AppButtonShape,
                                 color = SagePale,
                             ) {
                                 Text(
-                                    if (moment.sourceId != null) "查看来源" else if (moment.sourceFeedbackId != null) "来自反馈" else "已记录",
+                                    if (moment.sourceRecordId != null) "来自记录" else if (moment.sourceFeedbackId != null) "来自反馈" else if (moment.sourceId != null) "查看来源" else "已记录",
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = SageDark,
@@ -162,14 +207,14 @@ fun GrowthScreen(contentPadding: PaddingValues, onOpenSource: (Long) -> Unit = {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SupportSummary(
                             title = "我的一步",
-                            main = visibleEvents.mapNotNull { it.ownEffort }.firstOrNull() ?: "还没有记录",
+                            main = state.review?.ownEffort ?: "还没有记录",
                             detail = "只记录你明确做过的事。",
                             modifier = Modifier.weight(1f),
                             background = SagePale,
                         )
                         SupportSummary(
                             title = "收到的帮助",
-                            main = visibleEvents.mapNotNull { it.supportReceived }.firstOrNull() ?: "还没有记录",
+                            main = state.review?.supportReceived ?: "还没有记录",
                             detail = "只记录确实得到的帮助。",
                             modifier = Modifier.weight(1f),
                             background = TerracottaPale,

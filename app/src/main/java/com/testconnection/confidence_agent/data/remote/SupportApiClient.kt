@@ -33,6 +33,7 @@ data class GrowthEvent(
     val supportReceived: String?,
     val sourceId: Long?,
     val sourceFeedbackId: Long?,
+    val sourceRecordId: Long?,
     val createdAt: String,
 )
 
@@ -127,20 +128,4 @@ class SupportApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         }
     }
 
-    suspend fun events(deviceId: String): List<GrowthEvent> = withContext(Dispatchers.IO) {
-        val rows = JSONObject(request("/events?device_id=${Uri.encode(deviceId)}", "GET")).getJSONArray("events")
-        buildList {
-            for (index in 0 until rows.length()) {
-                val row = rows.getJSONObject(index)
-                add(GrowthEvent(
-                    row.getLong("id"), row.getString("fact"),
-                    row.optString("own_effort").takeIf { it.isNotBlank() && it != "null" },
-                    row.optString("support_received").takeIf { it.isNotBlank() && it != "null" },
-                    row.optLong("source_id").takeIf { it > 0 },
-                    row.optLong("source_feedback_id").takeIf { it > 0 },
-                    row.getString("created_at"),
-                ))
-            }
-        }
-    }
 }

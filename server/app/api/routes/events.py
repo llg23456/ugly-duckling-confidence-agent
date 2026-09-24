@@ -45,6 +45,7 @@ def list_events(device_id: str = Query(min_length=1, max_length=128), db: Sessio
         confidence=event.confidence, value_score=event.value_score,
         memory_decision=event.memory_decision, source_id=event.source_user_message_id,
         source_feedback_id=event.source_feedback_id,
+        source_record_id=event.source_record_id,
         source_type=event.source_type, created_at=event.created_at,
     ) for event in events])
 

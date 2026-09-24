@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -51,6 +51,7 @@ class GrowthEvent(Base):
     own_effort: Mapped[str | None] = mapped_column(Text, nullable=True)
     support_received: Mapped[str | None] = mapped_column(Text, nullable=True)
     source_feedback_id: Mapped[int | None] = mapped_column(ForeignKey("support_feedback.id"), unique=True, nullable=True)
+    source_record_id: Mapped[int | None] = mapped_column(ForeignKey("records.id"), unique=True, nullable=True)
     people: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     value_score: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -142,6 +143,21 @@ class SupportFeedback(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
+class UserRecord(Base):
+    __tablename__ = "records"
+    __table_args__ = (UniqueConstraint("conversation_id", "client_record_id", name="uq_records_device_client_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    client_record_id: Mapped[str] = mapped_column(String(80))
+    mode: Mapped[str] = mapped_column(String(16))
+    text: Mapped[str] = mapped_column(Text)
+    photo_comment: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class Review(Base):
     __tablename__ = "reviews"
 
@@ -150,4 +166,7 @@ class Review(Base):
     period: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text)
     source_event_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    range_start: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    range_end: Mapped[str | None] = mapped_column(String(10), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
