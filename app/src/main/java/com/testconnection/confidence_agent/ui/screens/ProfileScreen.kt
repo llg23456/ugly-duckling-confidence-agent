@@ -68,6 +68,7 @@ fun ProfileScreen(
     onVoicePreferencesChange: (VoicePreferences) -> Unit,
     onOpenMemoryCenter: () -> Unit,
     onOpenSupportCircle: () -> Unit,
+    onOpenDataTools: () -> Unit,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -192,11 +193,12 @@ fun ProfileScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限") {
+                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限" || entry.title == "数据导出") {
                                     when (entry.title) {
                                         "记忆中心" -> onOpenMemoryCenter()
                                         "支持圈" -> onOpenSupportCircle()
                                         "隐私与权限" -> { widgetAllowed = widgetPrivacy.isAllowed(); widgetPreview = widgetPrivacy.snapshot(); showWidgetPrivacy = true }
+                                        "数据导出" -> onOpenDataTools()
                                     }
                                 }
                                 .padding(horizontal = 18.dp, vertical = 16.dp),

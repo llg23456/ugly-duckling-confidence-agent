@@ -14,6 +14,12 @@ class ReviewMoment(BaseModel):
     source_record_id: int | None = None
 
 
+class ReviewSection(BaseModel):
+    key: str
+    title: str
+    content: str
+
+
 class ReviewGenerateRequest(BaseModel):
     device_id: str = Field(min_length=1, max_length=128)
     period: Literal["day", "week", "month"]
@@ -40,8 +46,11 @@ class ReviewResponse(BaseModel):
     support_received: str
     pause_or_restart: str = ""
     next_step: str = ""
+    sections: list[ReviewSection] = Field(default_factory=list)
+    affirmation: str = ""
     moments: list[ReviewMoment]
     source_event_ids: list[int] = Field(default_factory=list)
     closing: str
     generated_at: datetime | None = None
+    model: str | None = None
     mock: bool = True

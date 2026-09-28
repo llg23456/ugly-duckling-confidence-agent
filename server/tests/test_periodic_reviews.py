@@ -59,6 +59,7 @@ def test_previous_day_review_is_saved_with_source_and_retries(client: TestClient
     assert data["source_event_ids"] == [item["event_id"]]
     assert data["moments"][0]["source_record_id"] == item["id"]
     assert "卡住" in data["pause_or_restart"]
+    assert [section["key"] for section in data["sections"]] == ["happened", "difficulty", "attempt", "response"]
     assert client.post("/api/v1/reviews/generate", json=request).json()["id"] == data["id"]
     pending = client.post("/api/v1/reviews/generate-pending-daily", json={"device_id": "review-owner"}).json()["reviews"]
     assert len(pending) == 1 and pending[0]["id"] == data["id"]
@@ -89,6 +90,8 @@ def test_weekly_review_keeps_effort_and_actual_help(client: TestClient) -> None:
     assert len(review["source_event_ids"]) == 2
     assert any(item["source_feedback_id"] == feedback["feedback"]["id"] for item in review["moments"])
     assert review["next_step"]
+    assert [section["key"] for section in review["sections"]] == ["completed", "difficulty", "process", "change", "unfinished"]
+    assert review["affirmation"]
 
 
 def test_monthly_nodes_include_setback_and_empty_does_not_fabricate(client: TestClient) -> None:

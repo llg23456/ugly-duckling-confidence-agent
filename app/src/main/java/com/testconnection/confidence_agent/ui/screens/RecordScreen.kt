@@ -70,6 +70,10 @@ import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.WarmOutline
 import java.io.File
 import java.text.SimpleDateFormat
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.launch
@@ -80,6 +84,8 @@ fun RecordScreen(
     contentPadding: PaddingValues,
     requestedMode: RecordMode = RecordMode.TEXT,
     cameraLaunchToken: Int = 0,
+    requestedDateEpochDay: Long? = null,
+    requestedEditRecord: RecordDraft? = null,
     onRequestConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -94,6 +100,9 @@ fun RecordScreen(
     var photoComment by remember { mutableStateOf("") }
     var photoPath by remember { mutableStateOf<String?>(null) }
     var voiceTempFile by remember { mutableStateOf<File?>(null) }
+    var existingAudioPath by remember { mutableStateOf<String?>(null) }
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var editingCreatedAt by remember { mutableStateOf<Long?>(null) }
     var records by remember { mutableStateOf(localRepository.load()) }
     var selectedRecord by remember { mutableStateOf<RecordDraft?>(null) }
     var isRecording by remember { mutableStateOf(false) }
@@ -101,6 +110,9 @@ fun RecordScreen(
     var message by remember { mutableStateOf<String?>(null) }
     var handledCameraToken by remember { mutableIntStateOf(0) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    var targetDate by remember {
+        mutableStateOf(requestedDateEpochDay?.let(LocalDate::ofEpochDay) ?: LocalDate.now())
+    }
 
     fun acceptPhoto(uri: Uri) {
         runCatching { localRepository.importPhoto(uri) }
@@ -179,24 +191,28 @@ fun RecordScreen(
             message = "哪怕只写一句也可以。"
             return
         }
-        if (mode == RecordMode.VOICE && voiceTempFile == null) {
+        if (mode == RecordMode.VOICE && voiceTempFile == null && existingAudioPath == null) {
             message = "请先录下一段声音。"
             return
         }
         val savedAudioPath = if (mode == RecordMode.VOICE) {
-            runCatching { localRepository.importAudio(requireNotNull(voiceTempFile)) }
-                .getOrElse {
-                    message = it.message ?: "录音保存失败"
-                    return
-                }
+            if (voiceTempFile != null) {
+                runCatching { localRepository.importAudio(requireNotNull(voiceTempFile)) }
+                    .getOrElse {
+                        message = it.message ?: "录音保存失败"
+                        return
+                    }
+            } else existingAudioPath
         } else null
         val record = RecordDraft(
-                id = localRepository.newId(),
+                id = editingId ?: localRepository.newId(),
                 mode = mode,
                 text = mainText,
                 audioPath = savedAudioPath,
                 photoPath = photoPath,
                 photoComment = photoComment.trim(),
+                createdAt = editingCreatedAt
+                    ?: targetDate.atTime(LocalTime.now()).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
                 status = status,
             )
         localRepository.save(record)
@@ -209,6 +225,9 @@ fun RecordScreen(
         note = ""
         voiceTempFile?.delete()
         voiceTempFile = null
+        existingAudioPath = null
+        editingId = null
+        editingCreatedAt = null
         photoComment = ""
         photoPath = null
         message = if (status == "draft") "已经替你保存草稿。" else "这一笔已经好好收下了。"
@@ -220,8 +239,21 @@ fun RecordScreen(
             voiceTempFile?.delete()
         }
     }
-    LaunchedEffect(requestedMode, cameraLaunchToken) {
-        mode = requestedMode
+    LaunchedEffect(requestedMode, cameraLaunchToken, requestedDateEpochDay, requestedEditRecord) {
+        val edit = requestedEditRecord
+        mode = edit?.mode ?: requestedMode
+        targetDate = edit?.createdAt?.let {
+            java.time.Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+        } ?: requestedDateEpochDay?.let(LocalDate::ofEpochDay) ?: LocalDate.now()
+        editingId = edit?.id
+        editingCreatedAt = edit?.createdAt
+        if (edit != null) {
+            note = edit.text
+            photoComment = edit.photoComment
+            photoPath = edit.photoPath
+            existingAudioPath = edit.audioPath
+            message = "正在编辑这条记录，保存后会更新原内容。"
+        }
         if (cameraLaunchToken > 0 && cameraLaunchToken != handledCameraToken) {
             handledCameraToken = cameraLaunchToken
             requestCamera()
@@ -241,8 +273,20 @@ fun RecordScreen(
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("今日留一笔", style = MaterialTheme.typography.displaySmall)
-                    Text("不必完整，留下一点就好。", style = MaterialTheme.typography.bodyLarge, color = InkMuted)
+                    Text(
+                        when {
+                            editingId != null -> "编辑那天的记录"
+                            targetDate == LocalDate.now() -> "今日留一笔"
+                            else -> "为那天补一笔"
+                        },
+                        style = MaterialTheme.typography.displaySmall,
+                    )
+                    Text(
+                        if (targetDate == LocalDate.now()) "不必完整，留下一点就好。"
+                        else "这条记录会放回 ${targetDate.monthValue}月${targetDate.dayOfMonth}日。",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = InkMuted,
+                    )
                 }
                 DuckArt(R.drawable.duck_writing, "正在记录的小鸭", Modifier.size(130.dp))
             }
@@ -250,7 +294,7 @@ fun RecordScreen(
         item {
             WarmCard {
                 Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    Text(SimpleDateFormat("M月d日  EEEE", Locale.SIMPLIFIED_CHINESE).format(Date()), style = MaterialTheme.typography.titleLarge)
+                    Text(targetDate.format(DateTimeFormatter.ofPattern("M月d日  EEEE", Locale.SIMPLIFIED_CHINESE)), style = MaterialTheme.typography.titleLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         RecordModeButton(R.drawable.ic_record_write, "写一句", mode == RecordMode.TEXT, Modifier.weight(1f)) { mode = RecordMode.TEXT }
                         RecordModeButton(R.drawable.ic_record_voice, "说一句", mode == RecordMode.VOICE, Modifier.weight(1f)) { mode = RecordMode.VOICE }
@@ -310,7 +354,7 @@ fun RecordScreen(
 }
 
 @Composable
-fun RecordDetailDialog(record: RecordDraft, onDismiss: () -> Unit) {
+fun RecordDetailDialog(record: RecordDraft, onDismiss: () -> Unit, onEdit: (() -> Unit)? = null) {
     var playing by remember { mutableStateOf(false) }
     val player = remember(record.id) { MediaPlayer() }
     DisposableEffect(player) {
@@ -394,6 +438,9 @@ fun RecordDetailDialog(record: RecordDraft, onDismiss: () -> Unit) {
                     }
                 }
             }
+        },
+        dismissButton = {
+            if (onEdit != null) TextButton(onClick = onEdit) { Text("编辑", color = SageDark) }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("收好", color = SageDark) } },
     )

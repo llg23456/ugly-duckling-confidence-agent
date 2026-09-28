@@ -5,6 +5,9 @@ import com.testconnection.confidence_agent.BuildConfig
 import com.testconnection.confidence_agent.data.model.RecordDraft
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.OffsetDateTime
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,14 +19,23 @@ data class ReviewMoment(
     val sourceMessageId: Long?, val sourceFeedbackId: Long?, val sourceRecordId: Long?,
 )
 
+data class ReviewSection(
+    val key: String,
+    val title: String,
+    val content: String,
+)
+
 data class ReviewSummary(
     val id: Long?, val period: String, val rangeStart: String, val rangeEnd: String,
     val title: String, val story: String, val ownEffort: String, val supportReceived: String,
     val pauseOrRestart: String, val nextStep: String, val moments: List<ReviewMoment>,
-    val sourceEventIds: List<Long>,
+    val sourceEventIds: List<Long>, val closing: String,
+    val sections: List<ReviewSection> = emptyList(),
+    val affirmation: String = "",
 )
 
 data class SyncedRecord(val serverId: Long, val clientId: String)
+data class DemoDataResult(val created: Int, val deleted: Int, val theme: String)
 
 class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
     private fun request(path: String, method: String, body: JSONObject? = null): String {
@@ -101,9 +113,42 @@ class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         (0 until rows.length()).map { parseReview(rows.getJSONObject(it)) }
     }
 
+    suspend fun record(deviceId: String, serverId: Long): RecordDraft = withContext(Dispatchers.IO) {
+        val row = JSONObject(request("/records/$serverId?device_id=${Uri.encode(deviceId)}", "GET"))
+        RecordDraft(
+            id = row.getString("client_record_id"),
+            mode = runCatching { com.testconnection.confidence_agent.data.model.RecordMode.valueOf(row.getString("mode").uppercase(Locale.ROOT)) }
+                .getOrDefault(com.testconnection.confidence_agent.data.model.RecordMode.TEXT),
+            text = row.optString("text"),
+            photoComment = row.optString("photo_comment"),
+            createdAt = runCatching {
+                val raw = row.getString("created_at")
+                runCatching { OffsetDateTime.parse(raw).toInstant() }
+                    .getOrElse { LocalDateTime.parse(raw).toInstant(ZoneOffset.UTC) }
+                    .toEpochMilli()
+            }.getOrDefault(System.currentTimeMillis()),
+            status = row.optString("status", "saved"),
+        )
+    }
+
+    suspend fun createDemoData(deviceId: String): DemoDataResult = withContext(Dispatchers.IO) {
+        parseDemoResult(JSONObject(request("/dev/demo-data", "POST", JSONObject().put("device_id", deviceId))))
+    }
+
+    suspend fun clearDemoData(deviceId: String): DemoDataResult = withContext(Dispatchers.IO) {
+        parseDemoResult(JSONObject(request("/dev/demo-data", "DELETE", JSONObject().put("device_id", deviceId))))
+    }
+
+    private fun parseDemoResult(row: JSONObject) = DemoDataResult(
+        created = row.optInt("created"),
+        deleted = row.optInt("deleted"),
+        theme = row.optString("theme"),
+    )
+
     private fun parseReview(row: JSONObject): ReviewSummary {
         val moments = row.getJSONArray("moments")
         val sourceIds = row.getJSONArray("source_event_ids")
+        val sections = row.optJSONArray("sections") ?: JSONArray()
         return ReviewSummary(
             id = row.optLong("id").takeIf { it > 0 },
             period = row.getString("period"),
@@ -126,6 +171,17 @@ class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
                 }
             },
             sourceEventIds = (0 until sourceIds.length()).map { sourceIds.getLong(it) },
+            closing = row.optString("closing"),
+            sections = (0 until sections.length()).map { index ->
+                sections.getJSONObject(index).let { item ->
+                    ReviewSection(
+                        key = item.optString("key"),
+                        title = item.optString("title"),
+                        content = item.optString("content"),
+                    )
+                }
+            },
+            affirmation = row.optString("affirmation"),
         )
     }
 }

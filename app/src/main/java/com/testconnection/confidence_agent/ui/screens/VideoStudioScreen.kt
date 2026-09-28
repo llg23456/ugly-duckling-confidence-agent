@@ -37,8 +37,11 @@ import com.testconnection.confidence_agent.data.remote.VideoScene
 import com.testconnection.confidence_agent.data.remote.VideoScript
 import com.testconnection.confidence_agent.data.remote.VideoScriptApiClient
 import com.testconnection.confidence_agent.data.video.GrowthVideoRenderer
+import com.testconnection.confidence_agent.R
+import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.WarmCard
 import com.testconnection.confidence_agent.ui.components.noRippleClickable
+import com.testconnection.confidence_agent.ui.theme.SageDark
 import java.io.File
 import kotlinx.coroutines.launch
 
@@ -55,17 +58,23 @@ fun VideoStudioScreen(events: List<GrowthEvent>, onBack: () -> Unit) {
     val api = remember { VideoScriptApiClient() }
     val renderer = remember { GrowthVideoRenderer(context.applicationContext) }
     val deviceId = remember { DeviceIdStore(context.applicationContext).get() }
-    val candidates = events.filter { it.sensitivity == null || it.sensitivity == "low" }.take(30)
-    var selectedIds by remember(candidates.map { it.id }) { mutableStateOf(candidates.take(5).map { it.id }.toSet()) }
+    val candidates = events.filter { it.sensitivity == null || it.sensitivity == "low" }.take(40)
+    var query by remember { mutableStateOf("") }
+    var selectedIds by remember(candidates.map { it.id }) { mutableStateOf(emptySet<Long>()) }
     var script by remember { mutableStateOf<VideoScript?>(null) }
     var scenes by remember { mutableStateOf<List<VideoScene>>(emptyList()) }
     var video by remember { mutableStateOf<File?>(null) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
+    val searchResults = if (query.isBlank()) emptyList() else candidates.filter { event ->
+        val searchable = listOfNotNull(event.fact, event.ownEffort, event.supportReceived)
+            .plus(event.people).joinToString(" ")
+        searchable.contains(query.trim(), ignoreCase = true)
+    }.take(5)
 
     fun createScript() {
-        if (selectedIds.isEmpty() || busy) return
+        if (selectedIds.size !in 2..5 || busy) return
         busy = true
         error = null
         video = null
@@ -112,19 +121,50 @@ fun VideoStudioScreen(events: List<GrowthEvent>, onBack: () -> Unit) {
     ) {
         item {
             Text("‹ 成长小片", modifier = Modifier.noRippleClickable(onClick = onBack), style = MaterialTheme.typography.displaySmall)
-            Text("先选真实经历，再预览和删改脚本。只有你主动点击分享，视频才会离开本机。")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("从本周报告里找出三到五个能连成故事的片段，不需要把整周都塞进视频。",
+                    modifier = Modifier.weight(1f))
+                DuckArt(R.drawable.duck_story_picker, "挑选故事片段的小鸭", Modifier.height(112.dp))
+            }
         }
         item {
             WarmCard {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("选择素材（最多 6 条）", style = MaterialTheme.typography.titleLarge)
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("搜索故事素材", style = MaterialTheme.typography.titleLarge)
                     if (candidates.isEmpty()) Text("目前没有可选的成长事件，先留下一笔或聊聊自己的尝试。")
-                    candidates.forEach { event ->
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("搜索关键词") },
+                        placeholder = { Text("例如：汇报、紧张、老师、重新开始") },
+                    )
+                    if (query.isBlank() && candidates.isNotEmpty()) {
+                        Text("输入关键词后，最多显示 5 条相关结果。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else if (searchResults.isEmpty() && candidates.isNotEmpty()) {
+                        Text("没有找到相关片段，换一个更短的关键词试试。")
+                    }
+                    if (searchResults.isNotEmpty()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                selectedIds = searchResults.map { it.id }.toSet()
+                                script = null; scenes = emptyList(); video = null
+                            }) { Text("全选结果") }
+                            TextButton(onClick = {
+                                selectedIds = emptySet()
+                                script = null; scenes = emptyList(); video = null
+                            }) { Text("全部不选") }
+                            Text("已选 ${selectedIds.size}/5", modifier = Modifier.align(Alignment.CenterVertically), color = SageDark)
+                        }
+                    }
+                    searchResults.forEach { event ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(
                                 checked = event.id in selectedIds,
                                 onCheckedChange = { checked ->
-                                    selectedIds = if (checked && selectedIds.size < 6) selectedIds + event.id
+                                    selectedIds = if (checked && selectedIds.size < 5) selectedIds + event.id
                                     else if (!checked) selectedIds - event.id else selectedIds
                                     script = null; scenes = emptyList(); video = null
                                 },
@@ -132,7 +172,13 @@ fun VideoStudioScreen(events: List<GrowthEvent>, onBack: () -> Unit) {
                             Text(event.fact, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                         }
                     }
-                    Button(onClick = ::createScript, enabled = selectedIds.isNotEmpty() && !busy) { Text("生成五段脚本") }
+                    Button(
+                        onClick = ::createScript,
+                        enabled = selectedIds.size in 2..5 && !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("用已选片段生成故事脚本") }
+                    if (selectedIds.size == 1) Text("再选一条，故事才有前后变化。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

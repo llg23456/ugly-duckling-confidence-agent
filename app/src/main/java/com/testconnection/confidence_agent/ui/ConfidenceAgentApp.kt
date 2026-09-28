@@ -29,6 +29,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.testconnection.confidence_agent.ui.screens.GrowthScreen
 import com.testconnection.confidence_agent.ui.screens.GrowthViewModel
 import com.testconnection.confidence_agent.ui.screens.VideoStudioScreen
+import com.testconnection.confidence_agent.ui.screens.WeeklyReportScreen
 import com.testconnection.confidence_agent.ui.screens.AppCoverScreen
 import com.testconnection.confidence_agent.ui.screens.HomeScreen
 import com.testconnection.confidence_agent.ui.screens.HomeViewModel
@@ -41,6 +42,7 @@ import com.testconnection.confidence_agent.data.model.RecordMode
 import com.testconnection.confidence_agent.ui.screens.MemoryCenterScreen
 import com.testconnection.confidence_agent.ui.screens.SupportCircleScreen
 import com.testconnection.confidence_agent.ui.screens.OnboardingScreen
+import com.testconnection.confidence_agent.ui.screens.DataToolsScreen
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
@@ -67,8 +69,12 @@ fun ConfidenceAgentApp(
     var showMemoryCenter by rememberSaveable { mutableStateOf(false) }
     var showSupportCircle by rememberSaveable { mutableStateOf(false) }
     var showVideoStudio by rememberSaveable { mutableStateOf(false) }
+    var showWeeklyReport by rememberSaveable { mutableStateOf(false) }
+    var showDataTools by rememberSaveable { mutableStateOf(false) }
     var sourceMessageId by rememberSaveable { mutableStateOf<Long?>(null) }
     var requestedRecordMode by remember { mutableStateOf(RecordMode.TEXT) }
+    var requestedRecordDateEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var requestedEditRecord by remember { mutableStateOf<com.testconnection.confidence_agent.data.model.RecordDraft?>(null) }
     var cameraLaunchToken by remember { mutableIntStateOf(0) }
     val voicePreferencesStore = androidx.compose.runtime.remember {
         VoicePreferencesStore(context.applicationContext)
@@ -85,6 +91,7 @@ fun ConfidenceAgentApp(
     val homeViewModel: HomeViewModel = viewModel()
     val growthViewModel: GrowthViewModel = viewModel()
     val homeState by homeViewModel.uiState.collectAsState()
+    val growthState by growthViewModel.state.collectAsState()
 
     LaunchedEffect(showCover, showOnboarding) {
         if (!showCover && !showOnboarding) growthViewModel.refresh()
@@ -141,7 +148,31 @@ fun ConfidenceAgentApp(
     }
 
     if (showVideoStudio) {
-        VideoStudioScreen(events = growthViewModel.state.collectAsState().value.events, onBack = { showVideoStudio = false })
+        val sourceIds = growthState.review?.sourceEventIds.orEmpty().toSet()
+        VideoStudioScreen(
+            events = growthState.events.filter { it.id in sourceIds },
+            onBack = { showVideoStudio = false },
+        )
+        return
+    }
+
+    if (showWeeklyReport) {
+        WeeklyReportScreen(
+            review = growthState.review,
+            dailyReviews = growthState.dailyReviews,
+            onBack = { showWeeklyReport = false },
+            onShare = { showVideoStudio = true },
+        )
+        return
+    }
+
+    if (showDataTools) {
+        DataToolsScreen(
+            state = growthState,
+            onCreateDemoData = growthViewModel::createDemoData,
+            onClearDemoData = growthViewModel::clearDemoData,
+            onBack = { showDataTools = false },
+        )
         return
     }
 
@@ -149,6 +180,8 @@ fun ConfidenceAgentApp(
         externalDestination?.let {
             selectedTab = it.tab.coerceIn(0, tabs.lastIndex)
             requestedRecordMode = it.recordMode
+            requestedRecordDateEpochDay = null
+            requestedEditRecord = null
             if (it.openCamera) cameraLaunchToken += 1
             onExternalDestinationConsumed()
         }
@@ -175,7 +208,14 @@ fun ConfidenceAgentApp(
                 tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(
                         selected = selectedTab == index,
-                        onClick = { selectedTab = index },
+                        onClick = {
+                            if (index == 2) {
+                                requestedRecordMode = RecordMode.TEXT
+                                requestedRecordDateEpochDay = null
+                                requestedEditRecord = null
+                            }
+                            selectedTab = index
+                        },
                         icon = {
                             Image(
                                 painter = painterResource(tab.iconRes),
@@ -211,12 +251,27 @@ fun ConfidenceAgentApp(
                     onOpenSource = { sourceMessageId = it; selectedTab = 0 },
                     onOpenFeedback = { showSupportCircle = true },
                     growthViewModel = growthViewModel,
-                    onOpenVideoStudio = { showVideoStudio = true },
+                    onOpenWeeklyReport = { showWeeklyReport = true },
+                    onAddRecord = { date ->
+                        requestedRecordMode = RecordMode.TEXT
+                        requestedRecordDateEpochDay = date.toEpochDay()
+                        requestedEditRecord = null
+                        selectedTab = 2
+                    },
+                    onEditRecord = { record ->
+                        requestedRecordMode = record.mode
+                        requestedRecordDateEpochDay = java.time.Instant.ofEpochMilli(record.createdAt)
+                            .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
+                        requestedEditRecord = record
+                        selectedTab = 2
+                    },
                 )
                 2 -> RecordScreen(
                     contentPadding = padding,
                     requestedMode = requestedRecordMode,
                     cameraLaunchToken = cameraLaunchToken,
+                    requestedDateEpochDay = requestedRecordDateEpochDay,
+                    requestedEditRecord = requestedEditRecord,
                 )
                 else -> ProfileScreen(
                     contentPadding = padding,
@@ -228,6 +283,7 @@ fun ConfidenceAgentApp(
                     },
                     onOpenMemoryCenter = { showMemoryCenter = true },
                     onOpenSupportCircle = { showSupportCircle = true },
+                    onOpenDataTools = { showDataTools = true },
                 )
             }
         }
