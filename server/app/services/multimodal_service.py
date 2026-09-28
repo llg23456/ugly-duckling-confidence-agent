@@ -1,4 +1,5 @@
 import base64
+from collections.abc import Callable
 
 import httpx
 from openai import OpenAI
@@ -6,6 +7,8 @@ from openai import OpenAI
 from app.core.config import Settings, get_settings
 from app.schemas import ChatRequest, MultimodalChatResponse
 from app.services.chat_service import SYSTEM_PROMPT, chat_with_fallback
+from app.schemas.chat import MemoryEvidence
+from app.services.memory_service import memory_prompt
 
 
 TRANSCRIPTION_PROMPT = """请准确转写这段用户语音。
@@ -53,12 +56,15 @@ def chat_with_image(
     mime_type: str,
     prompt: str,
     settings: Settings | None = None,
+    history: list[dict[str, str]] | None = None,
+    evidence: list[MemoryEvidence] | None = None,
 ) -> MultimodalChatResponse:
     active_settings = settings or get_settings()
     completion = _client(active_settings).chat.completions.create(
         model=active_settings.chat_model,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": SYSTEM_PROMPT + "\n" + memory_prompt(evidence or [])},
+            *(history or []),
             {
                 "role": "user",
                 "content": [
@@ -81,6 +87,7 @@ def chat_with_image(
         user_text=prompt,
         reply=reply,
         model=active_settings.chat_model,
+        evidence=evidence or [],
     )
 
 
@@ -90,13 +97,20 @@ def chat_with_audio(
     audio_format: str,
     device_id: str,
     settings: Settings | None = None,
+    history: list[dict[str, str]] | None = None,
+    evidence: list[MemoryEvidence] | None = None,
+    recall_for_text: Callable[[str], list[MemoryEvidence]] | None = None,
 ) -> MultimodalChatResponse:
     active_settings = settings or get_settings()
     transcript = transcribe_audio(audio_bytes, mime_type, audio_format, active_settings)
+    if recall_for_text:
+        evidence = recall_for_text(transcript)
 
     chat_response = chat_with_fallback(
         ChatRequest(device_id=device_id, message=transcript, mode="listen"),
         settings=active_settings,
+        history=history,
+        evidence=evidence,
     )
     if chat_response.mock:
         raise RuntimeError(chat_response.mock_reason or "Chat fallback was used")
@@ -105,6 +119,8 @@ def chat_with_audio(
         user_text=transcript,
         reply=chat_response.reply,
         model=active_settings.chat_model,
+        evidence=chat_response.evidence,
+        strategy=chat_response.strategy,
     )
 
 

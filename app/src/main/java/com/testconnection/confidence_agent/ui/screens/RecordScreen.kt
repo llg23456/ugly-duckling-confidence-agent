@@ -56,6 +56,8 @@ import com.testconnection.confidence_agent.data.model.RecordDraft
 import com.testconnection.confidence_agent.data.model.RecordMode
 import com.testconnection.confidence_agent.data.repository.ChatRepository
 import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
+import com.testconnection.confidence_agent.data.remote.ReviewApiClient
+import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.SectionHeading
@@ -83,6 +85,8 @@ fun RecordScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val localRepository = remember { LocalRecordRepository(context.applicationContext) }
+    val reviewApi = remember { ReviewApiClient() }
+    val deviceId = remember { DeviceIdStore(context.applicationContext).get() }
     val chatRepository = remember { ChatRepository() }
     val recorder = remember { WavAudioRecorder(context.applicationContext) }
     var mode by remember { mutableStateOf(requestedMode) }
@@ -186,8 +190,7 @@ fun RecordScreen(
                     return
                 }
         } else null
-        localRepository.save(
-            RecordDraft(
+        val record = RecordDraft(
                 id = localRepository.newId(),
                 mode = mode,
                 text = mainText,
@@ -196,10 +199,12 @@ fun RecordScreen(
                 photoComment = photoComment.trim(),
                 status = status,
             )
-        )
+        localRepository.save(record)
         records = localRepository.load()
         scope.launch {
-            WidgetUpdater.refreshGrowthWidgets(context)
+            runCatching { WidgetUpdater.refreshGrowthWidgets(context) }
+            runCatching { reviewApi.syncRecords(deviceId, listOf(record)) }
+                .onFailure { message = "已保存在手机，暂时未同步到成长页；下次打开成长页会重试。" }
         }
         note = ""
         voiceTempFile?.delete()
@@ -269,7 +274,7 @@ fun RecordScreen(
                         )
                     }
                     message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = SageDark) }
-                    Text("▣ 仅自己可见，可随时修改或删除", style = MaterialTheme.typography.bodyMedium, color = InkMuted)
+                    Text("▣ 保存的文字、转写与照片说明会进入成长回望；原声和照片留在本机。", style = MaterialTheme.typography.bodyMedium, color = InkMuted)
                     Button(
                         onClick = { save("saved") },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -305,7 +310,7 @@ fun RecordScreen(
 }
 
 @Composable
-private fun RecordDetailDialog(record: RecordDraft, onDismiss: () -> Unit) {
+fun RecordDetailDialog(record: RecordDraft, onDismiss: () -> Unit) {
     var playing by remember { mutableStateOf(false) }
     val player = remember(record.id) { MediaPlayer() }
     DisposableEffect(player) {

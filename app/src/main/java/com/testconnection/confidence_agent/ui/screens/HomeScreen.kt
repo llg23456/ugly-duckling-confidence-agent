@@ -3,6 +3,10 @@ package com.testconnection.confidence_agent.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -20,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,7 +61,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.testconnection.confidence_agent.R
-import com.testconnection.confidence_agent.data.repository.FakeConfidenceRepository
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.SectionHeading
@@ -76,15 +81,42 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     userName: String,
     onOpenVoice: () -> Unit,
+    sourceMessageId: Long? = null,
+    onSourceLocated: () -> Unit = {},
 ) {
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
+    var requestedSourceId by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var showImageSourceDialog by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
     var imageLoadError by remember { mutableStateOf<String?>(null) }
+    var editableSupportMessage by remember(state.supportSuggestion?.id) {
+        mutableStateOf(state.supportSuggestion?.editableMessage.orEmpty())
+    }
+    var feedbackChoice by remember { mutableStateOf<String?>(null) }
+    var effortText by remember { mutableStateOf("") }
+    var helpText by remember { mutableStateOf("") }
+
+    feedbackChoice?.let { choice ->
+        AlertDialog(
+            onDismissRequest = { feedbackChoice = null },
+            title = { Text(if (choice == "helped") "记录这次帮助" else "记录这次尝试") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(value = effortText, onValueChange = { effortText = it }, label = { Text("我自己做了什么（选填）") })
+                    if (choice == "helped") OutlinedTextField(value = helpText, onValueChange = { helpText = it }, label = { Text("对方怎样帮到了我（选填）") })
+                }
+            },
+            confirmButton = { TextButton(onClick = {
+                viewModel.submitSupportFeedback(choice, effortText, helpText)
+                feedbackChoice = null
+            }) { Text("保存反馈") } },
+            dismissButton = { TextButton(onClick = { feedbackChoice = null }) { Text("取消") } },
+        )
+    }
 
     fun acceptChatImage(uri: Uri, fallbackName: String, deleteAfterRead: Boolean = false) {
         scope.launch {
@@ -161,9 +193,25 @@ fun HomeScreen(
         )
     }
 
-    LaunchedEffect(state.messages.size) {
-        if (state.messages.size > FakeConfidenceRepository.conversation.size) {
-            listState.animateScrollToItem(2)
+    LaunchedEffect(state.messages.size, state.pendingMessage) {
+        if (sourceMessageId == null && requestedSourceId == null && (state.messages.isNotEmpty() || state.pendingMessage != null)) {
+            listState.animateScrollToItem(1 + state.messages.size + if (state.pendingMessage != null) 1 else 0)
+        }
+    }
+    LaunchedEffect(sourceMessageId) {
+        if (sourceMessageId != null) {
+            requestedSourceId = sourceMessageId
+            viewModel.refreshHistory()
+        }
+    }
+    LaunchedEffect(requestedSourceId, state.messages.size) {
+        if (requestedSourceId != null) {
+            val index = state.messages.indexOfFirst { it.id == requestedSourceId }
+            if (index >= 0) {
+                listState.animateScrollToItem(index + 2)
+                requestedSourceId = null
+                if (sourceMessageId != null) onSourceLocated()
+            }
         }
     }
 
@@ -219,42 +267,50 @@ fun HomeScreen(
             }
         }
 
-        item {
-            state.messages.forEach { message ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
-                    horizontalArrangement = if (message.fromUser) Arrangement.Start else Arrangement.End,
+        items(
+            items = state.messages + listOfNotNull(state.pendingMessage),
+            key = { it.id ?: Long.MIN_VALUE },
+        ) { message ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                horizontalArrangement = if (message.fromUser) Arrangement.Start else Arrangement.End,
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(0.84f),
+                    shape = RoundedCornerShape(24.dp),
+                    color = if (message.fromUser) CreamDeep else MaterialTheme.colorScheme.surface,
+                    border = if (message.fromUser) null else BorderStroke(1.dp, WarmOutline),
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(0.84f),
-                        shape = RoundedCornerShape(24.dp),
-                        color = if (message.fromUser) CreamDeep else MaterialTheme.colorScheme.surface,
-                        border = if (message.fromUser) null else BorderStroke(1.dp, WarmOutline),
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                        ) {
-                            message.imageBytes?.let { bytes ->
-                                val bitmap = remember(bytes) {
-                                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-                                }
-                                if (bitmap != null) {
-                                    Image(
-                                        bitmap = bitmap,
-                                        contentDescription = "对话中的图片",
-                                        modifier = Modifier.fillMaxWidth().height(190.dp),
-                                        contentScale = ContentScale.Crop,
-                                    )
-                                }
-                            }
-                            if (message.text.isNotBlank()) {
-                                Text(message.text, style = MaterialTheme.typography.bodyLarge)
-                            }
+                        val bitmap = remember(message.imageBytes, message.imagePath) {
+                            when {
+                                message.imageBytes != null -> BitmapFactory.decodeByteArray(
+                                    message.imageBytes, 0, message.imageBytes.size,
+                                )
+                                message.imagePath != null -> BitmapFactory.decodeFile(message.imagePath)
+                                else -> null
+                            }?.asImageBitmap()
+                        }
+                        if (bitmap != null) {
+                            Image(
+                                bitmap = bitmap,
+                                contentDescription = "对话中的图片",
+                                modifier = Modifier.fillMaxWidth().height(190.dp),
+                                contentScale = ContentScale.Crop,
+                            )
+                        }
+                        if (message.text.isNotBlank()) {
+                            Text(message.text, style = MaterialTheme.typography.bodyLarge)
                         }
                     }
                 }
             }
+        }
+
+        item {
             if (state.sending) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -285,16 +341,20 @@ fun HomeScreen(
             }
         }
 
-        item {
+        if (state.lastEvidence.isNotEmpty()) item {
             WarmCard {
                 Row(
                     modifier = Modifier.padding(20.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionHeading("想起一件事", "上周你已经完整练习过 3 次")
+                        SectionHeading("想起一件事", state.lastEvidence.first().summary)
                         Button(
-                            onClick = {},
+                            onClick = {
+                                val sourceId = state.lastEvidence.first().sourceId
+                                requestedSourceId = sourceId
+                                if (state.messages.none { it.id == sourceId }) viewModel.refreshHistory()
+                            },
                             shape = AppButtonShape,
                             colors = ButtonDefaults.buttonColors(containerColor = SageDark),
                         ) { Text("查看来源") }
@@ -314,19 +374,49 @@ fun HomeScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    SectionHeading("要不要一起想下一步？", "不用完美，我们可以一点点来。")
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SectionHeading("要不要一起想下一步？", "可以自己试一小步，也可以请人帮忙。")
+                    state.supportSuggestion?.let { suggestion ->
+                        Text("我自己先试：${suggestion.smallStep}", style = MaterialTheme.typography.bodyLarge)
+                        Text("可以找谁：${suggestion.supporterName}。${suggestion.reason}", style = MaterialTheme.typography.bodyLarge)
+                        Text("更轻的选择：${suggestion.lighterOption}", style = MaterialTheme.typography.bodyMedium)
+                        OutlinedTextField(
+                            value = editableSupportMessage,
+                            onValueChange = { editableSupportMessage = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("可修改的求助话术") },
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("求助话术", editableSupportMessage))
+                            }, modifier = Modifier.weight(1f), shape = AppButtonShape) { Text("复制") }
+                            OutlinedButton(onClick = {
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, editableSupportMessage)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "选择分享方式"))
+                            }, modifier = Modifier.weight(1f), shape = AppButtonShape) { Text("分享") }
+                        }
+                        if (state.supportFeedbackOutcome == null && suggestion.id != null) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                TextButton(onClick = { effortText = ""; helpText = ""; feedbackChoice = "helped" }, modifier = Modifier.weight(1f)) { Text("帮到了") }
+                                TextButton(onClick = { effortText = ""; helpText = ""; feedbackChoice = "not_helped" }, modifier = Modifier.weight(1f)) { Text("没帮到") }
+                                TextButton(onClick = { viewModel.submitSupportFeedback("not_contacted", null, null) }, modifier = Modifier.weight(1f)) { Text("没有联系") }
+                            }
+                        } else if (state.supportFeedbackOutcome != null) {
+                            Text("这次反馈已记录。", style = MaterialTheme.typography.bodyMedium, color = SageDark)
+                        }
+                    }
+                    if (state.supportLoading) CircularProgressIndicator(modifier = Modifier.size(22.dp))
+                    if (state.supportSuggestion == null && !state.supportLoading) {
+                        val latest = state.messages.lastOrNull { it.fromUser }
                         Button(
-                            onClick = {},
-                            modifier = Modifier.weight(1f),
+                            onClick = { latest?.let { viewModel.requestSupport(it.text, it.id) } },
+                            enabled = latest != null,
                             shape = AppButtonShape,
                             colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                        ) { Text("先练 30 秒") }
-                        OutlinedButton(
-                            onClick = {},
-                            modifier = Modifier.weight(1f),
-                            shape = AppButtonShape,
-                        ) { Text("请同学陪练") }
+                        ) { Text("一起想办法") }
                     }
                     Text(
                         "只提供建议，不会自动给任何人发送消息。",

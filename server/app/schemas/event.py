@@ -12,6 +12,7 @@ class GrowthEvent(BaseModel):
     fact: str
     feeling: str | None = None
     attempt: str | None = None
+    own_effort: str | None = None
     support_received: str | None = None
     confidence: float = Field(ge=0, le=1)
 

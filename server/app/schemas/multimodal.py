@@ -1,6 +1,7 @@
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from app.schemas.chat import MemoryEvidence
 
 
 class MultimodalChatResponse(BaseModel):
@@ -9,6 +10,10 @@ class MultimodalChatResponse(BaseModel):
     reply: str
     model: str
     mock: bool = False
+    user_message_id: int | None = None
+    assistant_message_id: int | None = None
+    evidence: list[MemoryEvidence] = Field(default_factory=list)
+    strategy: str | None = None
 
 
 class SpeechSynthesisRequest(BaseModel):

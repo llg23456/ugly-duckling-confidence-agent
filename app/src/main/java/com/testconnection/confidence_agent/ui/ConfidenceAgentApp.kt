@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import com.testconnection.confidence_agent.R
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.testconnection.confidence_agent.ui.screens.GrowthScreen
+import com.testconnection.confidence_agent.ui.screens.GrowthViewModel
+import com.testconnection.confidence_agent.ui.screens.VideoStudioScreen
 import com.testconnection.confidence_agent.ui.screens.AppCoverScreen
 import com.testconnection.confidence_agent.ui.screens.HomeScreen
 import com.testconnection.confidence_agent.ui.screens.HomeViewModel
@@ -37,6 +39,7 @@ import com.testconnection.confidence_agent.data.preferences.VoicePreferencesStor
 import com.testconnection.confidence_agent.data.preferences.OnboardingStore
 import com.testconnection.confidence_agent.data.model.RecordMode
 import com.testconnection.confidence_agent.ui.screens.MemoryCenterScreen
+import com.testconnection.confidence_agent.ui.screens.SupportCircleScreen
 import com.testconnection.confidence_agent.ui.screens.OnboardingScreen
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
@@ -62,6 +65,9 @@ fun ConfidenceAgentApp(
     var showCover by rememberSaveable { mutableStateOf(true) }
     var showVoiceCall by rememberSaveable { mutableStateOf(false) }
     var showMemoryCenter by rememberSaveable { mutableStateOf(false) }
+    var showSupportCircle by rememberSaveable { mutableStateOf(false) }
+    var showVideoStudio by rememberSaveable { mutableStateOf(false) }
+    var sourceMessageId by rememberSaveable { mutableStateOf<Long?>(null) }
     var requestedRecordMode by remember { mutableStateOf(RecordMode.TEXT) }
     var cameraLaunchToken by remember { mutableIntStateOf(0) }
     val voicePreferencesStore = androidx.compose.runtime.remember {
@@ -77,7 +83,12 @@ fun ConfidenceAgentApp(
         ?.takeUnless { it == "unknown" || it == "prefer_not_to_say" || it.isBlank() }
         ?: "你"
     val homeViewModel: HomeViewModel = viewModel()
+    val growthViewModel: GrowthViewModel = viewModel()
     val homeState by homeViewModel.uiState.collectAsState()
+
+    LaunchedEffect(showCover, showOnboarding) {
+        if (!showCover && !showOnboarding) growthViewModel.refresh()
+    }
 
     LaunchedEffect(Unit) {
         delay(1_800)
@@ -110,12 +121,27 @@ fun ConfidenceAgentApp(
         MemoryCenterScreen(
             profile = userProfile,
             onBack = { showMemoryCenter = false },
+            onOpenSource = { sourceId ->
+                sourceMessageId = sourceId
+                selectedTab = 0
+                showMemoryCenter = false
+            },
             onRestartOnboarding = {
                 onboardingStore.reset()
                 showMemoryCenter = false
                 showOnboarding = true
             },
         )
+        return
+    }
+
+    if (showSupportCircle) {
+        SupportCircleScreen(onBack = { showSupportCircle = false })
+        return
+    }
+
+    if (showVideoStudio) {
+        VideoStudioScreen(events = growthViewModel.state.collectAsState().value.events, onBack = { showVideoStudio = false })
         return
     }
 
@@ -177,8 +203,16 @@ fun ConfidenceAgentApp(
                     viewModel = homeViewModel,
                     userName = displayName,
                     onOpenVoice = { showVoiceCall = true },
+                    sourceMessageId = sourceMessageId,
+                    onSourceLocated = { sourceMessageId = null },
                 )
-                1 -> GrowthScreen(contentPadding = padding)
+                1 -> GrowthScreen(
+                    contentPadding = padding,
+                    onOpenSource = { sourceMessageId = it; selectedTab = 0 },
+                    onOpenFeedback = { showSupportCircle = true },
+                    growthViewModel = growthViewModel,
+                    onOpenVideoStudio = { showVideoStudio = true },
+                )
                 2 -> RecordScreen(
                     contentPadding = padding,
                     requestedMode = requestedRecordMode,
@@ -193,6 +227,7 @@ fun ConfidenceAgentApp(
                         voicePreferencesStore.save(it)
                     },
                     onOpenMemoryCenter = { showMemoryCenter = true },
+                    onOpenSupportCircle = { showSupportCircle = true },
                 )
             }
         }

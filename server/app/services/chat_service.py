@@ -4,6 +4,9 @@ from typing import Any
 from app.core.config import Settings, get_settings
 from app.schemas import ChatRequest, ChatResponse
 from app.services.mock_service import mock_chat
+from app.schemas.chat import MemoryEvidence
+from app.services.memory_service import memory_prompt
+from app.services.support_service import needs_support
 
 
 logger = logging.getLogger(__name__)
@@ -35,16 +38,22 @@ def _content_to_text(content: Any) -> str:
     return ""
 
 
-def _strategy_for(request: ChatRequest) -> str:
+def _strategy_for(request: ChatRequest, history: list[dict[str, str]] | None = None) -> str:
+    if needs_support(request.message, history):
+        return "seek_support"
     if request.mode == "suggest":
         return "small_step"
     if request.mode == "reflect":
         return "reflect"
-    support_words = ("帮忙", "陪练", "老师", "同学", "朋友", "家人", "答辩")
-    return "seek_support" if any(word in request.message for word in support_words) else "listen"
+    return "listen"
 
 
-def _live_chat(request: ChatRequest, settings: Settings) -> ChatResponse:
+def _live_chat(
+    request: ChatRequest,
+    settings: Settings,
+    history: list[dict[str, str]] | None = None,
+    evidence: list[MemoryEvidence] | None = None,
+) -> ChatResponse:
     # 延迟导入：未安装模型 SDK 或未配置 Key 时，Mock 服务仍可独立运行。
     from openai import OpenAI
 
@@ -56,10 +65,9 @@ def _live_chat(request: ChatRequest, settings: Settings) -> ChatResponse:
     )
     completion = client.chat.completions.create(
         model=settings.chat_model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": request.message},
-        ],
+        messages=[{"role": "system", "content": SYSTEM_PROMPT + "\n" + memory_prompt(evidence or [])},
+                  *(history or []),
+                  {"role": "user", "content": request.message}],
         temperature=0.7,
         max_tokens=180,
     )
@@ -68,8 +76,8 @@ def _live_chat(request: ChatRequest, settings: Settings) -> ChatResponse:
         raise RuntimeError("Model returned empty content")
     return ChatResponse(
         reply=reply,
-        strategy=_strategy_for(request),
-        evidence=[],
+        strategy=_strategy_for(request, history),
+        evidence=evidence or [],
         mock=False,
         model=settings.chat_model,
     )
@@ -78,21 +86,26 @@ def _live_chat(request: ChatRequest, settings: Settings) -> ChatResponse:
 def chat_with_fallback(
     request: ChatRequest,
     settings: Settings | None = None,
+    history: list[dict[str, str]] | None = None,
+    evidence: list[MemoryEvidence] | None = None,
 ) -> ChatResponse:
     active_settings = settings or get_settings()
     if not active_settings.enable_live_ai:
         response = mock_chat(request)
+        response.strategy = _strategy_for(request, history)
         response.mock_reason = "ENABLE_LIVE_AI is false"
         return response
     if not active_settings.dashscope_api_key.strip():
         response = mock_chat(request)
+        response.strategy = _strategy_for(request, history)
         response.mock_reason = "DASHSCOPE_API_KEY is not configured"
         return response
 
     try:
-        return _live_chat(request, active_settings)
+        return _live_chat(request, active_settings, history, evidence)
     except Exception as exc:  # 外部服务失败时保证演示仍可继续。
         logger.exception("DashScope chat failed: %s", type(exc).__name__)
         response = mock_chat(request)
+        response.strategy = _strategy_for(request, history)
         response.mock_reason = f"DashScope call failed: {type(exc).__name__}"
         return response

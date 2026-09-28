@@ -6,6 +6,7 @@ import java.io.DataOutputStream
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import android.net.Uri
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,6 +17,35 @@ data class ChatApiReply(
     val isMock: Boolean,
     val userText: String? = null,
     val modality: String = "text",
+    val userMessageId: Long? = null,
+    val assistantMessageId: Long? = null,
+    val evidence: List<MemoryEvidence> = emptyList(),
+    val strategy: String? = null,
+)
+
+data class MemoryEvidence(val summary: String, val sourceDate: String, val sourceType: String, val sourceId: Long?, val memoryId: Long?)
+
+private fun parseEvidence(json: JSONObject): List<MemoryEvidence> {
+    val array = json.optJSONArray("evidence") ?: return emptyList()
+    return buildList {
+        for (index in 0 until array.length()) {
+            val item = array.getJSONObject(index)
+            add(MemoryEvidence(
+                item.getString("summary"), item.getString("source_date"), item.getString("source_type"),
+                item.optLong("source_id").takeIf { it > 0 }, item.optLong("memory_id").takeIf { it > 0 },
+            ))
+        }
+    }
+}
+
+data class ServerChatMessage(
+    val id: Long,
+    val role: String,
+    val modality: String,
+    val content: String,
+    val mediaRef: String?,
+    val createdAt: String,
+    val isMock: Boolean,
 )
 
 data class OnboardingReply(
@@ -28,6 +58,39 @@ data class OnboardingReply(
 class ChatApiClient(
     private val baseUrl: String = BuildConfig.API_BASE_URL,
 ) {
+    suspend fun loadMessages(deviceId: String): List<ServerChatMessage> = withContext(Dispatchers.IO) {
+        val encodedId = Uri.encode(deviceId)
+        val connection = (URL("${baseUrl.trimEnd('/')}/api/v1/conversations/$encodedId/messages")
+            .openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 10_000
+            readTimeout = 40_000
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            val status = connection.responseCode
+            if (status !in 200..299) throw IllegalStateException("会话服务返回 $status")
+            val array = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+                .getJSONArray("messages")
+            buildList {
+                for (index in 0 until array.length()) {
+                    val item = array.getJSONObject(index)
+                    add(ServerChatMessage(
+                        id = item.getLong("id"),
+                        role = item.getString("role"),
+                        modality = item.getString("modality"),
+                        content = item.getString("content"),
+                        mediaRef = item.optString("media_ref").takeIf { it.isNotBlank() && it != "null" },
+                        createdAt = item.getString("created_at"),
+                        isMock = item.optBoolean("mock", false),
+                    ))
+                }
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     suspend fun sendMessage(deviceId: String, message: String): ChatApiReply = withContext(Dispatchers.IO) {
         val connection = (URL("${baseUrl.trimEnd('/')}/api/v1/chat").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -60,6 +123,10 @@ class ChatApiClient(
                 text = json.getString("reply"),
                 isMock = json.optBoolean("mock", true),
                 userText = message,
+                userMessageId = json.optLong("user_message_id").takeIf { it > 0 },
+                assistantMessageId = json.optLong("assistant_message_id").takeIf { it > 0 },
+                evidence = parseEvidence(json),
+                strategy = json.optString("strategy").takeIf { it.isNotBlank() },
             )
         } finally {
             connection.disconnect()
@@ -76,13 +143,14 @@ class ChatApiClient(
         )
 
     suspend fun sendImage(
+        deviceId: String,
         prompt: String,
         fileName: String,
         mimeType: String,
         imageBytes: ByteArray,
     ): ChatApiReply = sendMultipart(
         path = "/api/v1/multimodal/image",
-        fields = mapOf("prompt" to prompt),
+        fields = mapOf("prompt" to prompt, "device_id" to deviceId),
         fileName = fileName,
         mimeType = mimeType,
         fileBytes = imageBytes,
@@ -172,6 +240,10 @@ class ChatApiClient(
             isMock = json.optBoolean("mock", false),
             userText = json.optString("user_text").takeIf { it.isNotBlank() },
             modality = json.optString("modality", "text"),
+            userMessageId = json.optLong("user_message_id").takeIf { it > 0 },
+            assistantMessageId = json.optLong("assistant_message_id").takeIf { it > 0 },
+            evidence = parseEvidence(json),
+            strategy = json.optString("strategy").takeIf { it.isNotBlank() },
         )
     }
 
