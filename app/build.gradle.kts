@@ -20,11 +20,12 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val apiBaseUrl = providers.gradleProperty("apiBaseUrl")
-            .orElse("http://10.113.21.33:8000").get()
+            .orElse("http://10.124.233.33").get()
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
     }
 
     buildTypes {
+
         debug {
             if (providers.gradleProperty("isolatedP0Test").orNull == "true") {
                 applicationIdSuffix = ".p0test"

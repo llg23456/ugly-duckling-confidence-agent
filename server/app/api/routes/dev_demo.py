@@ -6,10 +6,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.models import DailySummary, GrowthEvent, Review, UserRecord
+from app.db.models import DailySummary, GrowthEvent, ProactiveCheckIn, Review, UserRecord
 from app.db.repository import get_conversation, get_or_create_conversation
 from app.db.session import get_db
 from app.services.review_service import today_local
+from app.services.check_in_service import evaluate_check_in
 
 
 router = APIRouter(prefix="/dev/demo-data", tags=["development"])
@@ -75,6 +76,9 @@ def _clear_demo_rows(db: Session, conversation_id: int) -> int:
         GrowthEvent.source_record_id.in_(record_ids),
     ))) if record_ids else []
     if event_ids:
+        for check_in in db.scalars(select(ProactiveCheckIn).where(ProactiveCheckIn.conversation_id == conversation_id)).all():
+            if set(check_in.source_event_ids or []).intersection(event_ids):
+                db.delete(check_in)
         db.execute(delete(GrowthEvent).where(GrowthEvent.id.in_(event_ids)))
     if record_ids:
         db.execute(delete(UserRecord).where(UserRecord.id.in_(record_ids)))
@@ -125,6 +129,8 @@ def create_demo_data(request: DemoDataRequest, db: Session = Depends(get_db)) ->
             prompt_version="demo.v1",
             created_at=created_at,
         ))
+    db.flush()
+    evaluate_check_in(db, conversation.id)
     db.commit()
     return DemoDataResponse(created=len(DEMO_DAYS), theme=DEMO_THEME)
 
@@ -138,4 +144,3 @@ def delete_demo_data(request: DemoDataRequest, db: Session = Depends(get_db)) ->
     deleted = _clear_demo_rows(db, conversation.id)
     db.commit()
     return DemoDataResponse(deleted=deleted, theme=DEMO_THEME)
-

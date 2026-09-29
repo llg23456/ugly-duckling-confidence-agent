@@ -54,3 +54,24 @@ class ReviewResponse(BaseModel):
     generated_at: datetime | None = None
     model: str | None = None
     mock: bool = True
+
+
+class ReviewOverviewRequest(ReviewGenerateRequest):
+    pass
+
+
+class DailyReviewOverview(BaseModel):
+    date: str
+    review: ReviewResponse | None = None
+
+
+class WeeklyReviewOverview(BaseModel):
+    start: str
+    end: str
+    review: ReviewResponse | None = None
+
+
+class ReviewOverviewResponse(BaseModel):
+    review: ReviewResponse
+    daily_reviews: list[DailyReviewOverview] = Field(default_factory=list)
+    weekly_reviews: list[WeeklyReviewOverview] = Field(default_factory=list)

@@ -76,6 +76,8 @@ class Memory(Base):
     is_user_edited: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prompt_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -153,7 +155,10 @@ class UserRecord(Base):
     mode: Mapped[str] = mapped_column(String(16))
     text: Mapped[str] = mapped_column(Text)
     photo_comment: Mapped[str] = mapped_column(Text)
+    ai_description: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(16))
+    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
@@ -182,5 +187,22 @@ class VideoScript(Base):
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     prompt_version: Mapped[str] = mapped_column(String(32))
     is_user_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class ProactiveCheckIn(Base):
+    __tablename__ = "proactive_check_ins"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    reason: Mapped[str] = mapped_column(String(24))
+    prompt: Mapped[str] = mapped_column(Text)
+    source_event_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    status: Mapped[str] = mapped_column(String(24), default="pending")
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    shown_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    cooldown_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

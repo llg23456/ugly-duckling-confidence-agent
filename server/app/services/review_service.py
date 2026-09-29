@@ -251,7 +251,16 @@ def saved_review(db: Session, conversation_id: int, period: str, start: date, en
     ))
 
 
-def review_for(db: Session, device_id: str, period: str, start: date, end: date, *, persist: bool) -> ReviewResponse:
+def review_for(
+    db: Session,
+    device_id: str,
+    period: str,
+    start: date,
+    end: date,
+    *,
+    persist: bool,
+    polish: bool = True,
+) -> ReviewResponse:
     conversation = get_conversation(db, device_id)
     if conversation is None:
         return compose_review(period, start, end, [])
@@ -270,11 +279,12 @@ def review_for(db: Session, device_id: str, period: str, start: date, end: date,
     response = compose_review(period, start, end, events)
     if not events:
         return response
-    try:
-        response = polish_review(response, events)
-    except Exception:
-        # 模型超时、不可用或输出越界时，保留上面完全由来源生成的可靠模板。
-        pass
+    if polish:
+        try:
+            response = polish_review(response, events)
+        except Exception:
+            # 模型超时、不可用或输出越界时，保留上面完全由来源生成的可靠模板。
+            pass
     payload = response.model_dump_json(exclude={"id", "generated_at"})
     if stored is not None and stored.content == payload:
         response.id = stored.id

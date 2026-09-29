@@ -9,6 +9,7 @@ from app.db.session import get_db
 from app.schemas import ChatRequest, ChatResponse
 from app.schemas.chat import ConversationMessagesResponse
 from app.services.chat_service import chat_with_fallback
+from app.services.check_in_service import schedule_explicit_follow_up
 from app.services.event_service import process_turn
 from app.services.memory_service import recall
 
@@ -32,6 +33,9 @@ def chat(request: ChatRequest, background_tasks: BackgroundTasks, db: Session = 
     )
     response.user_message_id = user_message.id
     response.assistant_message_id = assistant_message.id
+    if schedule_explicit_follow_up(db, conversation.id, request.message) is not None:
+        db.commit()
+        response.check_in_scheduled = True
     background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
     return response
 

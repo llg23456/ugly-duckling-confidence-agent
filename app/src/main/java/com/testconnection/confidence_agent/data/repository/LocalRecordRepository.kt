@@ -25,6 +25,7 @@ class LocalRecordRepository(private val context: Context) {
                         audioPath = item.optString("audio_path").takeIf(String::isNotBlank),
                         photoPath = item.optString("photo_path").takeIf(String::isNotBlank),
                         photoComment = item.optString("photo_comment"),
+                        aiDescription = item.optString("ai_description"),
                         createdAt = item.optLong("created_at"),
                         status = item.optString("status", "saved"),
                     )
@@ -45,6 +46,51 @@ class LocalRecordRepository(private val context: Context) {
                 put("audio_path", item.audioPath.orEmpty())
                 put("photo_path", item.photoPath.orEmpty())
                 put("photo_comment", item.photoComment)
+                put("ai_description", item.aiDescription)
+                put("created_at", item.createdAt)
+                put("status", item.status)
+            })
+        }
+        preferences.edit().putString("records", array.toString()).apply()
+    }
+
+    fun delete(recordId: String) {
+        val existing = load()
+        val target = existing.firstOrNull { it.id == recordId } ?: return
+        val remaining = existing.filterNot { it.id == recordId }
+        write(remaining)
+        target.audioPath?.let { File(it).takeIf(File::exists)?.delete() }
+        target.photoPath?.let { File(it).takeIf(File::exists)?.delete() }
+        val pending = pendingDeletions().toMutableSet().apply { add(recordId) }
+        preferences.edit().putStringSet("pending_deletions", pending).apply()
+    }
+
+    fun pendingDeletions(): Set<String> =
+        preferences.getStringSet("pending_deletions", emptySet()).orEmpty().toSet()
+
+    fun confirmDeletion(recordId: String) {
+        val pending = pendingDeletions().toMutableSet().apply { remove(recordId) }
+        preferences.edit().putStringSet("pending_deletions", pending).apply()
+    }
+
+    fun clearAll() {
+        preferences.edit().clear().apply()
+        listOf("record_photos", "record_audio").forEach { name ->
+            File(context.filesDir, name).deleteRecursively()
+        }
+    }
+
+    private fun write(records: List<RecordDraft>) {
+        val array = JSONArray()
+        records.take(100).forEach { item ->
+            array.put(JSONObject().apply {
+                put("id", item.id)
+                put("mode", item.mode.name)
+                put("text", item.text)
+                put("audio_path", item.audioPath.orEmpty())
+                put("photo_path", item.photoPath.orEmpty())
+                put("photo_comment", item.photoComment)
+                put("ai_description", item.aiDescription)
                 put("created_at", item.createdAt)
                 put("status", item.status)
             })

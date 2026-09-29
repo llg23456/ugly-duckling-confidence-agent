@@ -9,13 +9,13 @@ import com.testconnection.confidence_agent.data.remote.GrowthEvent
 import com.testconnection.confidence_agent.data.remote.ReviewApiClient
 import com.testconnection.confidence_agent.data.remote.ReviewSummary
 import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
+import com.testconnection.confidence_agent.data.repository.ReviewCacheStore
 import com.testconnection.confidence_agent.widget.WidgetUpdater
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.temporal.TemporalAdjusters
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,6 +34,7 @@ data class GrowthUiState(
     val weeklyReviews: List<WeeklyReviewEntry> = emptyList(),
     val recordIds: Map<Long, String> = emptyMap(),
     val loading: Boolean = false,
+    val refreshing: Boolean = false,
     val error: String? = null,
     val demoNotice: String? = null,
 )
@@ -48,7 +49,9 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
     private val deviceId = DeviceIdStore(application).get()
     private val localRecords = LocalRecordRepository(application)
     private val api = ReviewApiClient()
+    private val reviewCache = ReviewCacheStore(application)
     private val _state = MutableStateFlow(GrowthUiState())
+    private var requestVersion = 0
     val state = _state.asStateFlow()
 
     fun localRecordFor(serverId: Long): RecordDraft? {
@@ -62,32 +65,74 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         viewModelScope.launch {
-            onLoaded(runCatching { api.record(deviceId, serverId) }.getOrNull())
+            val remote = runCatching { api.record(deviceId, serverId) }.getOrNull()
+            val local = remote?.let { item -> localRecords.load().firstOrNull { it.id == item.id } }
+            onLoaded(local ?: remote)
         }
     }
 
     fun refresh() {
-        if (_state.value.loading) return
-        _state.update { it.copy(loading = true, error = null) }
+        refreshInternal(force = false)
+    }
+
+    fun forceRefresh() {
+        refreshInternal(force = true)
+    }
+
+    private fun refreshInternal(force: Boolean) {
+        if (_state.value.loading || _state.value.refreshing) return
+        val period = _state.value.period
+        val anchor = _state.value.anchorDate
+        val (start, end) = selectionRange(period, anchor)
+        val cached = reviewCache.load(periodKey(period), start.toString(), end.toString())
+        val cachedData = cached?.let(::overviewToPeriodData)
+        val fresh = !force && cached != null && reviewCache.isFresh(
+            periodKey(period), start.toString(), end.toString(),
+        )
+        val version = ++requestVersion
+        _state.update {
+            it.copy(
+                review = cachedData?.review ?: it.review,
+                dailyReviews = cachedData?.dailyReviews ?: it.dailyReviews,
+                weeklyReviews = cachedData?.weeklyReviews ?: it.weeklyReviews,
+                loading = cachedData == null,
+                refreshing = cachedData != null && !fresh,
+                error = null,
+            )
+        }
         viewModelScope.launch {
-            var partialFailure = false
-            val synced = runCatching { api.syncRecords(deviceId, localRecords.load()) }
-                .onFailure { partialFailure = true }.getOrDefault(emptyList())
-            val eventsResult = runCatching { api.events(deviceId) }.onFailure { partialFailure = true }
+            if (fresh) {
+                refreshSourceEventsAndRecordIds()
+                return@launch
+            }
+            var syncFailed = false
+            val synced = runCatching {
+                api.syncRecords(deviceId, localRecords.load())
+            }.onFailure { syncFailed = true }.getOrDefault(emptyList())
+            val (eventsResult, periodResult) = coroutineScope {
+                val eventsDeferred = async { runCatching { api.events(deviceId) } }
+                val periodDeferred = async { runCatching { loadPeriod(period, anchor) } }
+                eventsDeferred.await() to periodDeferred.await()
+            }
             val events = eventsResult.getOrDefault(_state.value.events)
             if (eventsResult.isSuccess) runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication(), events) }
-            runCatching { api.pendingDaily(deviceId) }.onFailure { partialFailure = true }
-            val periodData = runCatching { loadPeriod(_state.value.period, _state.value.anchorDate) }
-                .onFailure { partialFailure = true }.getOrNull()
+            val periodData = periodResult.getOrNull() ?: cachedData
+            if (syncFailed || periodResult.isFailure) reviewCache.markDirty()
+            if (version != requestVersion) return@launch
             _state.update {
                 it.copy(
                     events = events,
-                    review = periodData?.review,
-                    dailyReviews = periodData?.dailyReviews.orEmpty(),
-                    weeklyReviews = periodData?.weeklyReviews.orEmpty(),
-                    recordIds = synced.associate { row -> row.serverId to row.clientId },
+                    review = periodData?.review ?: it.review,
+                    dailyReviews = periodData?.dailyReviews ?: it.dailyReviews,
+                    weeklyReviews = periodData?.weeklyReviews ?: it.weeklyReviews,
+                    recordIds = if (synced.isEmpty()) it.recordIds else synced.associate { row -> row.serverId to row.clientId },
                     loading = false,
-                    error = if (partialFailure) "部分记录或回望暂时无法同步，点重试继续。" else null,
+                    refreshing = false,
+                    error = when {
+                        periodResult.isSuccess -> null
+                        cachedData != null -> "正在显示上次回望，本次更新暂时失败。"
+                        else -> periodError(periodResult.exceptionOrNull())
+                    },
                 )
             }
         }
@@ -121,26 +166,28 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
     fun openWeek(start: LocalDate) = loadSelection("周", weekStart(start))
 
     fun createDemoData() {
-        if (_state.value.loading) return
+        if (_state.value.loading || _state.value.refreshing) return
         _state.update { it.copy(loading = true, error = null, demoNotice = null) }
         viewModelScope.launch {
             runCatching { api.createDemoData(deviceId) }
                 .onSuccess { result ->
                     _state.update { it.copy(loading = false, demoNotice = "已生成 ${result.created} 天演示记录：${result.theme}") }
-                    refresh()
+                    reviewCache.markDirty()
+                    forceRefresh()
                 }
                 .onFailure { error -> _state.update { it.copy(loading = false, error = "演示数据生成失败：${error.message}") } }
         }
     }
 
     fun clearDemoData() {
-        if (_state.value.loading) return
+        if (_state.value.loading || _state.value.refreshing) return
         _state.update { it.copy(loading = true, error = null, demoNotice = null) }
         viewModelScope.launch {
             runCatching { api.clearDemoData(deviceId) }
                 .onSuccess { result ->
                     _state.update { it.copy(loading = false, demoNotice = "已清除 ${result.deleted} 条演示记录，真实记录未删除。") }
-                    refresh()
+                    reviewCache.markDirty()
+                    forceRefresh()
                 }
                 .onFailure { error -> _state.update { it.copy(loading = false, error = "演示数据清除失败：${error.message}") } }
         }
@@ -148,61 +195,125 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun loadSelection(period: String, anchor: LocalDate) {
         if (_state.value.loading) return
+        val (start, end) = selectionRange(period, anchor)
+        val cached = reviewCache.load(periodKey(period), start.toString(), end.toString())
+        val cachedData = cached?.let(::overviewToPeriodData)
+        val fresh = cached != null && reviewCache.isFresh(periodKey(period), start.toString(), end.toString())
+        val version = ++requestVersion
         _state.update {
-            it.copy(period = period, anchorDate = anchor, review = null, dailyReviews = emptyList(),
-                weeklyReviews = emptyList(), loading = true, error = null)
+            it.copy(
+                period = period,
+                anchorDate = anchor,
+                review = cachedData?.review,
+                dailyReviews = cachedData?.dailyReviews.orEmpty(),
+                weeklyReviews = cachedData?.weeklyReviews.orEmpty(),
+                loading = cachedData == null,
+                refreshing = cachedData != null && !fresh,
+                error = null,
+            )
+        }
+        if (fresh) {
+            viewModelScope.launch { refreshSourceEventsAndRecordIds() }
+            return
         }
         viewModelScope.launch {
             runCatching { loadPeriod(period, anchor) }
-                .onSuccess { data -> _state.update { it.copy(
-                    review = data.review, dailyReviews = data.dailyReviews,
-                    weeklyReviews = data.weeklyReviews, loading = false,
-                ) } }
-                .onFailure { _state.update { it.copy(loading = false, error = "回望暂时无法生成，点重试继续。") } }
+                .onSuccess { data ->
+                    if (version == requestVersion) _state.update { it.copy(
+                        review = data.review, dailyReviews = data.dailyReviews,
+                        weeklyReviews = data.weeklyReviews, loading = false, refreshing = false,
+                    ) }
+                }
+                .onFailure {
+                    reviewCache.markDirty()
+                    if (version == requestVersion) {
+                        _state.update { state -> state.copy(
+                            loading = false,
+                            refreshing = false,
+                            error = if (cachedData == null) periodError(it)
+                                else "正在显示上次回望，本次更新暂时失败。",
+                        ) }
+                    }
+                }
         }
     }
 
-    private suspend fun loadPeriod(period: String, anchor: LocalDate): PeriodData = coroutineScope {
+    private suspend fun loadPeriod(period: String, anchor: LocalDate): PeriodData {
+        val periodKey = periodKey(period)
+        val (start, end) = selectionRange(period, anchor)
+        val cacheGeneration = reviewCache.generation()
+        val overview = api.overview(deviceId, periodKey, start.toString(), end.toString())
+        reviewCache.save(periodKey, start.toString(), end.toString(), overview, cacheGeneration)
+        return overviewToPeriodData(overview)
+    }
+
+    private suspend fun refreshSourceEventsAndRecordIds() {
+        val syncedResult = runCatching { api.syncRecords(deviceId, localRecords.load()) }
+        val eventsResult = runCatching { api.events(deviceId) }
+        val events = eventsResult.getOrNull()
+        if (events != null) {
+            runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication(), events) }
+        }
+        val synced = syncedResult.getOrNull().orEmpty()
+        if (events != null || synced.isNotEmpty()) {
+            _state.update { current ->
+                current.copy(
+                    events = events ?: current.events,
+                    recordIds = if (synced.isEmpty()) current.recordIds
+                        else synced.associate { row -> row.serverId to row.clientId },
+                )
+            }
+        }
+    }
+
+    private fun overviewToPeriodData(overview: com.testconnection.confidence_agent.data.remote.ReviewOverview) =
+        PeriodData(
+            review = overview.review,
+            dailyReviews = overview.dailyReviews.map { (day, review) ->
+                DailyReviewEntry(LocalDate.parse(day), review)
+            },
+            weeklyReviews = overview.weeklyReviews.map { (start, end, review) ->
+                WeeklyReviewEntry(LocalDate.parse(start), LocalDate.parse(end), review)
+            },
+        )
+
+    private fun periodKey(period: String) = when (period) {
+        "日" -> "day"
+        "周" -> "week"
+        else -> "month"
+    }
+
+    private fun selectionRange(period: String, anchor: LocalDate): Pair<LocalDate, LocalDate> {
         val today = LocalDate.now()
-        when (period) {
-            "日" -> PeriodData(api.generate(deviceId, "day", anchor.toString(), anchor.toString()))
+        return when (period) {
+            "日" -> anchor to anchor
             "周" -> {
                 val start = weekStart(anchor)
                 val end = minOf(start.plusDays(6), today)
-                val daily = (0L..6L).map { offset ->
-                    val day = start.plusDays(offset)
-                    async {
-                        DailyReviewEntry(day, if (day.isAfter(today)) null else runCatching {
-                            api.generate(deviceId, "day", day.toString(), day.toString())
-                        }.getOrNull())
-                    }
-                }.awaitAll()
-                PeriodData(api.generate(deviceId, "week", start.toString(), end.toString()), dailyReviews = daily)
+                start to end
             }
             else -> {
                 val month = YearMonth.from(anchor)
                 val start = month.atDay(1)
                 val end = minOf(month.atEndOfMonth(), today)
-                val ranges = mutableListOf<Pair<LocalDate, LocalDate>>()
-                var cursor = start
-                while (!cursor.isAfter(end)) {
-                    val rangeEnd = minOf(cursor.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)), end)
-                    ranges += cursor to rangeEnd
-                    cursor = rangeEnd.plusDays(1)
-                }
-                val weeks = ranges.map { (weekStart, weekEnd) ->
-                    async {
-                        WeeklyReviewEntry(weekStart, weekEnd, runCatching {
-                            api.generate(deviceId, "week", weekStart.toString(), weekEnd.toString())
-                        }.getOrNull())
-                    }
-                }.awaitAll()
-                PeriodData(api.generate(deviceId, "month", start.toString(), end.toString()), weeklyReviews = weeks)
+                start to end
             }
         }
     }
 
     private fun weekStart(date: LocalDate): LocalDate = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+
+    private fun periodError(error: Throwable?): String {
+        val detail = error?.message.orEmpty()
+        return when {
+            detail.contains("Failed to connect", ignoreCase = true) ||
+                detail.contains("Connection refused", ignoreCase = true) ||
+                detail.contains("connect", ignoreCase = true) ->
+                "暂时连不上后端。请确认电脑端服务已启动，并在“我的—帮助与求助资源”检测当前地址。"
+            detail.contains("404") || detail.contains("405") -> "后端还是旧版本，请重启电脑端服务后再试。"
+            else -> "回望暂时无法生成，点重试继续。"
+        }
+    }
 }
 
 private fun LocalDate.coerceAtMost(maximum: LocalDate): LocalDate = if (isAfter(maximum)) maximum else this

@@ -9,7 +9,10 @@ import com.testconnection.confidence_agent.data.model.UserProfile
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
 import com.testconnection.confidence_agent.data.remote.ChatApiClient
 import com.testconnection.confidence_agent.data.remote.ChatApiReply
+import com.testconnection.confidence_agent.data.remote.CheckInApiClient
+import com.testconnection.confidence_agent.data.remote.CheckInResponse
 import com.testconnection.confidence_agent.data.remote.OnboardingReply
+import com.testconnection.confidence_agent.data.remote.ProactiveCheckIn
 import java.io.File
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +25,7 @@ import kotlinx.coroutines.withContext
 class ChatRepository(
     context: Context? = null,
     private val apiClient: ChatApiClient = ChatApiClient(),
+    private val checkInApiClient: CheckInApiClient = CheckInApiClient(),
 ) {
     private val appContext = context?.applicationContext
     private val database = appContext?.let(ChatDatabase::get)
@@ -86,6 +90,7 @@ class ChatRepository(
                 ChatMessageEntity(assistantId, "assistant", response.modality, response.text, null, null, createdAt, response.isMock),
             ))
         }
+        appContext?.let { ReviewCacheStore(it).markDirty() }
     }
 
     suspend fun send(message: String): ChatApiReply {
@@ -118,4 +123,11 @@ class ChatRepository(
 
     suspend fun analyzeOnboarding(text: String, profile: UserProfile): OnboardingReply =
         apiClient.analyzeOnboarding(text, profile)
+
+    suspend fun pendingCheckIn(): ProactiveCheckIn? = checkInApiClient.pending(deviceId)
+
+    suspend fun newCheckInNotice(): ProactiveCheckIn? = checkInApiClient.notice(deviceId)
+
+    suspend fun respondToCheckIn(checkInId: Long, choice: String): CheckInResponse =
+        checkInApiClient.respond(deviceId, checkInId, choice)
 }

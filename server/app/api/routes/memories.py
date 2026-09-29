@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import Memory, MemoryDeletion, Message
+from app.db.models import GrowthEvent, Memory, MemoryDeletion, Message, UserRecord
 from app.db.repository import get_conversation
 from app.db.session import get_db
 from app.schemas.memory import MemoryItem, MemoryListResponse, MemoryUpdateRequest
-from app.services.memory_service import local_day
+from app.services.memory_service import local_day, set_memory_embedding
 
 router = APIRouter(prefix="/memories", tags=["memories"])
 
@@ -24,11 +24,20 @@ def _owned(db: Session, memory_id: int, device_id: str) -> Memory:
 def _item(db: Session, memory: Memory) -> MemoryItem:
     source_id = (memory.source_message_ids or [None])[0]
     source = db.get(Message, source_id) if source_id else None
+    source_date = local_day(source.created_at) if source else None
+    source_type = {"text": "chat", "image": "photo", "audio": "voice"}.get(source.modality) if source else None
+    if source is None and memory.event_id:
+        event = db.get(GrowthEvent, memory.event_id)
+        record = db.get(UserRecord, event.source_record_id) if event and event.source_record_id else None
+        if record and record.conversation_id == memory.conversation_id:
+            source_id = None
+            source_date = local_day(record.created_at)
+            source_type = {"text": "record", "photo": "photo", "voice": "voice"}.get(record.mode, "record")
     return MemoryItem(
         id=memory.id, content=memory.content, status=memory.status or "active",
-        source_id=source_id if source else None,
-        source_date=local_day(source.created_at) if source else None,
-        source_type={"text": "chat", "image": "photo", "audio": "voice"}.get(source.modality) if source else None,
+        source_id=source_id,
+        source_date=source_date,
+        source_type=source_type,
         value_score=memory.value_score, sensitivity=memory.sensitivity, created_at=memory.created_at,
     )
 
@@ -51,6 +60,9 @@ def edit_memory(memory_id: int, request: MemoryUpdateRequest, db: Session = Depe
     memory.status = "active"
     memory.is_user_edited = True
     memory.updated_at = datetime.now(UTC)
+    memory.embedding = None
+    memory.embedding_model = None
+    set_memory_embedding(memory)
     db.commit()
     return _item(db, memory)
 

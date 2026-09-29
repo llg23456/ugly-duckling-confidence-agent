@@ -1,7 +1,7 @@
 package com.testconnection.confidence_agent.data.remote
 
-import com.testconnection.confidence_agent.BuildConfig
 import com.testconnection.confidence_agent.data.model.UserProfile
+import com.testconnection.confidence_agent.data.preferences.ServerEndpoint
 import java.io.DataOutputStream
 import java.io.File
 import java.net.HttpURLConnection
@@ -21,9 +21,17 @@ data class ChatApiReply(
     val assistantMessageId: Long? = null,
     val evidence: List<MemoryEvidence> = emptyList(),
     val strategy: String? = null,
+    val checkInScheduled: Boolean = false,
 )
 
-data class MemoryEvidence(val summary: String, val sourceDate: String, val sourceType: String, val sourceId: Long?, val memoryId: Long?)
+data class MemoryEvidence(
+    val summary: String,
+    val sourceDate: String,
+    val sourceType: String,
+    val sourceId: Long?,
+    val sourceRecordId: Long?,
+    val memoryId: Long?,
+)
 
 private fun parseEvidence(json: JSONObject): List<MemoryEvidence> {
     val array = json.optJSONArray("evidence") ?: return emptyList()
@@ -32,7 +40,9 @@ private fun parseEvidence(json: JSONObject): List<MemoryEvidence> {
             val item = array.getJSONObject(index)
             add(MemoryEvidence(
                 item.getString("summary"), item.getString("source_date"), item.getString("source_type"),
-                item.optLong("source_id").takeIf { it > 0 }, item.optLong("memory_id").takeIf { it > 0 },
+                item.optLong("source_id").takeIf { it > 0 },
+                item.optLong("source_record_id").takeIf { it > 0 },
+                item.optLong("memory_id").takeIf { it > 0 },
             ))
         }
     }
@@ -56,11 +66,13 @@ data class OnboardingReply(
 )
 
 class ChatApiClient(
-    private val baseUrl: String = BuildConfig.API_BASE_URL,
+    private val baseUrl: String? = null,
 ) {
+    private val resolvedBaseUrl: String get() = baseUrl ?: ServerEndpoint.current()
+
     suspend fun loadMessages(deviceId: String): List<ServerChatMessage> = withContext(Dispatchers.IO) {
         val encodedId = Uri.encode(deviceId)
-        val connection = (URL("${baseUrl.trimEnd('/')}/api/v1/conversations/$encodedId/messages")
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/conversations/$encodedId/messages")
             .openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 10_000
@@ -92,7 +104,7 @@ class ChatApiClient(
     }
 
     suspend fun sendMessage(deviceId: String, message: String): ChatApiReply = withContext(Dispatchers.IO) {
-        val connection = (URL("${baseUrl.trimEnd('/')}/api/v1/chat").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/chat").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 40_000
@@ -127,6 +139,7 @@ class ChatApiClient(
                 assistantMessageId = json.optLong("assistant_message_id").takeIf { it > 0 },
                 evidence = parseEvidence(json),
                 strategy = json.optString("strategy").takeIf { it.isNotBlank() },
+                checkInScheduled = json.optBoolean("check_in_scheduled", false),
             )
         } finally {
             connection.disconnect()
@@ -157,7 +170,7 @@ class ChatApiClient(
     )
 
     suspend fun synthesizeSpeech(text: String, voice: String): ByteArray = withContext(Dispatchers.IO) {
-        val connection = (URL("${baseUrl.trimEnd('/')}/api/v1/multimodal/speech").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/multimodal/speech").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 70_000
@@ -192,7 +205,7 @@ class ChatApiClient(
     }
 
     suspend fun analyzeOnboarding(transcript: String, profile: UserProfile): OnboardingReply = withContext(Dispatchers.IO) {
-        val connection = (URL("${baseUrl.trimEnd('/')}/api/v1/onboarding/analyze").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/onboarding/analyze").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 60_000
@@ -244,6 +257,7 @@ class ChatApiClient(
             assistantMessageId = json.optLong("assistant_message_id").takeIf { it > 0 },
             evidence = parseEvidence(json),
             strategy = json.optString("strategy").takeIf { it.isNotBlank() },
+            checkInScheduled = json.optBoolean("check_in_scheduled", false),
         )
     }
 
@@ -255,7 +269,7 @@ class ChatApiClient(
         fileBytes: ByteArray,
     ): String = withContext(Dispatchers.IO) {
         val boundary = "DuckBoundary${UUID.randomUUID()}"
-        val connection = (URL("${baseUrl.trimEnd('/')}$path").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}$path").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 90_000

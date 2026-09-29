@@ -93,10 +93,6 @@ fun ConfidenceAgentApp(
     val homeState by homeViewModel.uiState.collectAsState()
     val growthState by growthViewModel.state.collectAsState()
 
-    LaunchedEffect(showCover, showOnboarding) {
-        if (!showCover && !showOnboarding) growthViewModel.refresh()
-    }
-
     LaunchedEffect(Unit) {
         delay(1_800)
         showCover = false
@@ -151,6 +147,7 @@ fun ConfidenceAgentApp(
         val sourceIds = growthState.review?.sourceEventIds.orEmpty().toSet()
         VideoStudioScreen(
             events = growthState.events.filter { it.id in sourceIds },
+            recordIds = growthState.recordIds,
             onBack = { showVideoStudio = false },
         )
         return
@@ -171,6 +168,13 @@ fun ConfidenceAgentApp(
             state = growthState,
             onCreateDemoData = growthViewModel::createDemoData,
             onClearDemoData = growthViewModel::clearDemoData,
+            onAllDataDeleted = {
+                onboardingStore.reset()
+                userProfile = null
+                showDataTools = false
+                showOnboarding = true
+                growthViewModel.forceRefresh()
+            },
             onBack = { showDataTools = false },
         )
         return
@@ -243,6 +247,17 @@ fun ConfidenceAgentApp(
                     viewModel = homeViewModel,
                     userName = displayName,
                     onOpenVoice = { showVoiceCall = true },
+                    onOpenRecordSource = { recordId ->
+                        growthViewModel.recordForEdit(recordId) { record ->
+                            if (record != null) {
+                                requestedRecordMode = record.mode
+                                requestedRecordDateEpochDay = java.time.Instant.ofEpochMilli(record.createdAt)
+                                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
+                                requestedEditRecord = record
+                                selectedTab = 2
+                            }
+                        }
+                    },
                     sourceMessageId = sourceMessageId,
                     onSourceLocated = { sourceMessageId = null },
                 )
@@ -284,6 +299,10 @@ fun ConfidenceAgentApp(
                     onOpenMemoryCenter = { showMemoryCenter = true },
                     onOpenSupportCircle = { showSupportCircle = true },
                     onOpenDataTools = { showDataTools = true },
+                    onServerEndpointChanged = {
+                        homeViewModel.refreshHistory()
+                        if (selectedTab == 1) growthViewModel.forceRefresh()
+                    },
                 )
             }
         }

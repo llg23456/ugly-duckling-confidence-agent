@@ -56,6 +56,8 @@ import com.testconnection.confidence_agent.data.model.RecordDraft
 import com.testconnection.confidence_agent.data.model.RecordMode
 import com.testconnection.confidence_agent.data.repository.ChatRepository
 import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
+import com.testconnection.confidence_agent.data.repository.ReviewCacheStore
+import com.testconnection.confidence_agent.data.remote.CheckInApiClient
 import com.testconnection.confidence_agent.data.remote.ReviewApiClient
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
@@ -65,6 +67,7 @@ import com.testconnection.confidence_agent.ui.components.WarmCard
 import com.testconnection.confidence_agent.ui.components.noRippleClickable
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.Cream
+import com.testconnection.confidence_agent.ui.theme.Danger
 import com.testconnection.confidence_agent.ui.theme.WarmWhite
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.WarmOutline
@@ -91,13 +94,17 @@ fun RecordScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val localRepository = remember { LocalRecordRepository(context.applicationContext) }
+    val reviewCache = remember { ReviewCacheStore(context.applicationContext) }
     val reviewApi = remember { ReviewApiClient() }
+    val checkInApi = remember { CheckInApiClient() }
     val deviceId = remember { DeviceIdStore(context.applicationContext).get() }
     val chatRepository = remember { ChatRepository() }
     val recorder = remember { WavAudioRecorder(context.applicationContext) }
     var mode by remember { mutableStateOf(requestedMode) }
     var note by remember { mutableStateOf("") }
     var photoComment by remember { mutableStateOf("") }
+    var photoDescription by remember { mutableStateOf("") }
+    var photoDescriptionAttempted by remember { mutableStateOf(false) }
     var photoPath by remember { mutableStateOf<String?>(null) }
     var voiceTempFile by remember { mutableStateOf<File?>(null) }
     var existingAudioPath by remember { mutableStateOf<String?>(null) }
@@ -105,9 +112,11 @@ fun RecordScreen(
     var editingCreatedAt by remember { mutableStateOf<Long?>(null) }
     var records by remember { mutableStateOf(localRepository.load()) }
     var selectedRecord by remember { mutableStateOf<RecordDraft?>(null) }
+    var recordPendingDeletion by remember { mutableStateOf<RecordDraft?>(null) }
     var isRecording by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var showCheckInScheduledNotice by remember { mutableStateOf(false) }
     var handledCameraToken by remember { mutableIntStateOf(0) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var targetDate by remember {
@@ -118,6 +127,8 @@ fun RecordScreen(
         runCatching { localRepository.importPhoto(uri) }
             .onSuccess {
                 photoPath = it
+                photoDescription = ""
+                photoDescriptionAttempted = false
                 mode = RecordMode.PHOTO
                 message = "照片准备好了，在旁边写下此刻的感受吧。"
             }
@@ -195,6 +206,18 @@ fun RecordScreen(
             message = "请先录下一段声音。"
             return
         }
+        if (mode == RecordMode.PHOTO && status == "saved" && photoDescription.isBlank() && !photoDescriptionAttempted) {
+            photoDescriptionAttempted = true
+            busy = true
+            message = "正在看一眼照片，整理成以后能找到的描述…"
+            scope.launch {
+                photoDescription = runCatching { reviewApi.describePhoto(File(requireNotNull(photoPath))) }
+                    .getOrElse { "" }
+                busy = false
+                save(status)
+            }
+            return
+        }
         val savedAudioPath = if (mode == RecordMode.VOICE) {
             if (voiceTempFile != null) {
                 runCatching { localRepository.importAudio(requireNotNull(voiceTempFile)) }
@@ -211,15 +234,22 @@ fun RecordScreen(
                 audioPath = savedAudioPath,
                 photoPath = photoPath,
                 photoComment = photoComment.trim(),
+                aiDescription = photoDescription.trim(),
                 createdAt = editingCreatedAt
                     ?: targetDate.atTime(LocalTime.now()).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
                 status = status,
             )
         localRepository.save(record)
+        reviewCache.markDirty()
         records = localRepository.load()
         scope.launch {
             runCatching { WidgetUpdater.refreshGrowthWidgets(context) }
             runCatching { reviewApi.syncRecords(deviceId, listOf(record)) }
+                .onSuccess {
+                    if (runCatching { checkInApi.notice(deviceId) }.getOrNull() != null) {
+                        showCheckInScheduledNotice = true
+                    }
+                }
                 .onFailure { message = "已保存在手机，暂时未同步到成长页；下次打开成长页会重试。" }
         }
         note = ""
@@ -229,8 +259,45 @@ fun RecordScreen(
         editingId = null
         editingCreatedAt = null
         photoComment = ""
+        photoDescription = ""
+        photoDescriptionAttempted = false
         photoPath = null
         message = if (status == "draft") "已经替你保存草稿。" else "这一笔已经好好收下了。"
+    }
+
+    fun deleteRecord(record: RecordDraft) {
+        localRepository.delete(record.id)
+        records = localRepository.load()
+        reviewCache.markDirty()
+        selectedRecord = null
+        recordPendingDeletion = null
+        message = "这条记录已从手机删除，正在同步清理成长回望和记忆。"
+        scope.launch {
+            runCatching { reviewApi.deleteRecord(deviceId, record.id) }
+                .onSuccess {
+                    localRepository.confirmDeletion(record.id)
+                    message = "这条记录及其成长回望、记忆已清理。"
+                }
+                .onFailure { message = "手机中的记录已删除；联网后会继续清理云端派生内容。" }
+            runCatching { WidgetUpdater.refreshGrowthWidgets(context) }
+        }
+    }
+
+    if (showCheckInScheduledNotice) {
+        AlertDialog(
+            onDismissRequest = { showCheckInScheduledNotice = false },
+            title = { Text("小鸭记住了") },
+            text = {
+                Text("等你下次回来时，我会轻轻问问这件事后来怎么样；你也可以随时选择暂时不说。")
+            },
+            confirmButton = {
+                TextButton(onClick = { showCheckInScheduledNotice = false }) {
+                    Text("知道啦", color = SageDark)
+                }
+            },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+        )
     }
 
     DisposableEffect(Unit) {
@@ -250,6 +317,8 @@ fun RecordScreen(
         if (edit != null) {
             note = edit.text
             photoComment = edit.photoComment
+            photoDescription = edit.aiDescription
+            photoDescriptionAttempted = edit.aiDescription.isNotBlank()
             photoPath = edit.photoPath
             existingAudioPath = edit.audioPath
             message = "正在编辑这条记录，保存后会更新原内容。"
@@ -262,7 +331,37 @@ fun RecordScreen(
     }
 
     selectedRecord?.let { record ->
-        RecordDetailDialog(record = record, onDismiss = { selectedRecord = null })
+        RecordDetailDialog(
+            record = record,
+            onDismiss = { selectedRecord = null },
+            onDelete = {
+                selectedRecord = null
+                recordPendingDeletion = record
+            },
+        )
+    }
+
+    recordPendingDeletion?.let { record ->
+        AlertDialog(
+            onDismissRequest = { recordPendingDeletion = null },
+            title = { Text("删除这条记录？") },
+            text = { Text("照片或原声、成长事件、长期记忆和相关回望都会一起清理，删除后无法恢复。") },
+            dismissButton = {
+                TextButton(onClick = { recordPendingDeletion = null }) { Text("先留着", color = SageDark) }
+            },
+            confirmButton = {
+                TextButton(onClick = { deleteRecord(record) }) { Text("确认删除", color = Danger) }
+            },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = Cream,
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        localRepository.pendingDeletions().forEach { recordId ->
+            runCatching { reviewApi.deleteRecord(deviceId, recordId) }
+                .onSuccess { localRepository.confirmDeletion(recordId) }
+        }
     }
 
     LazyColumn(
@@ -354,7 +453,12 @@ fun RecordScreen(
 }
 
 @Composable
-fun RecordDetailDialog(record: RecordDraft, onDismiss: () -> Unit, onEdit: (() -> Unit)? = null) {
+fun RecordDetailDialog(
+    record: RecordDraft,
+    onDismiss: () -> Unit,
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+) {
     var playing by remember { mutableStateOf(false) }
     val player = remember(record.id) { MediaPlayer() }
     DisposableEffect(player) {
@@ -437,10 +541,22 @@ fun RecordDetailDialog(record: RecordDraft, onDismiss: () -> Unit, onEdit: (() -
                         Text(content, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
+                if (record.mode == RecordMode.PHOTO && record.aiDescription.isNotBlank() && record.aiDescription != record.photoComment) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().background(WarmWhite, RoundedCornerShape(20.dp)).padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text("小鸭看到的画面", color = SageDark)
+                        Text(record.aiDescription, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
             }
         },
         dismissButton = {
-            if (onEdit != null) TextButton(onClick = onEdit) { Text("编辑", color = SageDark) }
+            Row {
+                if (onDelete != null) TextButton(onClick = onDelete) { Text("删除", color = Danger) }
+                if (onEdit != null) TextButton(onClick = onEdit) { Text("编辑", color = SageDark) }
+            }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("收好", color = SageDark) } },
     )

@@ -37,7 +37,7 @@ EMBEDDING_MODEL=qwen3.7-text-embedding-flash
 ASR_MODEL=paraformer-v2
 ```
 
-Android 只访问自己的 FastAPI；不得把 Key 放进 `BuildConfig`、`local.properties`、APK、日志、截图或 GitHub。
+Android 只访问自己的 FastAPI；不得把 Key 放进 `BuildConfig`、`local.properties`、APK、日志、截图或 GitHub。后端基础地址以 `BuildConfig` 作为首次安装默认值，运行时可在“帮助与求助资源”自动检测或手动修改，验证 `/health` 服务标识后保存到本机偏好；所有 API 客户端实时读取同一地址。
 
 ## 4. 数据流
 
@@ -55,6 +55,10 @@ FastAPI 校验输入与隐私选项
 规则计算记忆价值、敏感度和是否需要确认
     ↓
 返回回复与候选记忆，用户可查看、纠正或删除
+    ↓
+跨日同类状态信号满足规则时建立一次待问候
+    ↓
+下次打开 App 在聊天流中询问，回应后进入冷却
 ```
 
 自然回复与长期记忆写入必须分开：模型的一次理解不能直接变成永久记忆。
@@ -99,6 +103,8 @@ server/
 - `POST /api/v1/events/extract`
 - `POST /api/v1/support/suggest`
 - `GET /api/v1/reviews/{period}`
+- `GET /api/v1/check-ins/pending?device_id=...`
+- `POST /api/v1/check-ins/{id}/respond`
 
 `/multimodal/speech` 只允许 `Serena` 和 `Ethan`，服务端使用同一百炼 Key 获取短时音频 URL，再下载并代理给 Android，Key 和供应商 URL 均不会进入 APK。Android 本地持久化音色、自动朗读和提示音偏好。
 
@@ -113,7 +119,7 @@ server/
 
 ## 7. 暂不实现
 
-- 长期记忆算法、向量数据库。
+- 向量数据库与关键词、向量混合召回。
 - 真正全双工语音、打断检测与回声消除。
 - 登录、多设备同步、公开社区。
 - 自动联系老师、同学或朋友。

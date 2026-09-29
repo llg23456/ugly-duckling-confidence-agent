@@ -9,6 +9,7 @@ data class RecordDraft(
     val audioPath: String? = null,
     val photoPath: String? = null,
     val photoComment: String = "",
+    val aiDescription: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val status: String = "saved",
 )

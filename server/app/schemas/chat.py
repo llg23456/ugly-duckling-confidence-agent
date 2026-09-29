@@ -15,6 +15,7 @@ class MemoryEvidence(BaseModel):
     source_date: str
     source_type: Literal["record", "chat", "photo", "voice"]
     source_id: int | None = None
+    source_record_id: int | None = None
     memory_id: int | None = None
 
 
@@ -27,6 +28,7 @@ class ChatResponse(BaseModel):
     mock_reason: str | None = None
     user_message_id: int | None = None
     assistant_message_id: int | None = None
+    check_in_scheduled: bool = False
 
 
 class ConversationMessage(BaseModel):

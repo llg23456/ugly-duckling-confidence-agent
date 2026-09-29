@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import chat_router, events_router, multimodal_router, memories_router, onboarding_router, reviews_router, records_router, support_router, support_people_router, videos_router
+from app.api.routes import chat_router, check_ins_router, data_management_router, events_router, multimodal_router, memories_router, onboarding_router, reviews_router, records_router, support_router, support_people_router, videos_router
 from app.api.routes.dev_demo import router as dev_demo_router
 from app.core.config import get_settings
 
@@ -49,5 +49,7 @@ app.include_router(support_router, prefix=settings.api_prefix)
 app.include_router(support_people_router, prefix=settings.api_prefix)
 app.include_router(reviews_router, prefix=settings.api_prefix)
 app.include_router(records_router, prefix=settings.api_prefix)
+app.include_router(data_management_router, prefix=settings.api_prefix)
 app.include_router(videos_router, prefix=settings.api_prefix)
+app.include_router(check_ins_router, prefix=settings.api_prefix)
 app.include_router(dev_demo_router, prefix=settings.api_prefix)

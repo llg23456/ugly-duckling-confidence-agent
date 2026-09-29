@@ -1,5 +1,6 @@
 package com.testconnection.confidence_agent.ui.screens
 
+import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,7 +20,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.FileProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -31,14 +40,75 @@ import com.testconnection.confidence_agent.ui.components.SectionHeading
 import com.testconnection.confidence_agent.ui.components.WarmCard
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
+import com.testconnection.confidence_agent.ui.theme.Danger
+import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
+import com.testconnection.confidence_agent.data.repository.DataManagementRepository
+import com.testconnection.confidence_agent.widget.WidgetUpdater
+import kotlinx.coroutines.launch
 
 @Composable
 fun DataToolsScreen(
     state: GrowthUiState,
     onCreateDemoData: () -> Unit,
     onClearDemoData: () -> Unit,
+    onAllDataDeleted: () -> Unit,
     onBack: () -> Unit,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repository = remember { DataManagementRepository(context.applicationContext) }
+    val deviceId = remember { DeviceIdStore(context.applicationContext).get() }
+    var busy by remember { mutableStateOf(false) }
+    var notice by remember { mutableStateOf<String?>(null) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+    fun exportData() {
+        if (busy) return
+        busy = true
+        notice = "正在整理聊天、记录、回望和本机媒体…"
+        scope.launch {
+            runCatching { repository.export(deviceId) }
+                .onSuccess { file ->
+                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/zip"
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "导出小丑鸭数据"))
+                    notice = "数据包已生成，请选择保存或分享位置。"
+                }
+                .onFailure { notice = it.message ?: "数据导出失败，请稍后重试。" }
+            busy = false
+        }
+    }
+
+    fun deleteAllData() {
+        if (busy) return
+        showDeleteConfirmation = false
+        busy = true
+        notice = "正在删除全部数据…"
+        scope.launch {
+            runCatching { repository.deleteAll(deviceId) }
+                .onSuccess {
+                    runCatching { WidgetUpdater.refreshGrowthWidgets(context) }
+                    notice = "全部数据已删除。"
+                    onAllDataDeleted()
+                }
+                .onFailure { notice = "删除未完成：${it.message ?: "请确认后端连接后重试"}" }
+            busy = false
+        }
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("删除全部数据？") },
+            text = { Text("聊天、生活记录、照片与原声、记忆、回望、成长小片和画像都会删除，且无法恢复。建议先导出一份。") },
+            dismissButton = { TextButton(onClick = { showDeleteConfirmation = false }) { Text("取消") } },
+            confirmButton = { TextButton(onClick = ::deleteAllData) { Text("确认全部删除", color = Danger) } },
+        )
+    }
     LazyColumn(
         modifier = Modifier.statusBarsPadding().navigationBarsPadding(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
@@ -55,10 +125,30 @@ fun DataToolsScreen(
                 Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         SectionHeading("自己的记录")
-                        Text("正式的数据打包与导出会在数据闭环阶段接入。你的照片和原声目前仍保存在手机应用私有目录。",
+                        Text("导出包包含聊天、生活记录、成长事件、长期记忆、日周月回望，以及仍保存在本机的照片、原声和成长小片。后端暂时离线时也会先导出本机数据。",
                             style = MaterialTheme.typography.bodyLarge, color = InkMuted)
                     }
                     DuckArt(R.drawable.duck_writing, "整理记录的小鸭", Modifier.size(92.dp))
+                }
+            }
+        }
+        item {
+            WarmCard {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                    notice?.let { Text(it, color = SageDark) }
+                    if (busy) CircularProgressIndicator(Modifier.size(24.dp), color = SageDark)
+                    Button(
+                        onClick = ::exportData,
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = AppButtonShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = SageDark),
+                    ) { Text("导出为 ZIP 数据包") }
+                    TextButton(
+                        onClick = { showDeleteConfirmation = true },
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("删除全部数据", color = Danger) }
                 }
             }
         }

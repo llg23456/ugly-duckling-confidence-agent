@@ -127,6 +127,13 @@ fun GrowthScreen(
                 CircularProgressIndicator(modifier = Modifier.size(28.dp), color = SageDark)
             }
         }
+        if (state.refreshing) item {
+            Text(
+                "正在后台更新，当前先显示上次内容…",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         state.error?.let { message -> item {
             WarmCard {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

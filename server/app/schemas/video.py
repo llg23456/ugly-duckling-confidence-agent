@@ -3,7 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-Stage = Literal["difficulty", "small_step", "help", "change", "continuing"]
+Stage = Literal["beginning", "difficulty", "small_step", "change", "continuing", "help"]
 
 
 class VideoScene(BaseModel):
@@ -14,12 +14,12 @@ class VideoScene(BaseModel):
 
 class VideoScriptRequest(BaseModel):
     device_id: str = Field(min_length=1, max_length=128)
-    event_ids: list[int] = Field(min_length=1, max_length=6)
+    event_ids: list[int] = Field(min_length=3, max_length=5)
 
 
 class VideoScriptUpdate(BaseModel):
     device_id: str = Field(min_length=1, max_length=128)
-    scenes: list[VideoScene] = Field(min_length=2, max_length=5)
+    scenes: list[VideoScene] = Field(min_length=3, max_length=5)
 
 
 class VideoScriptResponse(BaseModel):

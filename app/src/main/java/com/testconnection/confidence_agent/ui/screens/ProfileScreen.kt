@@ -19,8 +19,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -42,7 +44,9 @@ import androidx.compose.ui.unit.dp
 import com.testconnection.confidence_agent.R
 import com.testconnection.confidence_agent.data.audio.AudioReplyPlayer
 import com.testconnection.confidence_agent.data.preferences.DuckVoiceMode
+import com.testconnection.confidence_agent.data.preferences.ServerEndpoint
 import com.testconnection.confidence_agent.data.preferences.VoicePreferences
+import com.testconnection.confidence_agent.data.remote.ServerConnectionManager
 import com.testconnection.confidence_agent.data.repository.ChatRepository
 import com.testconnection.confidence_agent.data.repository.FakeConfidenceRepository
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
@@ -69,6 +73,7 @@ fun ProfileScreen(
     onOpenMemoryCenter: () -> Unit,
     onOpenSupportCircle: () -> Unit,
     onOpenDataTools: () -> Unit,
+    onServerEndpointChanged: () -> Unit,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -86,6 +91,93 @@ fun ProfileScreen(
     var showWidgetPrivacy by remember { mutableStateOf(false) }
     var widgetAllowed by remember { mutableStateOf(widgetPrivacy.isAllowed()) }
     var widgetPreview by remember { mutableStateOf(widgetPrivacy.snapshot()) }
+    var showHelpResources by remember { mutableStateOf(false) }
+    var serverAddress by remember { mutableStateOf(ServerEndpoint.current()) }
+    var serverStatus by remember { mutableStateOf("当前使用：${ServerEndpoint.current()}") }
+    var serverChecking by remember { mutableStateOf(false) }
+
+    fun detectServer() {
+        if (serverChecking) return
+        serverChecking = true
+        serverStatus = "正在扫描当前 Wi-Fi…"
+        coroutineScope.launch {
+            runCatching { ServerConnectionManager.detectOnWifi(context) }
+                .onSuccess { health ->
+                    serverAddress = ServerEndpoint.save(context, health.baseUrl)
+                    serverStatus = "连接成功 · ${health.model}${if (health.liveAi) " · 云端 AI 已启用" else " · 演示回复"}"
+                    onServerEndpointChanged()
+                }
+                .onFailure { error ->
+                    serverStatus = error.message ?: "没有找到可用后端"
+                }
+            serverChecking = false
+        }
+    }
+
+    fun checkAndSaveServer() {
+        if (serverChecking) return
+        serverChecking = true
+        serverStatus = "正在检测输入的地址…"
+        coroutineScope.launch {
+            runCatching { ServerConnectionManager.check(serverAddress) }
+                .onSuccess { health ->
+                    serverAddress = ServerEndpoint.save(context, health.baseUrl)
+                    serverStatus = "连接成功 · ${health.model}${if (health.liveAi) " · 云端 AI 已启用" else " · 演示回复"}"
+                    onServerEndpointChanged()
+                }
+                .onFailure { error ->
+                    serverStatus = error.message ?: "该地址暂时无法连接"
+                }
+            serverChecking = false
+        }
+    }
+
+    if (showHelpResources) AlertDialog(
+        onDismissRequest = { if (!serverChecking) showHelpResources = false },
+        containerColor = Cream,
+        shape = RoundedCornerShape(30.dp),
+        title = { Text("帮助与求助资源") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("遇到紧急危险时，请优先联系身边可信任的人或当地紧急援助。小鸭不会替你自动发送消息。")
+                HorizontalDivider()
+                Text("后端连接 · 测试工具", style = MaterialTheme.typography.titleMedium)
+                Text("手机和电脑连接同一 Wi-Fi、电脑已启动后端时，可以自动找到并保存新地址。")
+                OutlinedTextField(
+                    value = serverAddress,
+                    onValueChange = { serverAddress = it; serverStatus = "地址尚未检测" },
+                    enabled = !serverChecking,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("服务器地址") },
+                    placeholder = { Text("http://192.168.1.10:8000") },
+                )
+                Button(
+                    onClick = ::detectServer,
+                    enabled = !serverChecking,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AppButtonShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = SageDark),
+                ) { Text("一键检测当前 Wi-Fi") }
+                TextButton(
+                    onClick = ::checkAndSaveServer,
+                    enabled = !serverChecking,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("检测并保存输入地址") }
+                if (serverChecking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp).align(Alignment.CenterHorizontally),
+                        color = SageDark,
+                        strokeWidth = 2.dp,
+                    )
+                }
+                Text(serverStatus, style = MaterialTheme.typography.bodyMedium, color = InkMuted)
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { showHelpResources = false }, enabled = !serverChecking) { Text("收好") }
+        },
+    )
 
     if (showWidgetPrivacy) AlertDialog(
         onDismissRequest = { showWidgetPrivacy = false },
@@ -193,12 +285,17 @@ fun ProfileScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限" || entry.title == "数据导出") {
+                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限" || entry.title == "数据导出" || entry.title == "帮助与求助资源") {
                                     when (entry.title) {
                                         "记忆中心" -> onOpenMemoryCenter()
                                         "支持圈" -> onOpenSupportCircle()
                                         "隐私与权限" -> { widgetAllowed = widgetPrivacy.isAllowed(); widgetPreview = widgetPrivacy.snapshot(); showWidgetPrivacy = true }
                                         "数据导出" -> onOpenDataTools()
+                                        "帮助与求助资源" -> {
+                                            serverAddress = ServerEndpoint.current()
+                                            serverStatus = "当前使用：${ServerEndpoint.current()}"
+                                            showHelpResources = true
+                                        }
                                     }
                                 }
                                 .padding(horizontal = 18.dp, vertical = 16.dp),
@@ -232,7 +329,7 @@ fun ProfileScreen(
         }
 
         item {
-            TextButton(onClick = {}, modifier = Modifier.fillMaxWidth()) {
+            TextButton(onClick = onOpenDataTools, modifier = Modifier.fillMaxWidth()) {
                 Text("删除全部数据", color = Danger, fontWeight = FontWeight.SemiBold)
             }
         }

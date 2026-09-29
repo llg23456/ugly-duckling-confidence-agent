@@ -9,6 +9,7 @@ class RecordInput(BaseModel):
     mode: Literal["text", "voice", "photo"]
     text: str = Field(default="", max_length=4000)
     photo_comment: str = Field(default="", max_length=2000)
+    ai_description: str = Field(default="", max_length=2000)
     status: Literal["saved", "draft"] = "saved"
     created_at_ms: int = Field(ge=946684800000, le=4102444800000)
 
@@ -24,6 +25,7 @@ class RecordItem(BaseModel):
     mode: str
     text: str
     photo_comment: str
+    ai_description: str
     status: str
     created_at: datetime
     event_id: int | None

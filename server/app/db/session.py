@@ -35,6 +35,8 @@ SQLITE_ADDITIONS = {
         "is_user_edited": "BOOLEAN",
         "model": "VARCHAR(100)",
         "prompt_version": "VARCHAR(32)",
+        "embedding": "JSON",
+        "embedding_model": "VARCHAR(100)",
         "updated_at": "DATETIME",
     },
     "support_people": {
@@ -45,6 +47,14 @@ SQLITE_ADDITIONS = {
         "range_start": "VARCHAR(10)",
         "range_end": "VARCHAR(10)",
         "updated_at": "DATETIME",
+    },
+    "records": {
+        "ai_description": "TEXT DEFAULT ''",
+        "embedding": "JSON",
+        "embedding_model": "VARCHAR(100)",
+    },
+    "proactive_check_ins": {
+        "notified_at": "DATETIME",
     },
 }
 

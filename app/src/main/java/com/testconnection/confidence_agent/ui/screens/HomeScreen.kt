@@ -51,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -63,7 +64,6 @@ import androidx.core.content.FileProvider
 import com.testconnection.confidence_agent.R
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
-import com.testconnection.confidence_agent.ui.components.SectionHeading
 import com.testconnection.confidence_agent.ui.components.WarmCard
 import com.testconnection.confidence_agent.ui.components.noRippleClickable
 import com.testconnection.confidence_agent.ui.theme.CreamDeep
@@ -81,6 +81,7 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     userName: String,
     onOpenVoice: () -> Unit,
+    onOpenRecordSource: (Long) -> Unit = {},
     sourceMessageId: Long? = null,
     onSourceLocated: () -> Unit = {},
 ) {
@@ -99,6 +100,21 @@ fun HomeScreen(
     var feedbackChoice by remember { mutableStateOf<String?>(null) }
     var effortText by remember { mutableStateOf("") }
     var helpText by remember { mutableStateOf("") }
+
+    state.checkInScheduledNotice?.let { notice ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissCheckInScheduledNotice,
+            title = { Text("小鸭记住了") },
+            text = { Text(notice, style = MaterialTheme.typography.bodyLarge) },
+            confirmButton = {
+                TextButton(onClick = viewModel::dismissCheckInScheduledNotice) {
+                    Text("知道啦", color = SageDark)
+                }
+            },
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
+        )
+    }
 
     feedbackChoice?.let { choice ->
         AlertDialog(
@@ -193,9 +209,20 @@ fun HomeScreen(
         )
     }
 
-    LaunchedEffect(state.messages.size, state.pendingMessage) {
-        if (sourceMessageId == null && requestedSourceId == null && (state.messages.isNotEmpty() || state.pendingMessage != null)) {
-            listState.animateScrollToItem(1 + state.messages.size + if (state.pendingMessage != null) 1 else 0)
+    LaunchedEffect(
+        state.messages.size,
+        state.pendingMessage,
+        state.proactiveCheckIn?.id,
+        state.checkInAcknowledgement,
+    ) {
+        if (
+            sourceMessageId == null && requestedSourceId == null &&
+            (state.messages.isNotEmpty() || state.pendingMessage != null ||
+                state.proactiveCheckIn != null || state.checkInAcknowledgement != null)
+        ) {
+            val chatCount = state.messages.size + if (state.pendingMessage != null) 1 else 0
+            val hasCheckInCard = state.proactiveCheckIn != null || state.checkInAcknowledgement != null
+            listState.animateScrollToItem(if (hasCheckInCard) 2 + chatCount else 1 + chatCount)
         }
     }
     LaunchedEffect(sourceMessageId) {
@@ -310,6 +337,68 @@ fun HomeScreen(
             }
         }
 
+        if (state.proactiveCheckIn != null || state.checkInAcknowledgement != null) item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(0.92f),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, WarmOutline),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("小鸭来问问", style = MaterialTheme.typography.bodyMedium, color = SageDark)
+                        state.proactiveCheckIn?.let { checkIn ->
+                            Text(checkIn.prompt, style = MaterialTheme.typography.bodyLarge)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Button(
+                                    onClick = { viewModel.respondToCheckIn("talk") },
+                                    enabled = !state.checkInLoading,
+                                    modifier = Modifier.weight(1f),
+                                    shape = AppButtonShape,
+                                    colors = ButtonDefaults.buttonColors(containerColor = SageDark),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 8.dp),
+                                ) { Text("想聊聊") }
+                                TextButton(
+                                    onClick = { viewModel.respondToCheckIn("improved") },
+                                    enabled = !state.checkInLoading,
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                                ) { Text("好一点") }
+                                TextButton(
+                                    onClick = { viewModel.respondToCheckIn("not_now") },
+                                    enabled = !state.checkInLoading,
+                                    modifier = Modifier.weight(1f),
+                                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                                ) { Text("暂时不说") }
+                            }
+                            if (state.checkInLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp).align(Alignment.CenterHorizontally),
+                                    color = SageDark,
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                        }
+                        if (state.proactiveCheckIn == null) {
+                            state.checkInAcknowledgement?.let {
+                                Text(it, style = MaterialTheme.typography.bodyLarge)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             if (state.sending) {
                 Row(
@@ -342,40 +431,53 @@ fun HomeScreen(
         }
 
         if (state.lastEvidence.isNotEmpty()) item {
-            WarmCard {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = SagePale,
+            ) {
                 Row(
-                    modifier = Modifier.padding(20.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        SectionHeading("想起一件事", state.lastEvidence.first().summary)
-                        Button(
-                            onClick = {
-                                val sourceId = state.lastEvidence.first().sourceId
-                                requestedSourceId = sourceId
-                                if (state.messages.none { it.id == sourceId }) viewModel.refreshHistory()
-                            },
-                            shape = AppButtonShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                        ) { Text("查看来源") }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("想起一件事", style = MaterialTheme.typography.bodyMedium, color = SageDark)
+                        Text(
+                            state.lastEvidence.first().summary,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
-                    DuckArt(
-                        drawable = R.drawable.duck_writing,
-                        description = "翻看记录的小鸭",
-                        modifier = Modifier.size(118.dp),
-                    )
+                    state.lastEvidence.first().sourceId?.let { sourceId ->
+                        TextButton(onClick = {
+                            viewModel.dismissEvidence()
+                            requestedSourceId = sourceId
+                            if (state.messages.none { it.id == sourceId }) viewModel.refreshHistory()
+                        }) { Text("查看") }
+                    }
+                    state.lastEvidence.first().sourceRecordId?.let { recordId ->
+                        TextButton(onClick = {
+                            viewModel.dismissEvidence()
+                            onOpenRecordSource(recordId)
+                        }) { Text("查看") }
+                    }
                 }
             }
         }
 
-        item {
+        if (state.supportSuggestion != null) item {
             WarmCard {
                 Column(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    SectionHeading("要不要一起想下一步？", "可以自己试一小步，也可以请人帮忙。")
                     state.supportSuggestion?.let { suggestion ->
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text("一起想下一步", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                            TextButton(onClick = viewModel::dismissSupportSuggestion) { Text("收起") }
+                        }
+                        Text("可以自己试一小步，也可以请人帮忙。", style = MaterialTheme.typography.bodyMedium)
                         Text("我自己先试：${suggestion.smallStep}", style = MaterialTheme.typography.bodyLarge)
                         Text("可以找谁：${suggestion.supporterName}。${suggestion.reason}", style = MaterialTheme.typography.bodyLarge)
                         Text("更轻的选择：${suggestion.lighterOption}", style = MaterialTheme.typography.bodyMedium)
@@ -408,21 +510,31 @@ fun HomeScreen(
                             Text("这次反馈已记录。", style = MaterialTheme.typography.bodyMedium, color = SageDark)
                         }
                     }
-                    if (state.supportLoading) CircularProgressIndicator(modifier = Modifier.size(22.dp))
-                    if (state.supportSuggestion == null && !state.supportLoading) {
-                        val latest = state.messages.lastOrNull { it.fromUser }
-                        Button(
-                            onClick = { latest?.let { viewModel.requestSupport(it.text, it.id) } },
-                            enabled = latest != null,
-                            shape = AppButtonShape,
-                            colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                        ) { Text("一起想办法") }
-                    }
                     Text(
                         "只提供建议，不会自动给任何人发送消息。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+        }
+
+        if (state.supportSuggestion == null) item {
+            val latest = state.messages.lastOrNull { it.fromUser }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (state.supportLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = SageDark, strokeWidth = 2.dp)
+                    Text(" 正在想一个轻一点的办法…", style = MaterialTheme.typography.bodyMedium)
+                } else if (latest != null) {
+                    OutlinedButton(
+                        onClick = { viewModel.requestSupport(latest.text, latest.id) },
+                        shape = AppButtonShape,
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 7.dp),
+                    ) { Text("一起想下一步") }
                 }
             }
         }

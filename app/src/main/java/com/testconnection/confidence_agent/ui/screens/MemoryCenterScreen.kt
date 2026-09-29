@@ -143,7 +143,7 @@ fun MemoryCenterScreen(
             }
         }
         Spacer(Modifier.height(24.dp))
-        Text("对话中记住的事", style = MaterialTheme.typography.titleLarge)
+        Text("小鸭记住的事", style = MaterialTheme.typography.titleLarge)
         loadError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (memories.isEmpty()) Text("还没有保存的对话记忆。", style = MaterialTheme.typography.bodyMedium)
         memories.forEach { memory ->

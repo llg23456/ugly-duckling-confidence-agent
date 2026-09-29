@@ -1,10 +1,12 @@
 package com.testconnection.confidence_agent.data.remote
 
 import android.net.Uri
-import com.testconnection.confidence_agent.BuildConfig
 import com.testconnection.confidence_agent.data.model.RecordDraft
+import com.testconnection.confidence_agent.data.preferences.ServerEndpoint
 import java.net.HttpURLConnection
 import java.net.URL
+import java.io.DataOutputStream
+import java.io.File
 import java.time.OffsetDateTime
 import java.time.LocalDateTime
 import java.time.ZoneOffset
@@ -36,10 +38,18 @@ data class ReviewSummary(
 
 data class SyncedRecord(val serverId: Long, val clientId: String)
 data class DemoDataResult(val created: Int, val deleted: Int, val theme: String)
+data class ReviewOverview(
+    val review: ReviewSummary,
+    val dailyReviews: List<Pair<String, ReviewSummary?>> = emptyList(),
+    val weeklyReviews: List<Triple<String, String, ReviewSummary?>> = emptyList(),
+    internal val rawJson: String = "",
+)
 
-class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
+class ReviewApiClient(private val baseUrl: String? = null) {
+    private val resolvedBaseUrl: String get() = baseUrl ?: ServerEndpoint.current()
+
     private fun request(path: String, method: String, body: JSONObject? = null): String {
-        val connection = (URL("${baseUrl.trimEnd('/')}/api/v1$path").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1$path").openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 10_000
             readTimeout = 30_000
@@ -62,16 +72,20 @@ class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
     }
 
     suspend fun syncRecords(deviceId: String, records: List<RecordDraft>): List<SyncedRecord> = withContext(Dispatchers.IO) {
-        if (records.isEmpty()) return@withContext emptyList()
+        val validRecords = records.filter { it.id.isNotBlank() }.take(100)
+        if (validRecords.isEmpty()) return@withContext emptyList()
         val rows = JSONArray()
-        records.forEach { record ->
+        validRecords.forEach { record ->
+            val safeCreatedAt = record.createdAt.takeIf { it in 946684800000L..4102444800000L }
+                ?: System.currentTimeMillis()
             rows.put(JSONObject()
-                .put("client_record_id", record.id)
+                .put("client_record_id", record.id.take(80))
                 .put("mode", record.mode.name.lowercase(Locale.ROOT))
-                .put("text", record.text)
-                .put("photo_comment", record.photoComment)
-                .put("status", record.status)
-                .put("created_at_ms", record.createdAt))
+                .put("text", record.text.take(4000))
+                .put("photo_comment", record.photoComment.take(2000))
+                .put("ai_description", record.aiDescription.take(2000))
+                .put("status", if (record.status == "draft") "draft" else "saved")
+                .put("created_at_ms", safeCreatedAt))
         }
         val response = JSONObject(request("/records/sync", "POST", JSONObject().put("device_id", deviceId).put("records", rows)))
         val result = response.getJSONArray("records")
@@ -107,6 +121,24 @@ class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         parseReview(JSONObject(request("/reviews/generate", "POST", body)))
     }
 
+    suspend fun overview(deviceId: String, period: String, start: String, end: String): ReviewOverview =
+        withContext(Dispatchers.IO) {
+            val body = JSONObject()
+                .put("device_id", deviceId)
+                .put("period", period)
+                .put("start_date", start)
+                .put("end_date", end)
+            runCatching { parseOverview(request("/reviews/overview", "POST", body)) }
+                .getOrElse { error ->
+                    val message = error.message.orEmpty()
+                    if (!message.contains("返回 404") && !message.contains("返回 405")) throw error
+                    // 兼容仍在运行的旧后端：至少加载主报告；重启后端后自动恢复完整子摘要。
+                    ReviewOverview(
+                        review = parseReview(JSONObject(request("/reviews/generate", "POST", body))),
+                    )
+                }
+        }
+
     suspend fun pendingDaily(deviceId: String): List<ReviewSummary> = withContext(Dispatchers.IO) {
         val rows = JSONObject(request("/reviews/generate-pending-daily", "POST", JSONObject().put("device_id", deviceId)))
             .getJSONArray("reviews")
@@ -121,6 +153,7 @@ class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
                 .getOrDefault(com.testconnection.confidence_agent.data.model.RecordMode.TEXT),
             text = row.optString("text"),
             photoComment = row.optString("photo_comment"),
+            aiDescription = row.optString("ai_description"),
             createdAt = runCatching {
                 val raw = row.getString("created_at")
                 runCatching { OffsetDateTime.parse(raw).toInstant() }
@@ -129,6 +162,56 @@ class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
             }.getOrDefault(System.currentTimeMillis()),
             status = row.optString("status", "saved"),
         )
+    }
+
+    suspend fun deleteRecord(deviceId: String, clientRecordId: String) = withContext(Dispatchers.IO) {
+        request("/records/client/${Uri.encode(clientRecordId)}?device_id=${Uri.encode(deviceId)}", "DELETE")
+    }
+
+    suspend fun describePhoto(file: File): String = withContext(Dispatchers.IO) {
+        require(file.exists() && file.length() > 0) { "照片文件不存在" }
+        val header = ByteArray(12)
+        file.inputStream().use { it.read(header) }
+        val mimeType = when {
+            header.take(8).map { it.toInt() and 0xFF } == listOf(137, 80, 78, 71, 13, 10, 26, 10) -> "image/png"
+            header.copyOfRange(0, 4).toString(Charsets.US_ASCII) == "RIFF" &&
+                header.copyOfRange(8, 12).toString(Charsets.US_ASCII) == "WEBP" -> "image/webp"
+            else -> "image/jpeg"
+        }
+        val extension = when (mimeType) { "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
+        val boundary = "DuckRecord${System.currentTimeMillis()}"
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/records/describe-photo").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 10_000
+            readTimeout = 70_000
+            doOutput = true
+            setRequestProperty("Accept", "application/json")
+            setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
+        }
+        try {
+            DataOutputStream(connection.outputStream).use { output ->
+                output.writeBytes("--$boundary\r\n")
+                output.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"record.$extension\"\r\n")
+                output.writeBytes("Content-Type: $mimeType\r\n\r\n")
+                file.inputStream().use { it.copyTo(output) }
+                output.writeBytes("\r\n--$boundary--\r\n")
+            }
+            val status = connection.responseCode
+            val content = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (status !in 200..299) throw IllegalStateException("照片描述服务返回 $status")
+            JSONObject(content).getString("description")
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    suspend fun exportData(deviceId: String): String = withContext(Dispatchers.IO) {
+        request("/data/export?device_id=${Uri.encode(deviceId)}", "GET")
+    }
+
+    suspend fun deleteAllData(deviceId: String) = withContext(Dispatchers.IO) {
+        request("/data?device_id=${Uri.encode(deviceId)}", "DELETE")
     }
 
     suspend fun createDemoData(deviceId: String): DemoDataResult = withContext(Dispatchers.IO) {
@@ -145,43 +228,69 @@ class ReviewApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
         theme = row.optString("theme"),
     )
 
-    private fun parseReview(row: JSONObject): ReviewSummary {
-        val moments = row.getJSONArray("moments")
-        val sourceIds = row.getJSONArray("source_event_ids")
-        val sections = row.optJSONArray("sections") ?: JSONArray()
-        return ReviewSummary(
-            id = row.optLong("id").takeIf { it > 0 },
-            period = row.getString("period"),
-            rangeStart = row.optString("range_start"),
-            rangeEnd = row.optString("range_end"),
-            title = row.getString("title"),
-            story = row.optString("story"),
-            ownEffort = row.getString("own_effort"),
-            supportReceived = row.getString("support_received"),
-            pauseOrRestart = row.optString("pause_or_restart"),
-            nextStep = row.optString("next_step"),
-            moments = (0 until moments.length()).map { index ->
-                moments.getJSONObject(index).let { item ->
-                    ReviewMoment(
-                        item.optLong("event_id").takeIf { it > 0 }, item.getString("date"), item.getString("title"),
-                        item.optLong("source_id").takeIf { it > 0 },
-                        item.optLong("source_feedback_id").takeIf { it > 0 },
-                        item.optLong("source_record_id").takeIf { it > 0 },
-                    )
-                }
-            },
-            sourceEventIds = (0 until sourceIds.length()).map { sourceIds.getLong(it) },
-            closing = row.optString("closing"),
-            sections = (0 until sections.length()).map { index ->
-                sections.getJSONObject(index).let { item ->
-                    ReviewSection(
-                        key = item.optString("key"),
-                        title = item.optString("title"),
-                        content = item.optString("content"),
-                    )
-                }
-            },
-            affirmation = row.optString("affirmation"),
-        )
+    companion object {
+        fun parseOverview(raw: String): ReviewOverview {
+            val row = JSONObject(raw)
+            val daily = row.optJSONArray("daily_reviews") ?: JSONArray()
+            val weekly = row.optJSONArray("weekly_reviews") ?: JSONArray()
+            return ReviewOverview(
+                review = parseReview(row.getJSONObject("review")),
+                dailyReviews = (0 until daily.length()).map { index ->
+                    daily.getJSONObject(index).let { item ->
+                        item.getString("date") to item.optJSONObject("review")?.let(::parseReview)
+                    }
+                },
+                weeklyReviews = (0 until weekly.length()).map { index ->
+                    weekly.getJSONObject(index).let { item ->
+                        Triple(
+                            item.getString("start"),
+                            item.getString("end"),
+                            item.optJSONObject("review")?.let(::parseReview),
+                        )
+                    }
+                },
+                rawJson = raw,
+            )
+        }
+
+        private fun parseReview(row: JSONObject): ReviewSummary {
+            val moments = row.getJSONArray("moments")
+            val sourceIds = row.getJSONArray("source_event_ids")
+            val sections = row.optJSONArray("sections") ?: JSONArray()
+            return ReviewSummary(
+                id = row.optLong("id").takeIf { it > 0 },
+                period = row.getString("period"),
+                rangeStart = row.optString("range_start"),
+                rangeEnd = row.optString("range_end"),
+                title = row.getString("title"),
+                story = row.optString("story"),
+                ownEffort = row.getString("own_effort"),
+                supportReceived = row.getString("support_received"),
+                pauseOrRestart = row.optString("pause_or_restart"),
+                nextStep = row.optString("next_step"),
+                moments = (0 until moments.length()).map { index ->
+                    moments.getJSONObject(index).let { item ->
+                        ReviewMoment(
+                            item.optLong("event_id").takeIf { it > 0 }, item.getString("date"), item.getString("title"),
+                            item.optLong("source_id").takeIf { it > 0 },
+                            item.optLong("source_feedback_id").takeIf { it > 0 },
+                            item.optLong("source_record_id").takeIf { it > 0 },
+                        )
+                    }
+                },
+                sourceEventIds = (0 until sourceIds.length()).map { sourceIds.getLong(it) },
+                closing = row.optString("closing"),
+                sections = (0 until sections.length()).map { index ->
+                    sections.getJSONObject(index).let { item ->
+                        ReviewSection(
+                            key = item.optString("key"),
+                            title = item.optString("title"),
+                            content = item.optString("content"),
+                        )
+                    }
+                },
+                affirmation = row.optString("affirmation"),
+            )
+        }
     }
 }

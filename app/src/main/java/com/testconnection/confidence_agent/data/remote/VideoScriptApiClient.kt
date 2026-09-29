@@ -1,6 +1,6 @@
 package com.testconnection.confidence_agent.data.remote
 
-import com.testconnection.confidence_agent.BuildConfig
+import com.testconnection.confidence_agent.data.preferences.ServerEndpoint
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -24,9 +24,11 @@ data class VideoScript(
     val userEdited: Boolean,
 )
 
-class VideoScriptApiClient(private val baseUrl: String = BuildConfig.API_BASE_URL) {
+class VideoScriptApiClient(private val baseUrl: String? = null) {
+    private val resolvedBaseUrl: String get() = baseUrl ?: ServerEndpoint.current()
+
     private fun request(path: String, method: String, body: JSONObject): String {
-        val connection = (URL("${baseUrl.trimEnd('/')}/api/v1$path").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1$path").openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 10_000
             readTimeout = 45_000

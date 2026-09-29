@@ -9,6 +9,7 @@ from app.db.repository import (
 from app.db.session import get_db
 from app.schemas import MultimodalChatResponse, SpeechSynthesisRequest, TranscriptionResponse
 from app.services.multimodal_service import chat_with_audio, chat_with_image, synthesize_speech, transcribe_audio
+from app.services.check_in_service import schedule_explicit_follow_up
 from app.services.event_service import process_turn
 from app.services.memory_service import recall
 
@@ -69,6 +70,9 @@ async def image_chat(
     )
     result.user_message_id = user_message.id
     result.assistant_message_id = assistant_message.id
+    if schedule_explicit_follow_up(db, conversation.id, prompt) is not None:
+        db.commit()
+        result.check_in_scheduled = True
     background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
     return result
 
@@ -106,6 +110,9 @@ async def audio_chat(
     )
     result.user_message_id = user_message.id
     result.assistant_message_id = assistant_message.id
+    if schedule_explicit_follow_up(db, conversation.id, result.user_text) is not None:
+        db.commit()
+        result.check_in_scheduled = True
     background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
     return result
 

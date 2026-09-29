@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import UTC, datetime
 from typing import Literal
 
 from openai import OpenAI
@@ -8,9 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.models import DailySummary, GrowthEvent, Memory, Message
+from app.db.models import DailySummary, GrowthEvent, Memory, Message, UserRecord
 from app.db.session import engine_for_url
-from app.services.memory_service import local_day
+from app.services.memory_service import local_day, set_memory_embedding
+from app.services.check_in_service import evaluate_check_in
 
 logger = logging.getLogger(__name__)
 PROMPT_VERSION = "p1.1"
@@ -98,13 +100,15 @@ def process_turn(database_url: str, conversation_id: int, user_message_id: int, 
             db.add(event)
             db.flush()
             if outcome in ("long_term", "confirm"):
-                db.add(Memory(
+                memory = Memory(
                     conversation_id=conversation_id, content=candidate.fact.strip(),
                     source_message_ids=[user_message_id], event_id=event.id,
                     status="active" if outcome == "long_term" else "pending",
                     value_score=score, sensitivity=candidate.sensitivity, is_user_edited=False,
                     model=settings.extraction_model, prompt_version=PROMPT_VERSION,
-                ))
+                )
+                set_memory_embedding(memory)
+                db.add(memory)
             elif outcome == "daily":
                 day = local_day(user_message.created_at)
                 summary = db.scalar(select(DailySummary).where(
@@ -119,6 +123,58 @@ def process_turn(database_url: str, conversation_id: int, user_message_id: int, 
                     summary.content += "\n" + candidate.fact.strip()
                     summary.source_event_ids = [*(summary.source_event_ids or []), event.id]
                     summary.updated_at = user_message.created_at
+            evaluate_check_in(db, conversation_id)
             db.commit()
     except Exception:
         logger.exception("P1 event extraction failed for source message %s", user_message_id)
+
+
+def process_record(database_url: str, conversation_id: int, record_id: int) -> None:
+    """Apply the established event and memory rules to a saved life record."""
+    settings = get_settings()
+    if not settings.enable_live_ai or not settings.dashscope_api_key.strip():
+        return
+    try:
+        with Session(engine_for_url(database_url)) as db:
+            record = db.get(UserRecord, record_id)
+            if not record or record.conversation_id != conversation_id or record.status != "saved":
+                return
+            event = db.scalar(select(GrowthEvent).where(GrowthEvent.source_record_id == record.id))
+            if event is None:
+                return
+            text = "\n".join(part.strip() for part in (
+                record.text,
+                record.photo_comment,
+                record.ai_description or "",
+            ) if part and part.strip())
+            if not text:
+                return
+            existing_contents = list(db.scalars(select(Memory.content).where(
+                Memory.conversation_id == conversation_id,
+                Memory.status == "active",
+            )))
+            candidate = extract_candidate(text, existing_contents)
+            score, outcome = decision(candidate)
+            if not candidate.fact.strip():
+                return
+
+            event.fact = candidate.fact.strip()
+            event.feeling = candidate.feeling
+            event.attempt = candidate.attempt
+            event.own_effort = candidate.own_effort or candidate.attempt
+            event.support_received = candidate.support_received
+            event.people = candidate.people
+            event.confidence = candidate.confidence
+            event.value_score = score
+            event.sensitivity = candidate.sensitivity
+            event.memory_decision = "record"
+            event.model = settings.extraction_model
+            event.prompt_version = PROMPT_VERSION
+
+            existing_memory = db.scalar(select(Memory).where(Memory.event_id == event.id))
+            if existing_memory is not None and not existing_memory.is_user_edited:
+                db.delete(existing_memory)
+            evaluate_check_in(db, conversation_id)
+            db.commit()
+    except Exception:
+        logger.exception("Record event extraction failed for source record %s", record_id)

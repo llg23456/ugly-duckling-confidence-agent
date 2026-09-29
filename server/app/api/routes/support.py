@@ -10,6 +10,7 @@ from app.schemas.support import (
     SupportFeedbackResponse, SupportSuggestionRequest, SupportSuggestionResponse,
 )
 from app.services.support_service import build_suggestion, choose_person
+from app.services.check_in_service import evaluate_check_in
 
 router = APIRouter(prefix="/support", tags=["support"])
 
@@ -78,6 +79,9 @@ def save_feedback(request: SupportFeedbackRequest, db: Session = Depends(get_db)
             sensitivity="low", memory_decision="ignore", model="user_feedback", prompt_version="p2.1",
         )
         db.add(event)
+    if event is not None:
+        db.flush()
+        evaluate_check_in(db, conversation.id)
     db.commit()
     return SupportFeedbackResponse(feedback=_feedback_item(feedback, suggestion), event_id=event.id if event else None)
 

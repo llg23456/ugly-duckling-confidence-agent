@@ -106,6 +106,28 @@ def test_monthly_nodes_include_setback_and_empty_does_not_fabricate(client: Test
     assert client.post("/api/v1/reviews/generate-pending-daily", json={"device_id": "empty"}).json()["reviews"] == []
 
 
+def test_overview_returns_one_complete_week_or_month_payload(client: TestClient) -> None:
+    record(client, "overview", "entry-1", "昨天完成了一次练习", day_offset=-1)
+    today = datetime.now(LOCAL).date()
+    week_start = today - timedelta(days=6)
+    weekly = client.post("/api/v1/reviews/overview", json={
+        "device_id": "overview", "period": "week",
+        "start_date": week_start.isoformat(), "end_date": today.isoformat(),
+    })
+    assert weekly.status_code == 200, weekly.text
+    assert weekly.json()["review"]["period"] == "week"
+    assert len(weekly.json()["daily_reviews"]) == 7
+
+    month_start = today.replace(day=1)
+    monthly = client.post("/api/v1/reviews/overview", json={
+        "device_id": "overview", "period": "month",
+        "start_date": month_start.isoformat(), "end_date": today.isoformat(),
+    })
+    assert monthly.status_code == 200, monthly.text
+    assert monthly.json()["review"]["period"] == "month"
+    assert monthly.json()["weekly_reviews"]
+
+
 def test_review_range_validation_and_p2_database_upgrade(client: TestClient, tmp_path) -> None:
     today = datetime.now(LOCAL).date().isoformat()
     assert client.post("/api/v1/reviews/generate", json={
