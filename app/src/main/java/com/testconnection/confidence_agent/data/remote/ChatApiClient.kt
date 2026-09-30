@@ -239,6 +239,44 @@ class ChatApiClient(
         }
     }
 
+    suspend fun refreshProfile(deviceId: String, profile: UserProfile): OnboardingReply = withContext(Dispatchers.IO) {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/onboarding/refresh").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = 10_000
+            readTimeout = 70_000
+            doOutput = true
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            val body = JSONObject()
+                .put("device_id", deviceId)
+                .put("existing_profile", profile.toJson())
+                .toString()
+            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+            val status = connection.responseCode
+            val responseText = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+            if (status !in 200..299) {
+                val detail = runCatching { JSONObject(responseText).optString("detail") }.getOrNull()
+                throw IllegalStateException(detail?.takeIf { it.isNotBlank() } ?: "画像服务返回 $status")
+            }
+            val json = JSONObject(responseText)
+            val missingJson = json.optJSONArray("missing_fields")
+            val missing = buildList {
+                if (missingJson != null) for (index in 0 until missingJson.length()) add(missingJson.getString(index))
+            }
+            OnboardingReply(
+                profile = UserProfile.fromJson(json.getJSONObject("profile")),
+                missingFields = missing,
+                followUp = json.optString("follow_up").takeIf { it.isNotBlank() && it != "null" },
+                complete = json.optBoolean("complete"),
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     private suspend fun sendMultipart(
         path: String,
         fields: Map<String, String>,

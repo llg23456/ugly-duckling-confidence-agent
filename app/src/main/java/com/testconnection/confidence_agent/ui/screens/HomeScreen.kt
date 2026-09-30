@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -66,14 +67,17 @@ import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.WarmCard
 import com.testconnection.confidence_agent.ui.components.noRippleClickable
+import com.testconnection.confidence_agent.ui.theme.Cream
 import com.testconnection.confidence_agent.ui.theme.CreamDeep
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
 import com.testconnection.confidence_agent.ui.theme.WarmOutline
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.LocalTime
 
 @Composable
 fun HomeScreen(
@@ -90,6 +94,20 @@ fun HomeScreen(
     var requestedSourceId by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    var currentHour by remember { mutableStateOf(LocalTime.now().hour) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(60_000)
+            currentHour = LocalTime.now().hour
+        }
+    }
+    val greeting = when (currentHour) {
+        in 5..10 -> "早上好"
+        in 11..13 -> "中午好"
+        in 14..17 -> "下午好"
+        in 18..22 -> "晚上好"
+        else -> "夜深了"
+    }
     var showImageSourceDialog by remember { mutableStateOf(false) }
     var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
     var pendingCameraFile by remember { mutableStateOf<File?>(null) }
@@ -228,7 +246,7 @@ fun HomeScreen(
     LaunchedEffect(sourceMessageId) {
         if (sourceMessageId != null) {
             requestedSourceId = sourceMessageId
-            viewModel.refreshHistory()
+            viewModel.refreshHistory(includeArchived = true)
         }
     }
     LaunchedEffect(requestedSourceId, state.messages.size) {
@@ -242,12 +260,13 @@ fun HomeScreen(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.padding(contentPadding),
-        state = listState,
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
+    Box(modifier = Modifier.fillMaxSize().padding(contentPadding)) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            contentPadding = PaddingValues(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 104.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
         item {
             Box(
                 modifier = Modifier.fillMaxWidth(),
@@ -278,7 +297,7 @@ fun HomeScreen(
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("晚上好，$userName", style = MaterialTheme.typography.displaySmall)
+                    Text("$greeting，$userName", style = MaterialTheme.typography.displaySmall)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         "不管今天怎样，你都已经很努力了。",
@@ -453,7 +472,7 @@ fun HomeScreen(
                         TextButton(onClick = {
                             viewModel.dismissEvidence()
                             requestedSourceId = sourceId
-                            if (state.messages.none { it.id == sourceId }) viewModel.refreshHistory()
+                            if (state.messages.none { it.id == sourceId }) viewModel.refreshHistory(includeArchived = true)
                         }) { Text("查看") }
                     }
                     state.lastEvidence.first().sourceRecordId?.let { recordId ->
@@ -539,8 +558,15 @@ fun HomeScreen(
             }
         }
 
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        }
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            color = Cream,
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 state.pendingImage?.let { selected ->
                     val bitmap = remember(selected.bytes) {
                         BitmapFactory.decodeByteArray(selected.bytes, 0, selected.bytes.size)?.asImageBitmap()

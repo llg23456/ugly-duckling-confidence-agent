@@ -9,6 +9,7 @@ data class ChatMessage(
     val imagePath: String? = null,
     val id: Long? = null,
     val modality: String = "text",
+    val createdAt: String? = null,
 )
 
 data class GrowthMoment(

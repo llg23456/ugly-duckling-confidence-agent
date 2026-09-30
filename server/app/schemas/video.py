@@ -14,7 +14,7 @@ class VideoScene(BaseModel):
 
 class VideoScriptRequest(BaseModel):
     device_id: str = Field(min_length=1, max_length=128)
-    event_ids: list[int] = Field(min_length=3, max_length=5)
+    event_ids: list[int] = Field(min_length=3, max_length=7)
 
 
 class VideoScriptUpdate(BaseModel):

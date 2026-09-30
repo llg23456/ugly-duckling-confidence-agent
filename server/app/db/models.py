@@ -55,6 +55,7 @@ class GrowthEvent(Base):
     people: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     value_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    score_components: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     sensitivity: Mapped[str | None] = mapped_column(String(16), nullable=True)
     memory_decision: Mapped[str | None] = mapped_column(String(16), nullable=True)
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)

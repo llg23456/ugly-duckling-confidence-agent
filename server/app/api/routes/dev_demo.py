@@ -15,7 +15,7 @@ from app.services.check_in_service import evaluate_check_in
 
 router = APIRouter(prefix="/dev/demo-data", tags=["development"])
 DEMO_PREFIX = "demo-growth-"
-DEMO_THEME = "从害怕课堂展示，到完成一次小组汇报"
+DEMO_THEME = "9月7日至13日：从怀疑自己考不上，到带着忐忑坚定备考"
 
 
 class DemoDataRequest(BaseModel):
@@ -34,13 +34,13 @@ DEMO_DAYS = [
     ("本来想开始整理资料，却因为不知道从哪里下手拖了一会儿。", "打开了资料文件", None),
     ("只写下了三个最想讲清楚的问题，没有逼自己一次完成。", "写下三个问题", None),
     ("查到一篇有用的资料，终于对汇报主题有了一点方向。", "整理了一条有用资料", None),
-    ("休息了一天，没有继续准备，但把想到的内容随手记了下来。", "留下了一句想法", None),
-    ("回看这一周，虽然进展不快，但已经不再完全不知道怎么开始。", "回看并确认了起点", None),
-    ("把汇报拆成开场、主体和结尾三部分，任务看起来没那么吓人了。", "拆分了汇报结构", None),
-    ("写开场时反复删改，还是觉得自己的表达不够好。", "完成了开场初稿", None),
-    ("对着手机试讲了一分钟，声音有点小，但坚持说完了。", "完成一分钟试讲", None),
-    ("听回自己的录音，发现语速太快，于是标出了需要停顿的位置。", "回听并标注停顿", None),
-    ("完成了第一版提纲，内容还不完整，但已经能够顺着讲下来。", "完成第一版提纲", None),
+    ("决定认真准备考研后，我查了目标院校和专业方向。看着录取要求有些忐忑，但还是把想去的学校记了下来。", "查清目标院校和专业要求", None),
+    ("买好了第一批考研书，也看了一节辅导课。我给自己列了学习计划，觉得终于可以开始了。", "买书、看辅导课并列出计划", None),
+    ("第一次带着书去图书馆，从早学到晚。回宿舍时很累，但至少完成了计划里的第一天。", "在图书馆完成第一天学习", None),
+    ("第二天继续做题，却错了很多。看着满页修改痕迹，我开始怀疑自己是不是基础太差。", "把错题标出来并订正了一部分", None),
+    ("只坚持了两天就不想学了。我觉得自己没有毅力，这样的人可能根本考不上，甚至想把考研计划放弃。", None, None),
+    ("我把想放弃和不自信告诉了小鸭。小鸭没有催我，只陪我把任务缩成二十分钟，还建议我把压力告诉家人；父母听完后说愿意支持我慢慢准备。", "先完成二十分钟学习，并主动和父母沟通", "小鸭陪我拆小任务，父母听完后给予支持"),
+    ("今天重新翻开了书。虽然想到考研还是有点忐忑，但我不再认定自己一定做不到；每天和小鸭聊一聊，情绪慢慢缓下来，我愿意继续坚定地往前走。", "带着忐忑重新开始当天的学习", "持续聊天和家人的支持让我找回了一些动力"),
     ("今天有些累，只修改了一个段落，就决定先停下来。", "修改一个段落后主动休息", None),
     ("第二周结束时，已经有了可以继续修改的完整框架。", "保留了一份完整框架", None),
     ("把提纲发给同学看，有点怕被否定，但还是发出去了。", "主动请同学看提纲", "同学愿意帮忙看提纲"),
@@ -116,17 +116,17 @@ def create_demo_data(request: DemoDataRequest, db: Session = Depends(get_db)) ->
             source_message_ids=[],
             source_type="demo",
             fact=fact,
-            feeling="紧张" if any(word in fact for word in ("紧张", "担心", "怕")) else None,
+            feeling="不自信" if "不自信" in fact else "忐忑" if "忐忑" in fact else "紧张" if any(word in fact for word in ("紧张", "担心", "害怕")) else None,
             attempt=effort,
             own_effort=effort,
             support_received=support,
-            people=["同学"] if support and "同学" in support else ["老师"] if support else [],
+            people=["父母"] if support and any(word in support for word in ("父母", "家人")) else ["同学"] if support and "同学" in support else ["老师"] if support and "老师" in support else [],
             confidence=1.0,
             value_score=0.8,
             memory_decision="ignore",
             sensitivity="low",
             model="demo_seed",
-            prompt_version="demo.v1",
+            prompt_version="demo.v2",
             created_at=created_at,
         ))
     db.flush()

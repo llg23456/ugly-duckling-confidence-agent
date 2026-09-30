@@ -2,6 +2,8 @@ package com.testconnection.confidence_agent.widget
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -36,6 +38,7 @@ import com.testconnection.confidence_agent.MainActivity
 import com.testconnection.confidence_agent.R
 import com.testconnection.confidence_agent.data.model.RecordMode
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
+import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
 import com.testconnection.confidence_agent.data.remote.GrowthEvent
 import com.testconnection.confidence_agent.data.remote.ReviewApiClient
 
@@ -50,8 +53,15 @@ object WidgetUpdater {
     suspend fun refreshGrowthWidgets(context: Context, events: List<GrowthEvent>? = null) {
         val store = WidgetPrivacyStore(context)
         if (store.isAllowed()) {
-            val fresh = events ?: runCatching { ReviewApiClient().events(DeviceIdStore(context).get()) }.getOrNull()
-            if (fresh != null) store.update(fresh)
+            if (events == null) {
+                // 已选记录已同步写入本地快照，先刷新组件，避免网络慢时桌面一直空白。
+                TodayGrowthWidget().updateAll(context)
+                MonthlyFootprintWidget().updateAll(context)
+                val fresh = runCatching { ReviewApiClient().events(DeviceIdStore(context).get()) }.getOrNull()
+                if (fresh != null) store.update(fresh, LocalRecordRepository(context.applicationContext).load())
+            } else {
+                store.update(events, LocalRecordRepository(context.applicationContext).load())
+            }
         }
         TodayGrowthWidget().updateAll(context)
         MonthlyFootprintWidget().updateAll(context)
@@ -66,13 +76,23 @@ private fun destinationIntent(context: Context, tab: Int, mode: RecordMode = Rec
         putExtra(MainActivity.EXTRA_OPEN_CAMERA, camera)
     }
 
+/** 桌面 RemoteViews 有传输大小限制，照片先缩至组件实际需要的尺寸。 */
+private fun loadWidgetBitmap(path: String?, maxDimension: Int): Bitmap? {
+    if (path.isNullOrBlank()) return null
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(path, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (bounds.outWidth / sample > maxDimension || bounds.outHeight / sample > maxDimension) sample *= 2
+    return BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = sample })
+}
+
 @Composable
 private fun Title(text: String) = Text(text, style = TextStyle(color = ink, fontSize = 19.sp, fontWeight = FontWeight.Bold))
 
 class TodayGrowthWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val store = WidgetPrivacyStore(context)
-        if (store.isAllowed()) runCatching { store.update(ReviewApiClient().events(DeviceIdStore(context).get())) }
         val snapshot = store.snapshot()
         provideContent {
             val appContext = LocalContext.current
@@ -81,7 +101,7 @@ class TodayGrowthWidget : GlanceAppWidget() {
                     .clickable(actionStartActivity(destinationIntent(appContext, 1))),
             ) {
                 Column(modifier = GlanceModifier.defaultWeight()) {
-                    Title("今天也看见自己的进步")
+                    Title(if (snapshot.todaySelected) "我今天想留下的" else "今天也看见自己的进步")
                     Spacer(GlanceModifier.height(8.dp))
                     Text(
                         if (!snapshot.allowed) "桌面展示尚未开启，打开应用后可自行选择。"
@@ -92,7 +112,9 @@ class TodayGrowthWidget : GlanceAppWidget() {
                     Spacer(GlanceModifier.height(8.dp))
                     Text("查看来源  ›", style = TextStyle(color = sage, fontSize = 15.sp, fontWeight = FontWeight.Bold))
                 }
-                Image(ImageProvider(R.drawable.duck_writing), "正在书写的小鸭", modifier = GlanceModifier.size(90.dp))
+                val photo = loadWidgetBitmap(snapshot.todayPhotoPath, maxDimension = 180)
+                if (photo != null) Image(ImageProvider(photo), "选择的照片记录", modifier = GlanceModifier.size(90.dp))
+                else Image(ImageProvider(R.drawable.duck_writing), "正在书写的小鸭", modifier = GlanceModifier.size(90.dp))
             }
         }
     }
@@ -105,7 +127,6 @@ class TodayGrowthWidgetReceiver : GlanceAppWidgetReceiver() {
 class MonthlyFootprintWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val store = WidgetPrivacyStore(context)
-        if (store.isAllowed()) runCatching { store.update(ReviewApiClient().events(DeviceIdStore(context).get())) }
         val snapshot = store.snapshot()
         provideContent {
             val appContext = LocalContext.current
@@ -113,13 +134,15 @@ class MonthlyFootprintWidget : GlanceAppWidget() {
                 modifier = GlanceModifier.fillMaxSize().background(cream).padding(16.dp)
                     .clickable(actionStartActivity(destinationIntent(appContext, 1))),
             ) {
-                Title("本月的小小足迹")
+                Title(if (snapshot.monthSelected) "我想留下的一笔" else "本月的小小足迹")
                 Spacer(GlanceModifier.height(6.dp))
                 Row {
-                    Image(ImageProvider(R.drawable.duck_step), "向前走的小鸭", modifier = GlanceModifier.size(70.dp))
+                    val photo = loadWidgetBitmap(snapshot.monthPhotoPath, maxDimension = 140)
+                    if (photo != null) Image(ImageProvider(photo), "选择的照片记录", modifier = GlanceModifier.size(70.dp))
+                    else Image(ImageProvider(R.drawable.duck_step), "向前走的小鸭", modifier = GlanceModifier.size(70.dp))
                     Column(modifier = GlanceModifier.padding(start = 10.dp)) {
-                        Text(if (snapshot.allowed) "${snapshot.monthCount} 个可展示事件" else "桌面展示未开启", style = TextStyle(color = sage, fontSize = 18.sp, fontWeight = FontWeight.Bold))
-                        Text(if (snapshot.allowed) "只统计适合公开的真实经历" else "打开应用后可自行选择", style = TextStyle(color = muted, fontSize = 13.sp))
+                        Text(if (snapshot.monthSelected) snapshot.monthText.ifBlank { "这条记录" } else if (snapshot.allowed) "${snapshot.monthCount} 个可展示事件" else "桌面展示未开启", style = TextStyle(color = sage, fontSize = 18.sp, fontWeight = FontWeight.Bold), maxLines = 3)
+                        Text(if (snapshot.monthSelected) "你亲自选择的记录" else if (snapshot.allowed) "只统计适合公开的真实经历" else "打开应用后可自行选择", style = TextStyle(color = muted, fontSize = 13.sp))
                     }
                 }
             }

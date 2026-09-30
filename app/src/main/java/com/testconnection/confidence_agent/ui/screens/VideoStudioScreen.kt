@@ -102,10 +102,10 @@ fun VideoStudioScreen(events: List<GrowthEvent>, recordIds: Map<Long, String>, o
         val searchable = listOfNotNull(event.fact, event.ownEffort, event.supportReceived)
             .plus(event.people).joinToString(" ")
         searchable.contains(query.trim(), ignoreCase = true)
-    }.take(5)
+    }.take(7)
 
     fun createScript() {
-        if (selectedIds.size !in 3..5 || busy) return
+        if (selectedIds.size !in 3..7 || busy) return
         busy = true
         error = null
         video = null
@@ -216,7 +216,7 @@ fun VideoStudioScreen(events: List<GrowthEvent>, recordIds: Map<Long, String>, o
         item {
             Text("‹ 成长小片", modifier = Modifier.noRippleClickable(onClick = onBack), style = MaterialTheme.typography.displaySmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("从本周报告里找出三到五个能连成故事的片段，不需要把整周都塞进视频。",
+                Text("从本周报告里找出三到七个能连成故事的片段，不需要把整周都塞进视频。",
                     modifier = Modifier.weight(1f))
                 DuckArt(R.drawable.duck_story_picker, "挑选故事片段的小鸭", Modifier.height(112.dp))
             }
@@ -232,10 +232,10 @@ fun VideoStudioScreen(events: List<GrowthEvent>, recordIds: Map<Long, String>, o
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         label = { Text("搜索关键词") },
-                        placeholder = { Text("例如：汇报、紧张、老师、重新开始") },
+                        placeholder = { Text("例如：考研、图书馆、不自信、父母") },
                     )
                     if (query.isBlank() && candidates.isNotEmpty()) {
-                        Text("输入关键词后，最多显示 5 条相关结果。",
+                        Text("输入关键词后，最多显示 7 条相关结果。",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else if (searchResults.isEmpty() && candidates.isNotEmpty()) {
                         Text("没有找到相关片段，换一个更短的关键词试试。")
@@ -252,7 +252,7 @@ fun VideoStudioScreen(events: List<GrowthEvent>, recordIds: Map<Long, String>, o
                                 selectedIds = emptySet()
                                 script = null; scenes = emptyList(); video = null
                             }) { Text("全部不选") }
-                            Text("已选 ${selectedIds.size}/5", modifier = Modifier.align(Alignment.CenterVertically), color = SageDark)
+                            Text("已选 ${selectedIds.size}/7", modifier = Modifier.align(Alignment.CenterVertically), color = SageDark)
                         }
                     }
                     searchResults.forEach { event ->
@@ -260,7 +260,7 @@ fun VideoStudioScreen(events: List<GrowthEvent>, recordIds: Map<Long, String>, o
                             Checkbox(
                                 checked = event.id in selectedIds,
                                 onCheckedChange = { checked ->
-                                    selectedIds = if (checked && selectedIds.size < 5) selectedIds + event.id
+                                    selectedIds = if (checked && selectedIds.size < 7) selectedIds + event.id
                                     else if (!checked) selectedIds - event.id else selectedIds
                                     script = null; scenes = emptyList(); video = null
                                 },
@@ -283,7 +283,7 @@ fun VideoStudioScreen(events: List<GrowthEvent>, recordIds: Map<Long, String>, o
                     }
                     Button(
                         onClick = ::createScript,
-                        enabled = selectedIds.size in 3..5 && !busy,
+                        enabled = selectedIds.size in 3..7 && !busy,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(if (selectedIds.size < 3) "还需选择 ${3 - selectedIds.size} 条" else "用已选片段生成故事脚本")

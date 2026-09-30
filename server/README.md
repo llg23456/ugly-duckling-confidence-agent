@@ -13,6 +13,7 @@
 - `POST /api/v1/multimodal/transcribe`：上传音频，只返回转写，不生成陪伴回复。
 - `GET /api/v1/onboarding/schema`：首次认识字段表。
 - `POST /api/v1/onboarding/analyze`：合并自然介绍与已有画像，返回缺项、追问和完成状态。
+- `POST /api/v1/onboarding/refresh`：按 `device_id` 汇总最近用户对话和已保存主动记录，在保留旧画像未涉及字段的前提下返回更新画像。
 - `POST /api/v1/events/extract`：成长事件提取；已配置真实模型时使用结构化提取，否则返回标记为 Mock 的结果。
 - `GET /api/v1/events?device_id=...`：查看后台提取的成长事件及其原始消息 ID。
 - `GET /api/v1/events/daily-summaries?device_id=...`：查看中等价值事件生成的当日摘要草稿。
@@ -34,7 +35,7 @@
 - `POST /api/v1/reviews/overview`：一次返回所选日/周/月主报告，以及周内每日或月内每周的子摘要，供 Android 单请求加载完整页签。主报告可调用一次 AI 润色，子摘要只使用已有缓存或可靠模板。
 - `POST /api/v1/reviews/generate-pending-daily`：补生成有真实事件的过去日期的日回望，重复调用不会产生重复总结。
 - `GET /api/v1/reviews/{period}?device_id=...`：读取日、近七天或当月回望及来源 ID；不传 `device_id` 保留旧版 Mock 示例。
-- `POST /api/v1/videos/scripts`：提交 `device_id` 和 1～6 个同设备、非敏感成长事件 ID，生成五段可编辑脚本并保存来源。
+- `POST /api/v1/videos/scripts`：提交 `device_id` 和 3～7 个同设备、非敏感成长事件 ID，生成五段可编辑脚本并保存来源。
 - `GET /api/v1/videos/scripts/{id}?device_id=...`：读取该设备已保存的脚本。
 - `PATCH /api/v1/videos/scripts/{id}`：保存删改后的 3～5 个片段，保留“开始状态—遇到困难—迈出一步—发生变化—仍在继续”的相对顺序和来源限制。
 - `GET /api/v1/check-ins/pending?device_id=...`：读取该设备尚未回应的一次主动问候；没有待问候时返回 `check_in: null`。
@@ -44,6 +45,8 @@
 文字、图片和语音聊天现在共用按 `device_id` 区分的 SQLite 会话。生成回复前读取最近 12 条消息；成功后把用户消息和回复写入 `messages`，响应额外返回两个消息 ID。数据库在首次访问时自动创建于 `DATABASE_URL` 指定位置（默认 `server/confidence_agent.db`）。上传的原始图片、音频不写入服务端数据库，`media_ref` 仅保存 SHA-256 来源标识。
 
 P1 在每轮回复保存后独立提取成长事件。聊天内容按交接文档的五项权重和阈值裁决：高价值低敏感事件自动进入长期记忆，中等价值进入当日草稿，敏感、矛盾或低置信度事件等待用户确认。用户在记录页主动保存的内容不再经过长期记忆筛选，而是直接作为可检索记录；草稿不参与检索。提取失败会记录服务端日志，不影响聊天、记录同步或记录的直接检索。召回统一搜索已保存记录与聊天长期记忆，使用关键词和向量混合检索，再按相关度、来源权重和时间衰减重排，最多返回四条；向量不可用时自动退回关键词检索。`evidence` 会区分消息来源与记录来源。旧 SQLite 数据库首次启动时自动补齐字段，现有消息、记录和记忆保留。
+
+数据导出的 `memory_assessments` 会把来源用户原话、置信度及 0.75 阈值、五项价值分、加权公式、总分、敏感度和最终记忆去向聚合展示。新事件会完整保存五项分数；升级前的历史事件无法反推原始分项，`score_components` 为 `null` 时仍保留其已有置信度、总分和最终判定。
 
 P2 在用户主动求助、持续受阻或面临高难任务时把聊天策略设为 `seek_support`。建议从用户自己维护的支持圈中选择对象；没有人选时只给泛称，不假定真实关系。Android 可编辑、复制或主动打开系统分享面板，服务端不会联系任何人。反馈与建议关联，只有用户确认实际得到帮助后才写入 `support_received`；自己的尝试单独写入 `own_effort`。成长页读取真实事件，支持反馈也能追溯到原始反馈。P1 数据库首次启动时自动增补 P2 字段和新表。
 

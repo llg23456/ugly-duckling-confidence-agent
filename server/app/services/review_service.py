@@ -27,6 +27,12 @@ SECTION_KEYS = {
     "week": ["completed", "difficulty", "process", "change", "unfinished"],
     "month": ["experiences", "difficulty", "change", "next_step"],
 }
+REVIEW_STRUCTURE_VERSION = "review-flow-v2"
+DIFFICULTY_TERMS = (
+    "卡住", "失败", "错了", "做错", "很累", "疲惫", "不想", "放弃", "停下", "暂停",
+    "没进展", "不敢", "害怕", "焦虑", "怀疑", "不自信", "没有毅力", "做不到", "考不上",
+)
+CHANGE_TERMS = ("重新", "不再", "慢慢", "愿意", "继续", "稳定", "缓下来", "找回", "完成")
 
 
 def today_local() -> date:
@@ -80,6 +86,24 @@ def _join(values: list[str], empty: str, limit: int = 3) -> str:
     return "；".join(selected) if selected else empty
 
 
+def _is_difficulty(event: GrowthEvent) -> bool:
+    text = f"{event.fact} {event.feeling or ''}"
+    return any(word in text for word in DIFFICULTY_TERMS)
+
+
+def _difficulty_score(event: GrowthEvent) -> int:
+    text = f"{event.fact} {event.feeling or ''}"
+    strong = ("放弃", "考不上", "没有毅力", "做不到", "不自信", "怀疑", "害怕", "焦虑")
+    medium = ("错了", "做错", "卡住", "失败", "不想", "不敢", "没进展")
+    return sum(3 for word in strong if word in text) + sum(2 for word in medium if word in text) + int("很累" in text or "疲惫" in text)
+
+
+def _main_difficulties(events: list[GrowthEvent], limit: int = 2) -> list[GrowthEvent]:
+    positions = {item.id: index for index, item in enumerate(events)}
+    ranked = sorted((item for item in events if _is_difficulty(item)), key=_difficulty_score, reverse=True)[:limit]
+    return sorted(ranked, key=lambda item: positions[item.id])
+
+
 def _structured_sections(
     period: str,
     events: list[GrowthEvent],
@@ -115,19 +139,48 @@ def _structured_sections(
         ]
 
     if period == "week":
-        change = facts[-1] if len(facts) == 1 else (
-            f"从“{facts[0]}”走到“{facts[-1]}”，这一周已经留下了可以回看的变化。"
-            if facts else "这一周还没有足够记录来判断变化。"
+        difficulty_events = [item for item in events if _is_difficulty(item)]
+        main_difficulties = _main_difficulties(events)
+        difficulty_start = events.index(difficulty_events[0]) if difficulty_events else len(events)
+        starting_events = [item for item in events[:difficulty_start] if not _is_difficulty(item)]
+        if not starting_events:
+            starting_events = [item for item in events if not _is_difficulty(item)][:2]
+        process_events = events[difficulty_start:] if difficulty_events else events
+        process_values = _unique([
+            value
+            for item in process_events
+            for value in (item.own_effort, item.attempt, item.support_received)
+            if value
+        ])
+        last_difficulty_index = events.index(difficulty_events[-1]) if difficulty_events else -1
+        change_event = next((
+            item for item in reversed(events[last_difficulty_index + 1:])
+            if any(word in item.fact for word in CHANGE_TERMS) or item.own_effort or item.support_received
+        ), None)
+        change = (
+            f"在经历“{difficulty_events[-1].fact}”之后，{change_event.fact}"
+            if difficulty_events and change_event else
+            "这一周记录了行动，但还没有足够证据说明状态已经发生变化。"
+        )
+        remaining = (
+            f"{events[-1].feeling}仍然存在，但不必等它完全消失再行动。{next_step}"
+            if events[-1].feeling else next_step
         )
         return [
-            ReviewSection(key="completed", title="这周做了什么", content=_join(facts, "这一周还没有留下具体事项。", 3)),
-            ReviewSection(key="difficulty", title="遇到的困难", content=paused or _join(feelings, "还没有记录明显的困难。", 2)),
             ReviewSection(
-                key="process", title="尝试和解决过程",
-                content=_join(efforts + attempts + helps, "还没有记录具体的解决过程。", 3),
+                key="completed", title="开始与行动",
+                content=_join([item.fact for item in starting_events], "这一周还没有留下明确的起点。", 3),
             ),
-            ReviewSection(key="change", title="发生的变化", content=change),
-            ReviewSection(key="unfinished", title="还在继续", content=next_step),
+            ReviewSection(
+                key="difficulty", title="遇到的困难",
+                content=_join([item.fact for item in main_difficulties], "还没有记录明显的困难。", 2),
+            ),
+            ReviewSection(
+                key="process", title="应对与支持",
+                content=_join(process_values, "还没有记录具体的应对过程或实际支持。", 4),
+            ),
+            ReviewSection(key="change", title="真实的变化", content=change),
+            ReviewSection(key="unfinished", title="仍在继续", content=remaining),
         ]
 
     return [
@@ -155,8 +208,8 @@ def compose_review(period: str, start: date, end: date, events: list[GrowthEvent
 
     efforts = _unique([item.own_effort for item in events if item.own_effort])
     helps = _unique([item.support_received for item in events if item.support_received])
-    setbacks = ("卡住", "失败", "停下", "暂停", "重新", "没帮到", "没进展", "不敢")
-    paused = next((item.fact for item in events if any(word in (item.fact + (item.feeling or "")) for word in setbacks)), None)
+    difficulty_events = [item for item in events if _is_difficulty(item)]
+    paused = _join([item.fact for item in _main_difficulties(events)], "还没有记录停顿或重新开始。", 2) if difficulty_events else None
     selected = _key_moments(events, period)
     moments = [ReviewMoment(
         event_id=item.id, date=local_day(item.created_at), title=item.fact,
@@ -172,6 +225,9 @@ def compose_review(period: str, start: date, end: date, events: list[GrowthEvent
         f"你确实做过“{efforts[-1][:60]}”，这份具体的尝试值得被看见。"
         if efforts else "你愿意把这些经历如实留下来，这本身就是认真看见自己。"
     )
+    sections = _structured_sections(period, events, efforts, helps, paused, next_step)
+    if period == "week":
+        story = " ".join(f"{item.title}：{item.content}。" for item in sections[:4])
     return ReviewResponse(
         period=period, range_start=start.isoformat(), range_end=end.isoformat(),
         title=names[period], story=story,
@@ -179,11 +235,11 @@ def compose_review(period: str, start: date, end: date, events: list[GrowthEvent
         support_received="；".join(helps) if helps else "还没有记录实际收到的帮助。",
         pause_or_restart=paused or "还没有记录停顿或重新开始。",
         next_step=next_step,
-        sections=_structured_sections(period, events, efforts, helps, paused, next_step),
+        sections=sections,
         affirmation=affirmation,
         moments=moments, source_event_ids=[item.id for item in events],
         closing="你做过的尝试，和别人给予的帮助，都值得被看见。" if helps else "这些经历都值得认真记下。",
-        mock=False,
+        mock=False, structure_version=REVIEW_STRUCTURE_VERSION,
     )
 
 
@@ -215,7 +271,11 @@ def polish_review(response: ReviewResponse, events: list[GrowthEvent]) -> Review
                     "你负责整理用户的日/周/月成长回望。只输出 JSON，不得新增来源中没有的人物、行为、帮助、结果或诊断。"
                     "语言简洁、温和、具体，不逐条复述日期，不喊口号。sections 的 key 必须严格按给定顺序，"
                     "title 用自然中文短标题，content 每项最多120字。肯定必须指出有记录支持的具体努力；"
-                    "若缺少证据，要明确写尚未记录，不能补写。"
+                    "若缺少证据，要明确写尚未记录，不能补写。周回望必须形成严格的时间逻辑："
+                    "completed 只写困难发生前的起点、目标和已做行动；difficulty 只写受挫、疲惫、自我怀疑或想放弃，"
+                    "不能放入结尾的积极状态；process 只写困难出现后的具体应对、自己的尝试和实际收到的支持；"
+                    "change 必须比较困难前后，只写证据支持的认知或行动变化；unfinished 写仍存在的担忧和下一小步。"
+                    "同一事实不要在多个栏目重复，禁止把首尾原话加引号后直接拼成所谓变化。story 也按上述顺序概括。"
                 ),
             },
             {
@@ -270,7 +330,7 @@ def review_for(
     if stored is not None and stored.source_event_ids == source_ids:
         try:
             cached = ReviewResponse.model_validate_json(stored.content)
-            if cached.sections:
+            if cached.sections and cached.structure_version == REVIEW_STRUCTURE_VERSION:
                 cached.id = stored.id
                 cached.generated_at = stored.updated_at or stored.created_at
                 return cached

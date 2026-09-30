@@ -42,6 +42,7 @@ class ChatRepository(
                     imagePath = row.localImagePath,
                     id = row.serverId,
                     modality = row.modality,
+                    createdAt = row.createdAt,
                 )
             }
         }
@@ -123,6 +124,9 @@ class ChatRepository(
 
     suspend fun analyzeOnboarding(text: String, profile: UserProfile): OnboardingReply =
         apiClient.analyzeOnboarding(text, profile)
+
+    suspend fun refreshProfile(profile: UserProfile): OnboardingReply =
+        apiClient.refreshProfile(deviceId, profile)
 
     suspend fun pendingCheckIn(): ProactiveCheckIn? = checkInApiClient.pending(deviceId)
 

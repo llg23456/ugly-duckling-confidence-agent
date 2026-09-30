@@ -47,16 +47,42 @@ def export_data(
     conversation = get_conversation(db, device_id)
     empty = {
         "messages": [], "records": [], "growth_events": [], "memories": [],
+        "memory_assessments": [],
         "daily_summaries": [], "reviews": [], "support_people": [],
         "support_suggestions": [], "support_feedback": [], "video_scripts": [],
         "proactive_check_ins": [],
     }
     if conversation is None:
         return {"exported_at": datetime.now(UTC).isoformat(), "device_id": device_id, "data": empty}
+    messages = _rows(db, Message, conversation.id)
+    message_content = {item["id"]: item["content"] for item in messages}
+    growth_events = _rows(db, GrowthEvent, conversation.id)
+    assessments = [{
+        "source_user_message_id": event.get("source_user_message_id"),
+        "source_content": message_content.get(event.get("source_user_message_id")),
+        "source_record_id": event.get("source_record_id"),
+        "source_type": event.get("source_type"),
+        "confidence": event.get("confidence"),
+        "confidence_threshold": 0.75,
+        "score_components": event.get("score_components"),
+        "value_score": event.get("value_score"),
+        "value_formula": "0.30*long_term_value + 0.25*growth_significance + 0.20*specificity + 0.15*future_reuse + 0.10*support_value",
+        "decision_rules": {
+            "confirm": "confidence < 0.75, sensitivity is not low, or content conflicts",
+            "long_term": "value_score >= 0.72",
+            "daily": "0.52 <= value_score < 0.72",
+            "ignore": "value_score < 0.52 or no concrete fact",
+        },
+        "memory_decision": event.get("memory_decision"),
+        "sensitivity": event.get("sensitivity"),
+        "model": event.get("model"),
+        "prompt_version": event.get("prompt_version"),
+    } for event in growth_events]
     data = {
-        "messages": _rows(db, Message, conversation.id),
+        "messages": messages,
         "records": _rows(db, UserRecord, conversation.id),
-        "growth_events": _rows(db, GrowthEvent, conversation.id),
+        "growth_events": growth_events,
+        "memory_assessments": assessments,
         "memories": _rows(db, Memory, conversation.id),
         "daily_summaries": _rows(db, DailySummary, conversation.id),
         "reviews": _rows(db, Review, conversation.id),

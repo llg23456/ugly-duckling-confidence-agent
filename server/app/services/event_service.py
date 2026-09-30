@@ -18,6 +18,16 @@ logger = logging.getLogger(__name__)
 PROMPT_VERSION = "p1.1"
 
 
+def score_components(candidate: "EventCandidate") -> dict[str, float]:
+    return {
+        "long_term_value": candidate.long_term_value,
+        "growth_significance": candidate.growth_significance,
+        "specificity": candidate.specificity,
+        "future_reuse": candidate.future_reuse,
+        "support_value": candidate.support_value,
+    }
+
+
 class EventCandidate(BaseModel):
     fact: str = Field(max_length=500)
     feeling: str | None = None
@@ -94,6 +104,7 @@ def process_turn(database_url: str, conversation_id: int, user_message_id: int, 
                 feeling=candidate.feeling, attempt=candidate.attempt, own_effort=candidate.own_effort or candidate.attempt,
                 support_received=candidate.support_received,
                 people=candidate.people, confidence=candidate.confidence, value_score=score,
+                score_components=score_components(candidate),
                 sensitivity=candidate.sensitivity, memory_decision=outcome,
                 model=settings.extraction_model, prompt_version=PROMPT_VERSION,
             )
@@ -166,6 +177,7 @@ def process_record(database_url: str, conversation_id: int, record_id: int) -> N
             event.people = candidate.people
             event.confidence = candidate.confidence
             event.value_score = score
+            event.score_components = score_components(candidate)
             event.sensitivity = candidate.sensitivity
             event.memory_decision = "record"
             event.model = settings.extraction_model

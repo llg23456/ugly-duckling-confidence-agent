@@ -20,7 +20,12 @@ class UserProfile(BaseModel):
 
 
 class OnboardingAnalyzeRequest(BaseModel):
-    transcript: str = Field(min_length=1, max_length=4_000)
+    transcript: str = Field(min_length=1, max_length=12_000)
+    existing_profile: dict[str, Any] = Field(default_factory=dict)
+
+
+class ProfileRefreshRequest(BaseModel):
+    device_id: str = Field(min_length=1, max_length=128)
     existing_profile: dict[str, Any] = Field(default_factory=dict)
 
 

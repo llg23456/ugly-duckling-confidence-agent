@@ -62,21 +62,21 @@ fun DataToolsScreen(
     var notice by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
-    fun exportData() {
+    fun exportData(jsonOnly: Boolean) {
         if (busy) return
         busy = true
-        notice = "正在整理聊天、记录、回望和本机媒体…"
+        notice = if (jsonOnly) "正在整理 JSON 文档…" else "正在整理聊天、记录、回望和本机媒体…"
         scope.launch {
-            runCatching { repository.export(deviceId) }
+            runCatching { if (jsonOnly) repository.exportJson(deviceId) else repository.export(deviceId) }
                 .onSuccess { file ->
                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
                     val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "application/zip"
+                        type = if (jsonOnly) "application/json" else "application/zip"
                         putExtra(Intent.EXTRA_STREAM, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    context.startActivity(Intent.createChooser(intent, "导出小丑鸭数据"))
-                    notice = "数据包已生成，请选择保存或分享位置。"
+                    context.startActivity(Intent.createChooser(intent, if (jsonOnly) "导出 JSON 文档" else "导出完整数据包"))
+                    notice = if (jsonOnly) "JSON 文档已生成，请选择保存或分享位置。" else "ZIP 数据包已生成，请选择保存或分享位置。"
                 }
                 .onFailure { notice = it.message ?: "数据导出失败，请稍后重试。" }
             busy = false
@@ -125,7 +125,7 @@ fun DataToolsScreen(
                 Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         SectionHeading("自己的记录")
-                        Text("导出包包含聊天、生活记录、成长事件、长期记忆、日周月回望，以及仍保存在本机的照片、原声和成长小片。后端暂时离线时也会先导出本机数据。",
+                        Text("JSON 适合查看和展示；ZIP 除同一份 JSON 外，还包含仍保存在本机的照片、原声和成长小片。后端暂时离线时也会先导出本机数据。",
                             style = MaterialTheme.typography.bodyLarge, color = InkMuted)
                     }
                     DuckArt(R.drawable.duck_writing, "整理记录的小鸭", Modifier.size(92.dp))
@@ -137,13 +137,24 @@ fun DataToolsScreen(
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     notice?.let { Text(it, color = SageDark) }
                     if (busy) CircularProgressIndicator(Modifier.size(24.dp), color = SageDark)
-                    Button(
-                        onClick = ::exportData,
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = AppButtonShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                    ) { Text("导出为 ZIP 数据包") }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = { exportData(jsonOnly = true) },
+                            enabled = !busy,
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = AppButtonShape,
+                        ) { Text("仅导出 JSON") }
+                        Button(
+                            onClick = { exportData(jsonOnly = false) },
+                            enabled = !busy,
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = AppButtonShape,
+                            colors = ButtonDefaults.buttonColors(containerColor = SageDark),
+                        ) { Text("导出完整 ZIP") }
+                    }
                     TextButton(
                         onClick = { showDeleteConfirmation = true },
                         enabled = !busy,
@@ -156,7 +167,7 @@ fun DataToolsScreen(
             WarmCard {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     SectionHeading("测试数据准备", "藏在数据管理里，不会出现在成长页和正式演示主线")
-                    Text("主题：从害怕课堂展示，到完成一次小组汇报。生成截至昨天的四周文字记录。",
+                    Text("生成截至昨天的四周记录；其中 9 月 7—13 日是“从怀疑自己考不上，到带着忐忑坚定备考”的完整案例。",
                         style = MaterialTheme.typography.bodyLarge)
                     state.demoNotice?.let { Text(it, color = SageDark) }
                     if (state.loading) CircularProgressIndicator(Modifier.size(24.dp), color = SageDark)

@@ -22,6 +22,7 @@ SQLITE_ADDITIONS = {
         "people": "JSON",
         "confidence": "FLOAT",
         "value_score": "FLOAT",
+        "score_components": "JSON",
         "sensitivity": "VARCHAR(16)",
         "memory_decision": "VARCHAR(16)",
         "model": "VARCHAR(100)",

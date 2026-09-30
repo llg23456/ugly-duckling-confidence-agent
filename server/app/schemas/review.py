@@ -54,6 +54,7 @@ class ReviewResponse(BaseModel):
     generated_at: datetime | None = None
     model: str | None = None
     mock: bool = True
+    structure_version: str = "legacy"
 
 
 class ReviewOverviewRequest(ReviewGenerateRequest):

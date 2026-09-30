@@ -10,9 +10,15 @@ import com.testconnection.confidence_agent.data.remote.MemoryEvidence
 import com.testconnection.confidence_agent.data.remote.ProactiveCheckIn
 import com.testconnection.confidence_agent.data.remote.SupportApiClient
 import com.testconnection.confidence_agent.data.remote.SupportSuggestion
+import com.testconnection.confidence_agent.data.remote.ReviewApiClient
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
 import com.testconnection.confidence_agent.widget.WidgetUpdater
 import java.io.File
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,15 +59,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = ChatRepository(application)
     private val supportApi = SupportApiClient()
     private val reviewCache = ReviewCacheStore(application)
+    private val reviewApi = ReviewApiClient()
     private val deviceId = DeviceIdStore(application).get()
     private val _uiState = MutableStateFlow(HomeUiState())
     private var checkInNoticeJob: Job? = null
+    private var allMessages: List<ChatMessage> = emptyList()
+    private var showingArchivedSource = false
+    private var visibleDay = LocalDate.now()
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
             repository.observeHistory().collect { messages ->
-                _uiState.update { it.copy(messages = messages) }
+                allMessages = messages
+                publishVisibleMessages()
             }
         }
         viewModelScope.launch {
@@ -71,7 +82,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         state.copy(error = "会话暂时无法同步，已显示本地历史。")
                     }
                 }
+            runCatching { reviewApi.pendingDaily(deviceId) }
             loadPendingCheckIn()
+        }
+        viewModelScope.launch {
+            while (true) {
+                delay(60_000)
+                val today = LocalDate.now()
+                if (today != visibleDay) {
+                    visibleDay = today
+                    showingArchivedSource = false
+                    publishVisibleMessages()
+                    runCatching { reviewApi.pendingDaily(deviceId) }
+                }
+            }
         }
     }
 
@@ -96,6 +120,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val message = _uiState.value.draft.trim()
         val image = _uiState.value.pendingImage
         if ((message.isEmpty() && image == null) || _uiState.value.sending) return
+        showingArchivedSource = false
+        publishVisibleMessages()
         val prompt = message.ifBlank { "请看看这张图片，结合我现在的处境温柔地回应。" }
 
         _uiState.update {
@@ -146,6 +172,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendAudio(file: File) {
         if (_uiState.value.sending) return
+        showingArchivedSource = false
+        publishVisibleMessages()
         _uiState.update { it.copy(sending = true, error = null, supportSuggestion = null, supportFeedbackOutcome = null) }
         viewModelScope.launch {
             try {
@@ -219,11 +247,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun scheduledNoticeText() =
         "小鸭记住了。等你下次回来时，我会轻轻问问这件事后来怎么样；你也可以随时选择暂时不说。"
 
-    fun refreshHistory() {
+    fun refreshHistory(includeArchived: Boolean = false) {
+        showingArchivedSource = includeArchived
+        publishVisibleMessages()
         viewModelScope.launch {
             runCatching { repository.syncHistory() }
             loadPendingCheckIn()
         }
+    }
+
+    private fun publishVisibleMessages() {
+        val visible = if (showingArchivedSource) allMessages else allMessages.filter(::isToday)
+        _uiState.update { it.copy(messages = visible) }
+    }
+
+    private fun isToday(message: ChatMessage): Boolean {
+        val raw = message.createdAt ?: return true
+        val instant = runCatching { Instant.parse(raw) }.getOrElse {
+            runCatching { LocalDateTime.parse(raw).toInstant(ZoneOffset.UTC) }.getOrNull() ?: return true
+        }
+        return instant.atZone(ZoneId.systemDefault()).toLocalDate() == LocalDate.now()
     }
 
     private suspend fun loadPendingCheckIn() {

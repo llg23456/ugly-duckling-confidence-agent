@@ -134,6 +134,10 @@ fun ConfidenceAgentApp(
                 showMemoryCenter = false
                 showOnboarding = true
             },
+            onProfileUpdated = { updated ->
+                userProfile = updated
+                onboardingStore.saveProfile(updated, complete = true)
+            },
         )
         return
     }

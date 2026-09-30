@@ -3,6 +3,8 @@ package com.testconnection.confidence_agent.ui.screens
 import android.speech.tts.TextToSpeech
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -49,6 +52,9 @@ import com.testconnection.confidence_agent.data.preferences.VoicePreferences
 import com.testconnection.confidence_agent.data.remote.ServerConnectionManager
 import com.testconnection.confidence_agent.data.repository.ChatRepository
 import com.testconnection.confidence_agent.data.repository.FakeConfidenceRepository
+import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
+import com.testconnection.confidence_agent.data.model.RecordDraft
+import com.testconnection.confidence_agent.data.model.RecordMode
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.noRippleClickable
@@ -88,9 +94,13 @@ fun ProfileScreen(
     }
     var showVoiceSettings by remember { mutableStateOf(false) }
     val widgetPrivacy = remember { WidgetPrivacyStore(context.applicationContext) }
+    val localRecordRepository = remember { LocalRecordRepository(context.applicationContext) }
     var showWidgetPrivacy by remember { mutableStateOf(false) }
     var widgetAllowed by remember { mutableStateOf(widgetPrivacy.isAllowed()) }
     var widgetPreview by remember { mutableStateOf(widgetPrivacy.snapshot()) }
+    var widgetRecords by remember { mutableStateOf<List<RecordDraft>>(emptyList()) }
+    var todayWidgetRecordId by remember { mutableStateOf(widgetPrivacy.selectedTodayRecordId()) }
+    var monthWidgetRecordId by remember { mutableStateOf(widgetPrivacy.selectedMonthRecordId()) }
     var showHelpResources by remember { mutableStateOf(false) }
     var serverAddress by remember { mutableStateOf(ServerEndpoint.current()) }
     var serverStatus by remember { mutableStateOf("当前使用：${ServerEndpoint.current()}") }
@@ -138,7 +148,10 @@ fun ProfileScreen(
         shape = RoundedCornerShape(30.dp),
         title = { Text("帮助与求助资源") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 Text("遇到紧急危险时，请优先联系身边可信任的人或当地紧急援助。小鸭不会替你自动发送消息。")
                 HorizontalDivider()
                 Text("后端连接 · 测试工具", style = MaterialTheme.typography.titleMedium)
@@ -183,8 +196,11 @@ fun ProfileScreen(
         onDismissRequest = { showWidgetPrivacy = false },
         title = { Text("桌面展示许可") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("桌面组件可能被身边的人看见。开启后只展示标记为低敏感、未关联人物且未命中明显敏感信息过滤的真实成长事件；原始照片和录音不会出现在组件上。开启后请查看预览，不合适可随时关闭。")
+            Column(
+                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("桌面组件可能被身边的人看见。开启后可自定选择展示一条主动记录：文字记录展示几句话，照片记录会展示照片和配文，语音记录只展示转写文字。不选时仍只展示经敏感过滤的成长事件。可随时关闭。")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("允许桌面展示", modifier = Modifier.weight(1f))
                     Switch(checked = widgetAllowed, onCheckedChange = { allowed ->
@@ -199,6 +215,55 @@ fun ProfileScreen(
                 }
                 Text(if (widgetAllowed) "今日预览：${widgetPreview.todayText.ifBlank { "没有适合展示的事件" }}\n本月可展示：${widgetPreview.monthCount} 条"
                     else "当前组件只显示通用提示，不展示你的经历。")
+                if (widgetAllowed) {
+                    Text("为两个展示组件选择记录", style = MaterialTheme.typography.titleMedium)
+                    Text("只能选择你主动保存的记录；照片将直接出现在桌面。", style = MaterialTheme.typography.bodySmall, color = InkMuted)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = {
+                            widgetPrivacy.selectTodayRecord(null)
+                            todayWidgetRecordId = null
+                            coroutineScope.launch {
+                                WidgetUpdater.refreshGrowthWidgets(context.applicationContext)
+                                widgetPreview = widgetPrivacy.snapshot()
+                            }
+                        }) { Text("清空今日选择") }
+                        TextButton(onClick = {
+                            widgetPrivacy.selectMonthRecord(null)
+                            monthWidgetRecordId = null
+                            coroutineScope.launch {
+                                WidgetUpdater.refreshGrowthWidgets(context.applicationContext)
+                                widgetPreview = widgetPrivacy.snapshot()
+                            }
+                        }) { Text("清空本月选择") }
+                    }
+                    widgetRecords.take(8).forEach { record ->
+                        val label = when (record.mode) {
+                            RecordMode.PHOTO -> "照片·${record.photoComment.ifBlank { record.aiDescription }.ifBlank { "一张照片" }}"
+                            RecordMode.VOICE -> "语音·${record.text.ifBlank { "一段语音转写" }}"
+                            RecordMode.TEXT -> "文字·${record.text}"
+                        }.take(42)
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, modifier = Modifier.weight(1f), maxLines = 2, style = MaterialTheme.typography.bodyMedium)
+                            TextButton(onClick = {
+                                widgetPrivacy.selectTodayRecord(record)
+                                todayWidgetRecordId = record.id
+                                coroutineScope.launch {
+                                    WidgetUpdater.refreshGrowthWidgets(context.applicationContext)
+                                    widgetPreview = widgetPrivacy.snapshot()
+                                }
+                            }) { Text(if (todayWidgetRecordId == record.id) "今日已选" else "给今日") }
+                            TextButton(onClick = {
+                                widgetPrivacy.selectMonthRecord(record)
+                                monthWidgetRecordId = record.id
+                                coroutineScope.launch {
+                                    WidgetUpdater.refreshGrowthWidgets(context.applicationContext)
+                                    widgetPreview = widgetPrivacy.snapshot()
+                                }
+                            }) { Text(if (monthWidgetRecordId == record.id) "本月已选" else "给本月") }
+                        }
+                    }
+                    if (widgetRecords.isEmpty()) Text("还没有已保存的文字、语音或照片记录。", color = InkMuted)
+                }
             }
         },
         confirmButton = { TextButton(onClick = { showWidgetPrivacy = false }) { Text("完成") } },
@@ -289,7 +354,14 @@ fun ProfileScreen(
                                     when (entry.title) {
                                         "记忆中心" -> onOpenMemoryCenter()
                                         "支持圈" -> onOpenSupportCircle()
-                                        "隐私与权限" -> { widgetAllowed = widgetPrivacy.isAllowed(); widgetPreview = widgetPrivacy.snapshot(); showWidgetPrivacy = true }
+                                        "隐私与权限" -> {
+                                            widgetAllowed = widgetPrivacy.isAllowed()
+                                            widgetPreview = widgetPrivacy.snapshot()
+                                            widgetRecords = localRecordRepository.load().filter { it.status == "saved" }
+                                            todayWidgetRecordId = widgetPrivacy.selectedTodayRecordId()
+                                            monthWidgetRecordId = widgetPrivacy.selectedMonthRecordId()
+                                            showWidgetPrivacy = true
+                                        }
                                         "数据导出" -> onOpenDataTools()
                                         "帮助与求助资源" -> {
                                             serverAddress = ServerEndpoint.current()
