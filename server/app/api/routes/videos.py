@@ -1,14 +1,18 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.models import GrowthEvent, VideoScript
 from app.db.repository import get_conversation
 from app.db.session import get_db
-from app.schemas.video import VideoScriptRequest, VideoScriptResponse, VideoScriptUpdate
-from app.services.video_service import PROMPT_VERSION, STAGES, generate_captions, scenes_for
+from app.schemas.video import (
+    VideoKeywordSuggestionRequest, VideoKeywordSuggestionResponse,
+    VideoScriptRequest, VideoScriptResponse, VideoScriptUpdate,
+)
+from app.services.video_service import PROMPT_VERSION, generate_captions, scenes_for, suggest_keywords
+from app.services.video_render_service import render_uploaded_video
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 
@@ -30,6 +34,26 @@ def _owned(db: Session, script_id: int, device_id: str) -> VideoScript:
     return script
 
 
+@router.post("/keywords", response_model=VideoKeywordSuggestionResponse)
+def keyword_suggestions(
+    request: VideoKeywordSuggestionRequest,
+    db: Session = Depends(get_db),
+) -> VideoKeywordSuggestionResponse:
+    conversation = get_conversation(db, request.device_id)
+    if conversation is None or len(request.event_ids) != len(set(request.event_ids)):
+        raise HTTPException(status_code=422, detail="请选择本设备的真实事件")
+    events = list(db.scalars(select(GrowthEvent).where(
+        GrowthEvent.conversation_id == conversation.id,
+        GrowthEvent.id.in_(request.event_ids),
+    ).order_by(GrowthEvent.created_at, GrowthEvent.id)))
+    if len(events) != len(request.event_ids):
+        raise HTTPException(status_code=422, detail="部分事件已不存在，请返回周报告后重新进入")
+    if any(item.sensitivity == "high" for item in events):
+        raise HTTPException(status_code=422, detail="高敏感内容不能加入分享视频")
+    suggestions, model = suggest_keywords(events)
+    return VideoKeywordSuggestionResponse(suggestions=suggestions, model=model)
+
+
 @router.post("/scripts", response_model=VideoScriptResponse, status_code=201)
 def create_script(request: VideoScriptRequest, db: Session = Depends(get_db)) -> VideoScriptResponse:
     conversation = get_conversation(db, request.device_id)
@@ -39,8 +63,10 @@ def create_script(request: VideoScriptRequest, db: Session = Depends(get_db)) ->
         GrowthEvent.conversation_id == conversation.id,
         GrowthEvent.id.in_(request.event_ids),
     ).order_by(GrowthEvent.created_at, GrowthEvent.id)))
-    if len(events) != len(request.event_ids) or any(item.sensitivity not in (None, "low") for item in events):
-        raise HTTPException(status_code=422, detail="事件不存在或含敏感内容")
+    if len(events) != len(request.event_ids):
+        raise HTTPException(status_code=422, detail="部分事件已不存在，请返回周报告后重新进入")
+    if any(item.sensitivity == "high" for item in events):
+        raise HTTPException(status_code=422, detail="高敏感内容不能加入分享视频")
     try:
         captions, model = generate_captions(events)
         scenes = scenes_for(events, captions)
@@ -66,14 +92,35 @@ def get_script(script_id: int, device_id: str, db: Session = Depends(get_db)) ->
 @router.patch("/scripts/{script_id}", response_model=VideoScriptResponse)
 def update_script(script_id: int, request: VideoScriptUpdate, db: Session = Depends(get_db)) -> VideoScriptResponse:
     script = _owned(db, script_id, request.device_id)
-    stages = [scene.stage for scene in request.scenes]
-    if stages != [stage for stage in STAGES if stage in stages]:
-        raise HTTPException(status_code=422, detail="片段顺序或内容无效")
     allowed = set(script.source_event_ids)
-    if any(not set(scene.source_event_ids).issubset(allowed) or not scene.text.strip() for scene in request.scenes):
+    positions = {event_id: index for index, event_id in enumerate(script.source_event_ids)}
+    scene_ids = [scene.source_event_ids[0] for scene in request.scenes]
+    if (
+        len(scene_ids) != len(set(scene_ids))
+        or any(event_id not in allowed for event_id in scene_ids)
+        or scene_ids != sorted(scene_ids, key=positions.get)
+        or any(not scene.text.strip() for scene in request.scenes)
+    ):
         raise HTTPException(status_code=422, detail="片段来源或内容无效")
     script.scenes = [scene.model_dump() for scene in request.scenes]
     script.is_user_edited = True
     script.updated_at = datetime.now(UTC)
     db.commit()
     return _response(script)
+
+
+@router.post("/render/{script_id}", response_class=Response)
+def render_video(
+    script_id: int,
+    device_id: str = Form(min_length=1, max_length=128),
+    manifest: str = Form(min_length=2),
+    files: list[UploadFile] = File(min_length=3, max_length=21),
+    db: Session = Depends(get_db),
+) -> Response:
+    _owned(db, script_id, device_id)
+    video = render_uploaded_video(manifest, files)
+    return Response(
+        content=video,
+        media_type="video/mp4",
+        headers={"Cache-Control": "no-store", "Content-Disposition": "inline; filename=growth-video.mp4"},
+    )

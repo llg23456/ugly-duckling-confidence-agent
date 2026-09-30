@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -166,6 +166,14 @@ class UserRecord(Base):
 
 class Review(Base):
     __tablename__ = "reviews"
+    __table_args__ = (Index(
+        "ix_reviews_period_range",
+        "conversation_id",
+        "period",
+        "range_start",
+        "range_end",
+        unique=True,
+    ),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)

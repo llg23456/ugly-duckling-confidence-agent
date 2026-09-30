@@ -148,9 +148,15 @@ fun ConfidenceAgentApp(
     }
 
     if (showVideoStudio) {
-        val sourceIds = growthState.review?.sourceEventIds.orEmpty().toSet()
+        val sourceIds = buildSet {
+            addAll(growthState.review?.sourceEventIds.orEmpty())
+            growthState.dailyReviews.forEach { day ->
+                addAll(day.review?.sourceEventIds.orEmpty())
+            }
+        }
         VideoStudioScreen(
             events = growthState.events.filter { it.id in sourceIds },
+            sourceEventIds = sourceIds,
             recordIds = growthState.recordIds,
             onBack = { showVideoStudio = false },
         )

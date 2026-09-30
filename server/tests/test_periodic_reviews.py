@@ -1,8 +1,11 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from threading import Barrier, Lock
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, inspect, text
 
+from app.services import review_service
 from app.db.session import engine_for_url
 
 LOCAL = timezone(timedelta(hours=8))
@@ -126,6 +129,41 @@ def test_overview_returns_one_complete_week_or_month_payload(client: TestClient)
     assert monthly.status_code == 200, monthly.text
     assert monthly.json()["review"]["period"] == "month"
     assert monthly.json()["weekly_reviews"]
+
+
+def test_concurrent_weekly_overview_reuses_the_same_cache(
+    client: TestClient,
+    monkeypatch,
+) -> None:
+    record(client, "concurrent-review", "entry-1", "今天完成了学习计划")
+    original_saved_review = review_service.saved_review
+    initial_reads = 0
+    initial_reads_lock = Lock()
+    both_requests_read_empty_cache = Barrier(2)
+
+    def synchronized_saved_review(*args, **kwargs):
+        nonlocal initial_reads
+        stored = original_saved_review(*args, **kwargs)
+        if stored is None:
+            with initial_reads_lock:
+                initial_reads += 1
+                read_number = initial_reads
+            if read_number <= 2:
+                both_requests_read_empty_cache.wait(timeout=5)
+        return stored
+
+    monkeypatch.setattr(review_service, "saved_review", synchronized_saved_review)
+    request = {"device_id": "concurrent-review", "period": "week"}
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        responses = list(executor.map(lambda _: client.post(
+            "/api/v1/reviews/overview",
+            json=request,
+        ), range(2)))
+
+    assert [response.status_code for response in responses] == [200, 200]
+    review_ids = {response.json()["review"]["id"] for response in responses}
+    assert None not in review_ids
+    assert len(review_ids) == 1
 
 
 def test_review_range_validation_and_p2_database_upgrade(client: TestClient, tmp_path) -> None:

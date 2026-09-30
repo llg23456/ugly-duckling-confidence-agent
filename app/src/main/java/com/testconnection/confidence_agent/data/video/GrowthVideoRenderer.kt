@@ -6,115 +6,34 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
-import android.net.Uri
-import android.os.Handler
-import android.os.Looper
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
-import androidx.media3.transformer.Composition
-import androidx.media3.transformer.EditedMediaItem
-import androidx.media3.transformer.EditedMediaItemSequence
-import androidx.media3.transformer.ExportException
-import androidx.media3.transformer.ExportResult
-import androidx.media3.transformer.Transformer
 import com.testconnection.confidence_agent.R
 import com.testconnection.confidence_agent.data.remote.VideoScene
 import java.io.File
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 
 data class VideoRenderScene(
     val scene: VideoScene,
     val photoPath: String? = null,
     val annotation: String = "",
-    val audioPath: String? = null,
-    val audioDurationMs: Long = 0,
+    val narrationPath: String? = null,
+    val narrationDurationMs: Long = 0,
+    val originalVoicePath: String? = null,
+    val originalVoiceDurationMs: Long = 0,
     val durationMs: Long = 4_000,
 )
 
 class GrowthVideoRenderer(private val context: Context) {
-    suspend fun render(scenes: List<VideoRenderScene>): File {
-        require(scenes.size in 3..5) { "请选择三到五个关键节点" }
-        val directory = File(context.filesDir, "generated_videos").apply { mkdirs() }
+    suspend fun createFrames(scenes: List<VideoRenderScene>): List<File> {
+        require(scenes.size in 3..7) { "请选择三到七个关键节点" }
         val frameDirectory = File(context.cacheDir, "video_frames").apply { mkdirs() }
-        val frames = withContext(Dispatchers.Default) {
+        return withContext(Dispatchers.Default) {
             scenes.mapIndexed { index, item -> makeFrame(frameDirectory, item, index, scenes.size) }
-        }
-        val output = File(directory, "growth-${System.currentTimeMillis()}.mp4")
-        return withContext(Dispatchers.Main) {
-            suspendCancellableCoroutine { continuation ->
-                val videoItems = frames.mapIndexed { index, image ->
-                    EditedMediaItem.Builder(
-                        MediaItem.Builder()
-                            .setUri(Uri.fromFile(image))
-                            .setImageDurationMs(scenes[index].durationMs)
-                            .build(),
-                    ).setFrameRate(24).build()
-                }
-                val videoSequence = EditedMediaItemSequence.Builder(videoItems).build()
-                val sequences = mutableListOf(videoSequence)
-                if (scenes.any { !it.audioPath.isNullOrBlank() }) {
-                    val audioBuilder = EditedMediaItemSequence.Builder()
-                    scenes.forEach { item ->
-                        val audio = item.audioPath?.let(::File)?.takeIf { it.exists() && it.length() > 0 }
-                        if (audio == null) {
-                            audioBuilder.addGap(item.durationMs * 1_000)
-                        } else {
-                            val mediaItem = MediaItem.Builder().setUri(Uri.fromFile(audio)).apply {
-                                if (item.audioDurationMs > 0) {
-                                    setClippingConfiguration(
-                                        MediaItem.ClippingConfiguration.Builder()
-                                            .setEndPositionMs(item.audioDurationMs)
-                                            .build(),
-                                    )
-                                }
-                            }.build()
-                            audioBuilder.addItem(EditedMediaItem.Builder(mediaItem).build())
-                            val remainingMs = item.durationMs - item.audioDurationMs
-                            if (remainingMs > 50) audioBuilder.addGap(remainingMs * 1_000)
-                        }
-                    }
-                    sequences.add(audioBuilder.build())
-                }
-                val composition = Composition.Builder(sequences)
-                    .experimentalSetForceAudioTrack(sequences.size > 1)
-                    .build()
-                val transformer = Transformer.Builder(context)
-                    .setVideoMimeType(MimeTypes.VIDEO_H264)
-                    .setAudioMimeType(MimeTypes.AUDIO_AAC)
-                    .setPortraitEncodingEnabled(true)
-                    .addListener(object : Transformer.Listener {
-                        override fun onCompleted(composition: Composition, result: ExportResult) {
-                            frames.forEach(File::delete)
-                            if (!continuation.isActive) return
-                            if (output.exists() && output.length() > 0) continuation.resume(output)
-                            else continuation.resumeWithException(IllegalStateException("视频文件未生成"))
-                        }
-
-                        override fun onError(composition: Composition, result: ExportResult, exception: ExportException) {
-                            frames.forEach(File::delete)
-                            output.delete()
-                            if (continuation.isActive) continuation.resumeWithException(exception)
-                        }
-                    }).build()
-                continuation.invokeOnCancellation {
-                    Handler(Looper.getMainLooper()).post { transformer.cancel() }
-                    frames.forEach(File::delete)
-                    output.delete()
-                }
-                runCatching { transformer.start(composition, output.absolutePath) }
-                    .onFailure {
-                        frames.forEach(File::delete)
-                        output.delete()
-                        if (continuation.isActive) continuation.resumeWithException(it)
-                    }
-            }
         }
     }
 
@@ -124,60 +43,97 @@ class GrowthVideoRenderer(private val context: Context) {
             "small_step" to "迈出一步", "change" to "发生变化",
             "continuing" to "仍在继续", "help" to "获得帮助",
         )
-        val bitmap = Bitmap.createBitmap(720, 1280, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
+        // 用 720×1280 的逻辑坐标排版，再缩放为更适合手机快速编码的 540×960。
+        val bitmap = Bitmap.createBitmap(540, 960, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap).apply { scale(0.75f, 0.75f) }
+        canvas.drawColor(0xFFFFFBF2.toInt())
         val photo = item.photoPath?.let(BitmapFactory::decodeFile)
-        if (photo != null) {
-            drawCenterCrop(canvas, photo, Rect(0, 0, 720, 1280))
-            canvas.drawColor(0x55000000)
-            photo.recycle()
-        } else {
-            val backgrounds = listOf(0xFFFFFBF2.toInt(), 0xFFEAF2EB.toInt(), 0xFFF8E9E0.toInt())
-            canvas.drawColor(backgrounds[index % backgrounds.size])
-        }
         val ink = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF202421.toInt() }
         val sage = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF607C6C.toInt() }
-        val card = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xEEFFFFFF.toInt() }
-        canvas.drawRoundRect(RectF(48f, 330f, 672f, 965f), 42f, 42f, card)
+        val card = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+        canvas.drawRoundRect(RectF(42f, 200f, 678f, 1085f), 42f, 42f, card)
+
         ink.typeface = Typeface.create("sans-serif", Typeface.BOLD)
         ink.textSize = 46f
-        ink.color = if (photo != null) Color.WHITE else 0xFF202421.toInt()
-        canvas.drawText("小丑鸭 · 成长小片", 52f, 118f, ink)
+        canvas.drawText("小丑鸭 · 成长小片", 52f, 105f, ink)
+
         sage.typeface = Typeface.create("sans-serif", Typeface.BOLD)
-        sage.textSize = 38f
-        canvas.drawText(labels[item.scene.stage] ?: "成长记录", 86f, 415f, sage)
+        sage.textSize = 27f
+        val dateAndStage = listOfNotNull(
+            displayDate(item.scene.date).takeIf(String::isNotBlank),
+            labels[item.scene.stage] ?: "成长记录",
+        ).joinToString("  ·  ")
+        canvas.drawText(dateAndStage, 52f, 158f, sage)
+
+        ink.typeface = Typeface.create("sans-serif", Typeface.BOLD)
+        ink.textSize = 34f
+        canvas.drawText(item.scene.title.ifBlank { "这一天的记录" }, 76f, 270f, ink)
         ink.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-        ink.color = 0xFF202421.toInt()
         val caption = item.scene.text.trim().replace(Regex("\\s+"), " ")
-        val lines = sequenceOf(43f, 39f, 35f, 32f, 29f)
-            .map { size -> ink.textSize = size; size to wrap(caption, ink, 530f) }
-            .first { (_, wrapped) -> wrapped.size <= 8 }
-        ink.textSize = lines.first
-        val lineHeight = ink.textSize * 1.38f
-        lines.second.forEachIndexed { lineIndex, line ->
-            canvas.drawText(line, 86f, 505f + lineIndex * lineHeight, ink)
-        }
-        if (item.annotation.isNotBlank()) {
-            sage.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
-            sage.textSize = 25f
-            wrap("照片批注：${item.annotation.trim()}", sage, 530f).take(2).forEachIndexed { lineIndex, line ->
-                canvas.drawText(line, 86f, 885f + lineIndex * 32f, sage)
+
+        if (photo != null) {
+            drawRoundedCenterCrop(canvas, photo, Rect(76, 310, 644, 715), 28f)
+            photo.recycle()
+            val lines = sequenceOf(32f, 29f, 26f, 24f)
+                .map { size -> ink.textSize = size; size to wrap(caption, ink, 568f) }
+                .firstOrNull { (_, wrapped) -> wrapped.size <= 6 }
+                ?: (24f to wrap(caption, ink.apply { textSize = 24f }, 568f))
+            ink.textSize = lines.first
+            val lineHeight = ink.textSize * 1.35f
+            lines.second.forEachIndexed { lineIndex, line ->
+                canvas.drawText(line, 76f, 780f + lineIndex * lineHeight, ink)
             }
-        }
-        if (photo == null) {
+            if (item.annotation.isNotBlank()) {
+                sage.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                sage.textSize = 23f
+                val annotationY = 805f + lines.second.size * lineHeight
+                wrap("照片批注：${item.annotation.trim()}", sage, 568f).take(2).forEachIndexed { lineIndex, line ->
+                    canvas.drawText(line, 76f, annotationY + lineIndex * 30f, sage)
+                }
+            }
+        } else {
+            val lines = sequenceOf(42f, 38f, 34f, 31f, 28f)
+                .map { size -> ink.textSize = size; size to wrap(caption, ink, 548f) }
+                .firstOrNull { (_, wrapped) -> wrapped.size <= 9 }
+                ?: (28f to wrap(caption, ink.apply { textSize = 28f }, 548f))
+            ink.textSize = lines.first
+            val lineHeight = ink.textSize * 1.45f
+            val totalHeight = lines.second.size * lineHeight
+            val firstBaseline = 360f + ((590f - totalHeight) / 2f).coerceAtLeast(0f) + ink.textSize
+            lines.second.forEachIndexed { lineIndex, line ->
+                canvas.drawText(line, 86f, firstBaseline + lineIndex * lineHeight, ink)
+            }
             val duck = BitmapFactory.decodeResource(context.resources, R.drawable.duck_step)
             if (duck != null) {
-                canvas.drawBitmap(duck, null, RectF(430f, 975f, 655f, 1200f), null)
+                canvas.drawBitmap(duck, null, RectF(510f, 1075f, 680f, 1245f), null)
                 duck.recycle()
             }
         }
+
         sage.textSize = 28f
-        sage.color = if (photo != null) Color.WHITE else 0xFF607C6C.toInt()
         canvas.drawText("${index + 1} / $total  ·  只讲真实发生过的事", 52f, 1210f, sage)
         val file = File(directory, "frame-${System.nanoTime()}-$index.png")
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
         return file
+    }
+
+    private fun displayDate(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        return runCatching {
+            val date = LocalDate.parse(raw)
+            "${date.monthValue}月${date.dayOfMonth}日"
+        }.getOrDefault(raw)
+    }
+
+    private fun drawRoundedCenterCrop(canvas: Canvas, source: Bitmap, destination: Rect, radius: Float) {
+        val checkpoint = canvas.save()
+        val clip = Path().apply {
+            addRoundRect(RectF(destination), radius, radius, Path.Direction.CW)
+        }
+        canvas.clipPath(clip)
+        drawCenterCrop(canvas, source, destination)
+        canvas.restoreToCount(checkpoint)
     }
 
     private fun drawCenterCrop(canvas: Canvas, source: Bitmap, destination: Rect) {

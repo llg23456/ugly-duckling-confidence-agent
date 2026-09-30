@@ -1,5 +1,6 @@
 import base64
 from collections.abc import Callable
+import struct
 
 import httpx
 from openai import OpenAI
@@ -33,6 +34,30 @@ def _client(settings: Settings) -> OpenAI:
 def _data_uri(content: bytes, mime_type: str) -> str:
     encoded = base64.b64encode(content).decode("ascii")
     return f"data:{mime_type};base64,{encoded}"
+
+
+def _finalize_streaming_wav(content: bytes) -> bytes:
+    """Replace streaming WAV placeholder sizes with the downloaded byte lengths."""
+    if len(content) < 20 or content[:4] != b"RIFF" or content[8:12] != b"WAVE":
+        return content
+
+    audio = bytearray(content)
+    struct.pack_into("<I", audio, 4, min(len(audio) - 8, 0xFFFFFFFF))
+    offset = 12
+    while offset + 8 <= len(audio):
+        chunk_name = bytes(audio[offset:offset + 4])
+        chunk_size = struct.unpack_from("<I", audio, offset + 4)[0]
+        data_start = offset + 8
+        if chunk_name == b"data":
+            remaining = len(audio) - data_start
+            if chunk_size > remaining:
+                struct.pack_into("<I", audio, offset + 4, min(remaining, 0xFFFFFFFF))
+            break
+        next_offset = data_start + chunk_size + (chunk_size % 2)
+        if next_offset <= offset or next_offset > len(audio):
+            break
+        offset = next_offset
+    return bytes(audio)
 
 
 def _message_text(content) -> str:
@@ -190,4 +215,4 @@ def synthesize_speech(
         media_type = audio_response.headers.get("content-type", "audio/wav").split(";", 1)[0]
         if not media_type.startswith("audio/"):
             media_type = "audio/wav"
-        return audio_response.content, media_type
+        return _finalize_streaming_wav(audio_response.content), media_type

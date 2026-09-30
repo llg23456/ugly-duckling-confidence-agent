@@ -35,9 +35,11 @@
 - `POST /api/v1/reviews/overview`：一次返回所选日/周/月主报告，以及周内每日或月内每周的子摘要，供 Android 单请求加载完整页签。主报告可调用一次 AI 润色，子摘要只使用已有缓存或可靠模板。
 - `POST /api/v1/reviews/generate-pending-daily`：补生成有真实事件的过去日期的日回望，重复调用不会产生重复总结。
 - `GET /api/v1/reviews/{period}?device_id=...`：读取日、近七天或当月回望及来源 ID；不传 `device_id` 保留旧版 Mock 示例。
-- `POST /api/v1/videos/scripts`：提交 `device_id` 和 3～7 个同设备、非敏感成长事件 ID，生成五段可编辑脚本并保存来源。
+- `POST /api/v1/videos/keywords`：对 1～40 条同设备成长事件生成最多十组可选主题及其关联事件；在线 AI 可用时按语义归类，不可用或输出异常时自动退回程序规则，未被主题覆盖的事件统一归入“其他记录”。
+- `POST /api/v1/videos/scripts`：提交 `device_id` 和 3～7 个同设备、非高敏感成长事件 ID，按时间生成一条素材对应一页的 3～7 页可编辑脚本，并保存每页日期与来源；中敏感内容仅在用户主动勾选后使用，高敏感内容始终拒绝。
 - `GET /api/v1/videos/scripts/{id}?device_id=...`：读取该设备已保存的脚本。
-- `PATCH /api/v1/videos/scripts/{id}`：保存删改后的 3～5 个片段，保留“开始状态—遇到困难—迈出一步—发生变化—仍在继续”的相对顺序和来源限制。
+- `PATCH /api/v1/videos/scripts/{id}`：保存删改后的 3～7 个页面，保持来源事件的时间顺序和唯一性。
+- `POST /api/v1/videos/render/{script_id}`：校验设备归属后接收 3～7 组 PNG 画面、可选 AI 旁白和对应原声，由 FFmpeg 合成 H.264/AAC MP4；单段只要求时长为正，整片最长 5 分钟，上传素材总计不超过 64 MB。
 - `GET /api/v1/check-ins/pending?device_id=...`：读取该设备尚未回应的一次主动问候；没有待问候时返回 `check_in: null`。
 - `GET /api/v1/check-ins/notice?device_id=...`：消费一次“已建立待问候”的轻量提示，但不消费正式问候；同一任务只返回一次。
 - `POST /api/v1/check-ins/{id}/respond`：提交 `device_id` 与 `talk / improved / not_now`，保存回应、冷却时间和可选的继续聊天话题。
@@ -52,7 +54,7 @@ P2 在用户主动求助、持续受阻或面临高难任务时把聊天策略�
 
 P3 只在用户进入成长页时按需同步本地记录和生成回望，不再在 App 冷启动时预加载，也不再扫描并补生成全部历史日期。日、周、月回望分别返回对应的结构化栏目；周报告覆盖完成事项、困难、解决过程、变化与仍在继续，月总结覆盖主要经历、反复困难、变化和下一步。`/reviews/overview` 用一次请求返回完整页签，主报告最多进行一次 AI 润色，周内每日和月内每周子摘要不重复调用模型。模型超时、不可用、栏目顺序错误或输出越界时自动保留模板；来源没有变化的已保存报告直接复用。Android 先显示五分钟本地缓存，再按需后台刷新；聊天、记录和求助反馈变化会使缓存失效。月故事从真实事件中选最多六个关键节点，优先保留受阻经历。每份非空主回望存入 `reviews`，记录 `source_event_ids`；同一日期重复生成会复用并在内容变化时更新。Android 节点能打开本机原始文字、转写、照片或语音；数据库自动增补 P3 字段和表。
 
-P4 脚本由真实成长事件生成，记录模型、提示版本、来源和用户修改状态。未启用真实模型时返回明确标记的可编辑模板；模型响应格式无效时返回错误且不写库。Android 使用 Media3 Transformer 1.5.1 在本机合成 15～20 秒、720×1280 的 H.264 MP4，分享必须由用户主动触发。桌面组件默认不公开事件，开启后仅显示低敏感且未命中人物和明显敏感信息过滤的内容；该过滤不能保证识别所有私人信息，开启后应检查预览。
+P4 脚本由真实成长事件生成，记录模型、提示版本、来源和用户修改状态。未启用真实模型时返回明确标记的可编辑模板；模型响应格式无效时返回错误且不写库。Android 将本机照片、批注和字幕绘制进 540×960 PNG 页面，再上传页面、AI 旁白和对应原声；后端通过 FFmpeg 按实际配音时长合成 H.264/AAC MP4。每段旁白播放完后可接该段最多 5 秒的原声，整片最长 5 分钟。云端 TTS 返回流式 WAV 时，后端会按实际下载字节数修正 RIFF/data 长度，避免 Android 将十余秒音频误判为数小时，也避免 FFmpeg 按虚假长度持续补音。分享必须由用户主动触发。桌面组件默认不公开事件，开启后仅显示低敏感且未命中人物和明显敏感信息过滤的内容；该过滤不能保证识别所有私人信息，开启后应检查预览。
 
 主动关心由成长事件触发，不直接读取或上传本地媒体。单次普通情绪不会创建任务；同类受阻、紧张或低落需在不同日期至少出现两次，明确提出“之后再问我”可单次触发且无需等待 AI 事件提取。任务建立后只返回一次轻量确认提示，正式问候仍保留到下次打开 App。危险表达不进入延迟任务，仍由聊天当轮立即处理。每次回应后按选择写入冷却时间，避免重复追问；设备归属在读取和回应接口中都会校验。
 
@@ -66,8 +68,18 @@ P4 脚本由真实成长事件生成，记录模型、提示版本、来源和�
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-    .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+
+成长小片依赖 FFmpeg。启动后端前先确认以下命令可用：
+
+```powershell
+where.exe ffmpeg
+ffmpeg -version
+where.exe ffprobe
+```
+
+若没有加入 `PATH`，可在 `.env` 中配置 `FFMPEG_PATH=C:\ffmpeg\bin\ffmpeg.exe`；修改 `.env` 后需要重启 Uvicorn。
 
 - 健康检查：`http://127.0.0.1:8000/health`
 - Swagger：`http://127.0.0.1:8000/docs`

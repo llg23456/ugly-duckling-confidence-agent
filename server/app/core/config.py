@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     extraction_model: str = "qwen3.7-flash"
     embedding_model: str = "qwen3.7-text-embedding-flash"
     asr_model: str = "paraformer-v2"
+    ffmpeg_path: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

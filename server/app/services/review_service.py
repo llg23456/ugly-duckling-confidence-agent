@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from openai import OpenAI
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -353,13 +354,34 @@ def review_for(
     if not persist:
         return response
     if stored is None:
-        stored = Review(conversation_id=conversation.id, period=period,
-                        range_start=start.isoformat(), range_end=end.isoformat())
+        stored = Review(
+            conversation_id=conversation.id,
+            period=period,
+            range_start=start.isoformat(),
+            range_end=end.isoformat(),
+            source_event_ids=response.source_event_ids,
+            content=payload,
+            updated_at=datetime.now(timezone.utc),
+        )
         db.add(stored)
-    stored.source_event_ids = response.source_event_ids
-    stored.content = payload
-    stored.updated_at = datetime.now(timezone.utc)
-    db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            # 两个 overview 请求可能同时发现缓存不存在；唯一键由先提交者占用。
+            # 回滚失败事务并复用已创建的缓存，使生成接口保持幂等。
+            db.rollback()
+            stored = saved_review(db, conversation.id, period, start, end)
+            if stored is None:
+                raise
+            stored.source_event_ids = response.source_event_ids
+            stored.content = payload
+            stored.updated_at = datetime.now(timezone.utc)
+            db.commit()
+    else:
+        stored.source_event_ids = response.source_event_ids
+        stored.content = payload
+        stored.updated_at = datetime.now(timezone.utc)
+        db.commit()
     response.id = stored.id
     response.generated_at = stored.updated_at
     return response

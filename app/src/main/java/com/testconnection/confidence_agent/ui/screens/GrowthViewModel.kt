@@ -235,6 +235,7 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
                         ) }
                     }
                 }
+            refreshSourceEventsAndRecordIds()
         }
     }
 
