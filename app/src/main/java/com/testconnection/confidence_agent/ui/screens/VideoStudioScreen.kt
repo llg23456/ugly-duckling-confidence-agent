@@ -94,6 +94,10 @@ private val localVideoTopicRules = listOf(
     "压力与不自信" to listOf("压力", "焦虑", "紧张", "忐忑", "不自信", "怀疑", "考不上"),
     "想放弃" to listOf("放弃", "不想学", "没毅力", "坚持不下"),
     "家人支持" to listOf("父母", "家人", "爸爸", "妈妈", "家里"),
+    "师兄师姐" to listOf("师兄", "师姐", "学长", "学姐"),
+    "老师指导" to listOf("老师", "导师", "学院"),
+    "运动与户外" to listOf("运动", "健身", "慢跑", "操场", "散步", "户外", "公园"),
+    "休息与调整" to listOf("休息", "睡觉", "熬夜", "调整", "方法"),
     "沟通与求助" to listOf("沟通", "聊天", "求助", "倾诉", "告诉", "商量"),
     "鼓励与陪伴" to listOf("小鸭", "安慰", "鼓励", "陪伴", "支持"),
     "计划与行动" to listOf("计划", "开始", "行动", "完成", "继续", "坚持", "重新"),
@@ -337,6 +341,7 @@ fun VideoStudioScreen(
                         originalVoicePath = original?.absolutePath,
                         originalVoiceDurationMs = originalDuration,
                         durationMs = max(4_000L, if (spokenDuration > 0) spokenDuration + 800L else silentReadingDuration),
+                        isDemo = sourceEvents.any { it.id in scene.sourceEventIds && it.sourceType == "demo" },
                     )
                 }
             }.getOrElse {
