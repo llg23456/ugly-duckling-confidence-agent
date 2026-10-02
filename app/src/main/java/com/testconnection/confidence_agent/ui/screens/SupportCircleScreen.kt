@@ -40,7 +40,7 @@ import com.testconnection.confidence_agent.ui.theme.SagePale
 import kotlinx.coroutines.launch
 
 private val kindLabels = listOf(
-    "teacher" to "老师", "classmate" to "同学", "friend" to "朋友",
+    "teacher" to "老师", "senior" to "师兄师姐", "classmate" to "同学", "friend" to "朋友",
     "family" to "家人", "professional" to "专业人士",
 )
 

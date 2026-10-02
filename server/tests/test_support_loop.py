@@ -13,6 +13,24 @@ def test_support_strategy_uses_request_and_repeated_blockage() -> None:
     assert not needs_support("这道题我卡住了")
     assert needs_support("我又卡住了", [{"role": "user", "content": "昨天就卡住了"}])
     assert not needs_support("我今天完成了", [{"role": "user", "content": "之前卡住了"}])
+    assert needs_support("考研专业方向不清楚，可以找谁请教")
+    assert not needs_support("今天继续准备考研，感觉状态挺好")
+
+
+def test_postgraduate_support_selects_senior_and_teacher_by_situation(client: TestClient) -> None:
+    for name, kind in (("小林师姐", "senior"), ("学院王老师", "teacher"), ("妈妈", "family")):
+        response = client.post("/api/v1/support-people", json={
+            "device_id": "postgrad", "name": name, "relationship": name, "kind": kind,
+        })
+        assert response.status_code == 201
+    senior = client.post("/api/v1/support/suggest", json={"device_id": "postgrad", "situation": "想了解目标院校的备考经验"}).json()
+    assert senior["supporter_type"] == "senior" and senior["supporter_name"] == "小林师姐"
+    assert "什么时候方便" in senior["editable_message"] and senior["auto_send"] is False
+    teacher = client.post("/api/v1/support/suggest", json={"device_id": "postgrad", "situation": "考研专业方向不清楚"}).json()
+    assert teacher["supporter_type"] == "teacher"
+    assert "自己的理解" in teacher["small_step"]
+    unnamed = client.post("/api/v1/support/suggest", json={"situation": "想了解目标院校"}).json()
+    assert unnamed["supporter_id"] is None and unnamed["supporter_type"] == "senior"
 
 
 def test_support_people_crud_and_ownership(client: TestClient) -> None:
