@@ -37,6 +37,9 @@ data class GrowthEvent(
     val sensitivity: String?,
     val people: List<String>,
     val createdAt: String,
+    val attempt: String? = null,
+    val confidence: Double? = null,
+    val sourceType: String? = null,
 )
 
 data class SupportFeedbackRecord(

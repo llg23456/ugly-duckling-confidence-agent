@@ -115,6 +115,8 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
                 eventsDeferred.await() to periodDeferred.await()
             }
             val events = eventsResult.getOrDefault(_state.value.events)
+            if (eventsResult.isSuccess) com.testconnection.confidence_agent.data.preferences.ProfileJourneyStore(getApplication())
+                .reconcile(events, synced.associate { it.serverId to it.clientId })
             if (eventsResult.isSuccess) runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication(), events) }
             val periodData = periodResult.getOrNull() ?: cachedData
             if (syncFailed || periodResult.isFailure) reviewCache.markDirty()
@@ -253,6 +255,8 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
         val eventsResult = runCatching { api.events(deviceId) }
         val events = eventsResult.getOrNull()
         if (events != null) {
+            com.testconnection.confidence_agent.data.preferences.ProfileJourneyStore(getApplication())
+                .reconcile(events, syncedResult.getOrNull().orEmpty().associate { it.serverId to it.clientId })
             runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication(), events) }
         }
         val synced = syncedResult.getOrNull().orEmpty()
