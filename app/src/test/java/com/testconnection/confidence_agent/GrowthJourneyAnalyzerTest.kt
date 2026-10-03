@@ -41,6 +41,15 @@ class GrowthJourneyAnalyzerTest {
         assertTrue(GrowthJourneyAnalyzer.analyze(ignored).keywords.isEmpty())
     }
 
+    @Test fun demoStoriesCannotAdvancePersonalGrowth() {
+        val demo = (1..4).map { event(it.toLong(), "2026-09-0$it", "主动联系师姐并安排运动").copy(sourceType = "demo") }
+        val journey = GrowthJourneyAnalyzer.analyze(demo)
+        assertEquals(0, journey.stage)
+        assertTrue(journey.keywords.isEmpty())
+        assertTrue(journey.milestones.isEmpty())
+        assertEquals(0, GrowthJourneyAnalyzer.analyze(demo + event(5, "2026-09-05")).stage)
+    }
+
     @Test fun inactivityKeepsStageAndDeletedEvidenceIsRecomputed() {
         val actions = (1..4).map { event(it.toLong(), "2026-09-0$it", if (it == 4) "主动安排运动和休息" else "完成一次复习") }
         assertEquals(2, GrowthJourneyAnalyzer.analyze(actions, LocalDate.of(2026, 9, 6)).stage)

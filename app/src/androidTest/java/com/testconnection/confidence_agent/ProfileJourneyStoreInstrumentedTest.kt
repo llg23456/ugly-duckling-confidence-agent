@@ -51,10 +51,12 @@ class ProfileJourneyStoreInstrumentedTest {
         events.forEach { records.save(RecordDraft("record-${it.id}", RecordMode.TEXT, it.fact)) }
         val mapping = events.associate { it.id to "record-${it.id}" }
         store.reconcile(events, mapping)
+        assertEquals(mapping, ProfileJourneyStore(context).recordIds())
         profile.saveProfile(introduction.copy(mainChallenge = ProfileValue("学会照顾生活", 1.0)), true, "画像更新")
         records.delete("record-3")
         assertEquals(introduction, profile.loadProfile())
         assertFalse(store.events().any { it.id == 3L })
+        assertFalse(store.recordIds().containsKey(3L))
         assertEquals(1, store.journey().stage)
         assertEquals(1, store.snapshots().size)
         store.reconcile(events, mapping)

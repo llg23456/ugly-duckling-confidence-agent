@@ -48,7 +48,7 @@ fun MemoryCenterScreen(
     var journey by remember { mutableStateOf(store.journey()) }
     var events by remember { mutableStateOf(store.events()) }
     var history by remember { mutableStateOf(store.snapshots()) }
-    var recordIds by remember { mutableStateOf(emptyMap<Long, String>()) }
+    var recordIds by remember { mutableStateOf(store.recordIds()) }
     var refreshing by remember { mutableStateOf(false) }
     var loadingEvidence by remember { mutableStateOf(true) }
     var notice by remember { mutableStateOf<String?>(null) }
@@ -115,15 +115,18 @@ fun MemoryCenterScreen(
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             item {
                 WarmCard {
-                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Crossfade(targetState = journey.stage, label = "小鸭成长") { stage ->
-                            DuckArt(listOf(R.drawable.duck_growth_start, R.drawable.duck_step, R.drawable.duck_growth_open)[stage],
-                                "${growthStageNames[stage]}阶段的小鸭", Modifier.size(130.dp))
-                        }
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text(growthStageNames[journey.stage], style = MaterialTheme.typography.headlineSmall, color = SageDark)
-                            Text(listOf("先认识此刻的自己", "你留下了真实的尝试", "尝试，也照顾生活")[journey.stage])
-                            TextButton(onClick = { selected = "小鸭如何变化" to "两个不同日期留下真实尝试，小鸭进入尝试阶段；四个不同日期有尝试，并记录了求助、调整方法或照顾自己，小鸭进入舒展阶段。\n\n形象依据你留下的经历变化。停止记录不会让小鸭降级。删除作为依据的记录后，会重新整理阶段。" }) { Text("查看阶段依据") }
+                    BoxWithConstraints(Modifier.fillMaxWidth()) {
+                        val artSize = if (maxWidth < 300.dp) 100.dp else 130.dp
+                        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Crossfade(targetState = journey.stage, label = "小鸭成长") { stage ->
+                                DuckArt(listOf(R.drawable.duck_growth_start, R.drawable.duck_step, R.drawable.duck_growth_open)[stage],
+                                    "${growthStageNames[stage]}阶段的小鸭", Modifier.size(artSize))
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(growthStageNames[journey.stage], style = MaterialTheme.typography.headlineSmall, color = SageDark)
+                                Text(listOf("先认识此刻的自己", "你留下了真实的尝试", "尝试，也照顾生活")[journey.stage])
+                                TextButton(onClick = { selected = "小鸭如何变化" to "两个不同日期留下真实尝试，小鸭进入尝试阶段；四个不同日期有尝试，并记录了求助、调整方法或照顾自己，小鸭进入舒展阶段。\n\n形象依据你留下的经历变化。停止记录不会让小鸭降级。删除作为依据的记录后，会重新整理阶段。" }) { Text("查看阶段依据") }
+                            }
                         }
                     }
                 }
@@ -135,7 +138,7 @@ fun MemoryCenterScreen(
                         journey.keywords.forEach { keyword -> AssistChip(onClick = { evidenceIds = keyword.eventIds }, label = { Text(keyword.label) }) }
                     }
                     if (journey.keywords.isEmpty()) Text("有了真实记录，这里会慢慢出现你的尝试。")
-                    if (events.any { it.sourceType == "demo" }) Text("包含演示故事，点击关键词可查看来源。", style = MaterialTheme.typography.bodySmall, color = SageDark)
+                    if (events.any { it.sourceType == "demo" }) Text("演示故事不会计入你的成长阶段和关键词。", style = MaterialTheme.typography.bodySmall, color = SageDark)
                 }
             }
             item {

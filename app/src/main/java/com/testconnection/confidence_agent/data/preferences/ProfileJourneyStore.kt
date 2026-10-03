@@ -36,6 +36,15 @@ class ProfileJourneyStore(private val context: Context) {
 
     fun journey(): GrowthJourney = GrowthJourneyAnalyzer.analyze(events())
 
+    fun recordIds(): Map<Long, String> = array("journey_events").let { rows ->
+        buildMap {
+            for (index in 0 until rows.length()) rows.optJSONObject(index)?.let { row ->
+                val id = row.optLong("source_record_id")
+                row.nullable("client_record_id")?.let { if (id > 0) put(id, it) }
+            }
+        }
+    }
+
     fun capture(profile: UserProfile, reason: String) {
         val journey = journey()
         val current = snapshots()

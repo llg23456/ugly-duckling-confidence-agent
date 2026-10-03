@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -42,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
@@ -443,14 +448,14 @@ fun VideoStudioScreen(
                 )
                 TextButton(
                     onClick = ::closeFullscreenVideo,
-                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+                modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(16.dp),
                 ) { Text("关闭", color = Color.White) }
             }
         }
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize().padding(20.dp),
+        modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item {
@@ -592,8 +597,9 @@ fun VideoStudioScreen(
                     Text(if (script?.mock == true) "当前使用可编辑模板；未调用 AI。" else "已生成可编辑脚本，分享前请确认每一句都准确。")
                     Text("配音", style = MaterialTheme.typography.titleMedium)
                     listOf("Serena" to "温柔女声", "Ethan" to "温暖男声", "none" to "无配音").forEach { option ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            RadioButton(selected = voice == option.first, onClick = { voice = option.first; video = null })
+                        Row(Modifier.fillMaxWidth().selectable(selected = voice == option.first, role = Role.RadioButton,
+                            onClick = { voice = option.first; video = null }), verticalAlignment = Alignment.CenterVertically) {
+                            RadioButton(selected = voice == option.first, onClick = null)
                             Text(option.second)
                         }
                     }

@@ -42,7 +42,7 @@ object GrowthJourneyAnalyzer {
     }
 
     fun analyze(events: List<GrowthEvent>, today: LocalDate = LocalDate.now()): GrowthJourney {
-        val trusted = events.filter { it.sensitivity != "high" && (it.confidence ?: 0.0) >= 0.75 }
+        val trusted = events.filter { it.sourceType != "demo" && it.sensitivity != "high" && (it.confidence ?: 0.0) >= 0.75 }
             .distinctBy { it.id }.filter { day(it)?.let { date -> !date.isAfter(today) } == true }
             .sortedWith(compareBy<GrowthEvent> { day(it) }.thenBy { it.id })
         val efforts = trusted.associate { it.id to effort(it) }
