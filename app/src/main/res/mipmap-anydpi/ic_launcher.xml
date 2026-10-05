@@ -8,8 +8,8 @@
         </shape>
     </item>
     <item
-        android:width="62dp"
-        android:height="78dp"
+        android:width="96dp"
+        android:height="104dp"
         android:gravity="center"
         android:drawable="@drawable/duck_main" />
 </layer-list>
