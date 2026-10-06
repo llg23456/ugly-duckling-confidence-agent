@@ -49,7 +49,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun DataToolsScreen(
     state: GrowthUiState,
-    onCreateDemoData: () -> Unit,
+    onCreateExamWeekDemoData: () -> Unit,
+    onCreateFourWeekDemoData: () -> Unit,
     onClearDemoData: () -> Unit,
     onAllDataDeleted: () -> Unit,
     onBack: () -> Unit,
@@ -104,7 +105,7 @@ fun DataToolsScreen(
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
             title = { Text("删除全部数据？") },
-            text = { Text("聊天、生活记录、照片与原声、记忆、回望、成长小片和画像都会删除，且无法恢复。建议先导出一份。") },
+            text = { Text("聊天、生活记录、照片与原声、自己的社区分享、记忆、回望、成长小片和画像都会删除，且无法恢复。建议先导出一份。") },
             dismissButton = { TextButton(onClick = { showDeleteConfirmation = false }) { Text("取消") } },
             confirmButton = { TextButton(onClick = ::deleteAllData) { Text("确认全部删除", color = Danger) } },
         )
@@ -125,7 +126,7 @@ fun DataToolsScreen(
                 Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         SectionHeading("自己的记录")
-                        Text("JSON 适合查看和展示；ZIP 除同一份 JSON 外，还包含仍保存在本机的照片、原声和成长小片。后端暂时离线时也会先导出本机数据。",
+                        Text("JSON 适合查看和展示；ZIP 除同一份 JSON 外，还包含仍保存在本机的照片、原声、社区图片和成长小片。后端暂时离线时也会先导出本机数据。",
                             style = MaterialTheme.typography.bodyLarge, color = InkMuted)
                     }
                     DuckArt(R.drawable.duck_writing, "整理记录的小鸭", Modifier.size(92.dp))
@@ -167,17 +168,23 @@ fun DataToolsScreen(
             WarmCard {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
                     SectionHeading("测试数据准备", "仅开发版本可用，演示记录会在成长回望中标明来源")
-                    Text("生成截至昨天的四周考研故事：学习尝试、向师兄师姐和学院老师请教、家人支持，以及运动、户外和休息。演示故事不计入你的成长阶段。",
+                    Text("主故事固定为 2026年9月7日至13日，展示从怀疑自己到愿意行动、求助、调整和照顾生活。演示故事不计入你的真实成长阶段。",
                         style = MaterialTheme.typography.bodyLarge)
                     state.demoNotice?.let { Text(it, color = SageDark) }
                     if (state.loading) CircularProgressIndicator(Modifier.size(24.dp), color = SageDark)
                     Button(
-                        onClick = onCreateDemoData,
+                        onClick = onCreateExamWeekDemoData,
                         enabled = !state.loading,
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = AppButtonShape,
                         colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                    ) { Text("生成四周测试数据") }
+                    ) { Text("生成 9.7—9.13 主故事") }
+                    OutlinedButton(
+                        onClick = onCreateFourWeekDemoData,
+                        enabled = !state.loading,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = AppButtonShape,
+                    ) { Text("生成最近四周扩展故事") }
                     OutlinedButton(
                         onClick = onClearDemoData,
                         enabled = !state.loading,

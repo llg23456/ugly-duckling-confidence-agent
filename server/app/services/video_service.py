@@ -9,13 +9,14 @@ from app.db.models import GrowthEvent
 from app.schemas.video import VideoKeywordSuggestion, VideoScene
 from app.services.memory_service import local_day
 
-PROMPT_VERSION = "p6.0"
+PROMPT_VERSION = "p7.0"
 STAGES = ("beginning", "difficulty", "small_step", "help", "change", "continuing")
 
 
 class DailyCaption(BaseModel):
-    event_id: int
-    text: str = Field(min_length=1, max_length=120)
+    date: str = Field(min_length=10, max_length=10)
+    event_ids: list[int] = Field(min_length=1, max_length=40)
+    text: str = Field(min_length=1, max_length=1200)
 
 
 class DailyCaptions(BaseModel):
@@ -127,56 +128,114 @@ def suggest_keywords(events: list[GrowthEvent]) -> tuple[list[VideoKeywordSugges
         return fallback, None
 
 
-def _stage(event: GrowthEvent, index: int, total: int) -> str:
-    text = f"{event.fact} {event.feeling or ''}"
+def group_events_by_day(events: list[GrowthEvent]) -> list[tuple[str, list[GrowthEvent]]]:
+    grouped: dict[str, list[GrowthEvent]] = {}
+    for event in events:
+        grouped.setdefault(local_day(event.created_at), []).append(event)
+    return list(grouped.items())
+
+
+def _stage(events: list[GrowthEvent], index: int, total: int) -> str:
+    text = " ".join(_event_text(event) for event in events)
     difficulty = ("卡住", "失败", "错了", "很累", "不想", "放弃", "不敢", "紧张", "怀疑", "不自信", "考不上")
     if index == 0:
         return "beginning"
-    if event.support_received:
+    if any(event.support_received for event in events):
         return "help"
     if any(word in text for word in difficulty):
         return "difficulty"
     if index == total - 1:
         return "continuing"
-    if event.own_effort or event.attempt:
+    if any(event.own_effort or event.attempt for event in events):
         return "small_step"
     return "change"
 
 
-def _fallback(events: list[GrowthEvent]) -> DailyCaptions:
-    return DailyCaptions(pages=[DailyCaption(event_id=item.id, text=item.fact[:120]) for item in events])
+def _clean_clause(value: str | None) -> str:
+    compact = re.sub(r"\s+", " ", value or "").strip()
+    compact = re.sub(r"[。！？!?]+\s*", "，", compact)
+    return compact.strip("。！？!?；;，, ")
+
+
+def _one_sentence(value: str) -> str:
+    cleaned = _clean_clause(value).rstrip("；")
+    if not cleaned:
+        raise ValueError("每日故事摘要不能为空")
+    return cleaned + "。"
+
+
+def _daily_sentence(events: list[GrowthEvent]) -> str:
+    clauses: list[str] = []
+    for event in events:
+        fact = _clean_clause(event.fact)
+        if fact and fact not in clauses:
+            clauses.append(fact)
+        additions = (
+            ("当时我感到", event.feeling),
+            ("我尝试了", event.own_effort or event.attempt),
+            ("我得到的支持是", event.support_received),
+        )
+        for prefix, raw in additions:
+            value = _clean_clause(raw)
+            if value and not any(value in clause for clause in clauses):
+                clauses.append(f"{prefix}{value}")
+    return _one_sentence("；".join(clauses))
+
+
+def _fallback(groups: list[tuple[str, list[GrowthEvent]]]) -> DailyCaptions:
+    return DailyCaptions(pages=[DailyCaption(
+        date=day,
+        event_ids=[event.id for event in day_events],
+        text=_daily_sentence(day_events),
+    ) for day, day_events in groups])
 
 
 def generate_captions(events: list[GrowthEvent]) -> tuple[DailyCaptions, str | None]:
+    groups = group_events_by_day(events)
     settings = get_settings()
     if not settings.enable_live_ai or not settings.dashscope_api_key.strip():
-        return _fallback(events), None
+        return _fallback(groups), None
 
-    facts = [{"id": item.id, "fact": item.fact, "feeling": item.feeling,
-              "own_effort": item.own_effort, "support_received": item.support_received}
-             for item in events]
+    days = [{
+        "date": day,
+        "events": [{
+            "id": item.id,
+            "fact": item.fact,
+            "feeling": item.feeling,
+            "own_effort": item.own_effort,
+            "attempt": item.attempt,
+            "support_received": item.support_received,
+        } for item in day_events],
+    } for day, day_events in groups]
     client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.dashscope_base_url, timeout=35, max_retries=0)
     response = client.chat.completions.create(
         model=settings.chat_model,
         messages=[
-            {"role": "system", "content": "为成长小片逐条改写字幕。输入有几条事件就输出几页，顺序、event_id 和数量必须完全一致。只输出 JSON：{\"pages\":[{\"event_id\":整数,\"text\":不超过120字}]}。每页只概括对应事件，可让前后语气自然衔接，但不得合并日期、挪用别页事实、虚构人物、帮助、行为或结果。文字要适合口播，句子简洁。"},
-            {"role": "user", "content": json.dumps({"events": facts}, ensure_ascii=False)},
+            {"role": "system", "content": "为成长小片按天整理故事摘要。输入已按日期分组；一天只输出一页，日期、event_ids、页数与顺序必须完全一致。只输出 JSON：{\"pages\":[{\"date\":\"YYYY-MM-DD\",\"event_ids\":[整数],\"text\":\"一句话摘要\"}]}。一句话可以用逗号和分号串联，但必须清楚覆盖当天输入中的每一件事，包括重要感受、自己的尝试和实际获得的支持；不能漏掉事件，也不得添加、调换或夸大事实。文字自然、适合口播，不把多天内容合并。"},
+            {"role": "user", "content": json.dumps({"days": days}, ensure_ascii=False)},
         ],
         response_format={"type": "json_object"}, temperature=0,
-        reasoning_effort="none", max_tokens=1600,
+        reasoning_effort="none", max_tokens=2400,
     )
     captions = DailyCaptions.model_validate_json(response.choices[0].message.content or "")
-    if [page.event_id for page in captions.pages] != [item.id for item in events]:
-        raise ValueError("成长小片页面与来源事件不一致")
-    return captions, settings.chat_model
+    expected = [(day, [event.id for event in day_events]) for day, day_events in groups]
+    actual = [(page.date, page.event_ids) for page in captions.pages]
+    if actual != expected:
+        raise ValueError("成长小片每日摘要与来源事件不一致")
+    cleaned = DailyCaptions(pages=[
+        DailyCaption(date=page.date, event_ids=page.event_ids, text=_one_sentence(page.text))
+        for page in captions.pages
+    ])
+    return cleaned, settings.chat_model
 
 
 def scenes_for(events: list[GrowthEvent], captions: DailyCaptions) -> list[VideoScene]:
-    text_by_id = {page.event_id: page.text.strip() for page in captions.pages}
+    groups = group_events_by_day(events)
+    caption_by_day = {page.date: page for page in captions.pages}
     return [VideoScene(
-        stage=_stage(event, index, len(events)),
+        stage=_stage(day_events, index, len(groups)),
         title="这一天的记录",
-        date=local_day(event.created_at),
-        text=text_by_id[event.id],
-        source_event_ids=[event.id],
-    ) for index, event in enumerate(events)]
+        date=day,
+        text=caption_by_day[day].text.strip(),
+        source_event_ids=[event.id for event in day_events],
+    ) for index, (day, day_events) in enumerate(groups)]

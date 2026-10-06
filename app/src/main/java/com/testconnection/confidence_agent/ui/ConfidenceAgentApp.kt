@@ -2,14 +2,15 @@ package com.testconnection.confidence_agent.ui
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -35,6 +36,7 @@ import com.testconnection.confidence_agent.ui.screens.HomeScreen
 import com.testconnection.confidence_agent.ui.screens.HomeViewModel
 import com.testconnection.confidence_agent.ui.screens.ProfileScreen
 import com.testconnection.confidence_agent.ui.screens.RecordScreen
+import com.testconnection.confidence_agent.ui.screens.CommunityScreen
 import com.testconnection.confidence_agent.ui.screens.VoiceCallScreen
 import com.testconnection.confidence_agent.data.preferences.VoicePreferencesStore
 import com.testconnection.confidence_agent.data.preferences.OnboardingStore
@@ -48,13 +50,14 @@ import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
 import kotlinx.coroutines.delay
 
-private data class AppTab(val label: String, val iconRes: Int)
+private data class AppTab(val destination: AppDestination, val label: String, val iconRes: Int)
 
 private val tabs = listOf(
-    AppTab("首页", R.drawable.ic_nav_home),
-    AppTab("成长", R.drawable.ic_nav_growth),
-    AppTab("记录", R.drawable.ic_nav_record),
-    AppTab("我的", R.drawable.ic_nav_profile),
+    AppTab(AppDestination.HOME, "首页", R.drawable.ic_nav_home),
+    AppTab(AppDestination.GROWTH, "成长", R.drawable.ic_nav_growth),
+    AppTab(AppDestination.COMMUNITY, "社区", R.drawable.ic_nav_community),
+    AppTab(AppDestination.RECORD, "记录", R.drawable.ic_nav_record),
+    AppTab(AppDestination.PROFILE, "我的", R.drawable.ic_nav_profile),
 )
 
 @Composable
@@ -63,7 +66,8 @@ fun ConfidenceAgentApp(
     onExternalDestinationConsumed: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var selectedDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
+    var communityDetailOpen by rememberSaveable { mutableStateOf(false) }
     var showCover by rememberSaveable { mutableStateOf(true) }
     var showVoiceCall by rememberSaveable { mutableStateOf(false) }
     var showMemoryCenter by rememberSaveable { mutableStateOf(false) }
@@ -126,7 +130,7 @@ fun ConfidenceAgentApp(
             onBack = { showMemoryCenter = false },
             onOpenSource = { sourceId ->
                 sourceMessageId = sourceId
-                selectedTab = 0
+                selectedDestination = AppDestination.HOME
                 showMemoryCenter = false
             },
             onRestartOnboarding = {
@@ -145,7 +149,7 @@ fun ConfidenceAgentApp(
                 requestedRecordDateEpochDay = java.time.Instant.ofEpochMilli(record.createdAt)
                     .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
                 requestedEditRecord = record
-                selectedTab = 2
+                selectedDestination = AppDestination.RECORD
                 showMemoryCenter = false
             },
         )
@@ -177,6 +181,7 @@ fun ConfidenceAgentApp(
         WeeklyReportScreen(
             review = growthState.review,
             dailyReviews = growthState.dailyReviews,
+            events = growthState.events,
             onBack = { showWeeklyReport = false },
             onShare = { showVideoStudio = true },
         )
@@ -186,7 +191,14 @@ fun ConfidenceAgentApp(
     if (showDataTools) {
         DataToolsScreen(
             state = growthState,
-            onCreateDemoData = growthViewModel::createDemoData,
+            onCreateExamWeekDemoData = {
+                growthViewModel.createExamWeekDemoData { start ->
+                    showDataTools = false
+                    selectedDestination = AppDestination.GROWTH
+                    growthViewModel.openWeek(start)
+                }
+            },
+            onCreateFourWeekDemoData = growthViewModel::createDemoData,
             onClearDemoData = growthViewModel::clearDemoData,
             onAllDataDeleted = {
                 onboardingStore.reset()
@@ -202,7 +214,8 @@ fun ConfidenceAgentApp(
 
     LaunchedEffect(externalDestination) {
         externalDestination?.let {
-            selectedTab = it.tab.coerceIn(0, tabs.lastIndex)
+            selectedDestination = it.destination
+            communityDetailOpen = false
             requestedRecordMode = it.recordMode
             requestedRecordDateEpochDay = null
             requestedEditRecord = null
@@ -225,44 +238,52 @@ fun ConfidenceAgentApp(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier.navigationBarsPadding(),
-                containerColor = MaterialTheme.colorScheme.surface,
+            if (!communityDetailOpen) Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                shadowElevation = 10.dp,
             ) {
-                tabs.forEachIndexed { index, tab ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = {
-                            if (index == 2) {
-                                requestedRecordMode = RecordMode.TEXT
-                                requestedRecordDateEpochDay = null
-                                requestedEditRecord = null
-                            }
-                            selectedTab = index
-                        },
-                        icon = {
-                            Image(
-                                painter = painterResource(tab.iconRes),
-                                contentDescription = tab.label,
-                                modifier = Modifier.size(26.dp),
-                            )
-                        },
-                        label = { Text(tab.label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = SageDark,
-                            selectedTextColor = SageDark,
-                            indicatorColor = SagePale,
-                            unselectedIconColor = InkMuted,
-                            unselectedTextColor = InkMuted,
-                        ),
-                    )
+                NavigationBar(
+                    modifier = Modifier.fillMaxWidth(),
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 0.dp,
+                ) {
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = selectedDestination == tab.destination,
+                            onClick = {
+                                communityDetailOpen = false
+                                if (tab.destination == AppDestination.RECORD) {
+                                    requestedRecordMode = RecordMode.TEXT
+                                    requestedRecordDateEpochDay = null
+                                    requestedEditRecord = null
+                                }
+                                selectedDestination = tab.destination
+                            },
+                            icon = {
+                                Image(
+                                    painter = painterResource(tab.iconRes),
+                                    contentDescription = tab.label,
+                                    modifier = Modifier.size(26.dp),
+                                )
+                            },
+                            label = { Text(tab.label) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = SageDark,
+                                selectedTextColor = SageDark,
+                                indicatorColor = SagePale,
+                                unselectedIconColor = InkMuted,
+                                unselectedTextColor = InkMuted,
+                            ),
+                        )
+                    }
                 }
             }
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize()) {
-            when (selectedTab) {
-                0 -> HomeScreen(
+            when (selectedDestination) {
+                AppDestination.HOME -> HomeScreen(
                     contentPadding = padding,
                     viewModel = homeViewModel,
                     userName = displayName,
@@ -274,16 +295,16 @@ fun ConfidenceAgentApp(
                                 requestedRecordDateEpochDay = java.time.Instant.ofEpochMilli(record.createdAt)
                                     .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
                                 requestedEditRecord = record
-                                selectedTab = 2
+                                selectedDestination = AppDestination.RECORD
                             }
                         }
                     },
                     sourceMessageId = sourceMessageId,
                     onSourceLocated = { sourceMessageId = null },
                 )
-                1 -> GrowthScreen(
+                AppDestination.GROWTH -> GrowthScreen(
                     contentPadding = padding,
-                    onOpenSource = { sourceMessageId = it; selectedTab = 0 },
+                    onOpenSource = { sourceMessageId = it; selectedDestination = AppDestination.HOME },
                     onOpenFeedback = { showSupportCircle = true },
                     growthViewModel = growthViewModel,
                     onOpenWeeklyReport = { showWeeklyReport = true },
@@ -291,24 +312,29 @@ fun ConfidenceAgentApp(
                         requestedRecordMode = RecordMode.TEXT
                         requestedRecordDateEpochDay = date.toEpochDay()
                         requestedEditRecord = null
-                        selectedTab = 2
+                        selectedDestination = AppDestination.RECORD
                     },
                     onEditRecord = { record ->
                         requestedRecordMode = record.mode
                         requestedRecordDateEpochDay = java.time.Instant.ofEpochMilli(record.createdAt)
                             .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
                         requestedEditRecord = record
-                        selectedTab = 2
+                        selectedDestination = AppDestination.RECORD
                     },
                 )
-                2 -> RecordScreen(
+                AppDestination.COMMUNITY -> CommunityScreen(
+                    contentPadding = padding,
+                    userName = displayName,
+                    onDetailVisibilityChanged = { communityDetailOpen = it },
+                )
+                AppDestination.RECORD -> RecordScreen(
                     contentPadding = padding,
                     requestedMode = requestedRecordMode,
                     cameraLaunchToken = cameraLaunchToken,
                     requestedDateEpochDay = requestedRecordDateEpochDay,
                     requestedEditRecord = requestedEditRecord,
                 )
-                else -> ProfileScreen(
+                AppDestination.PROFILE -> ProfileScreen(
                     contentPadding = padding,
                     userName = displayName,
                     voicePreferences = voicePreferences,
@@ -321,7 +347,7 @@ fun ConfidenceAgentApp(
                     onOpenDataTools = { showDataTools = true },
                     onServerEndpointChanged = {
                         homeViewModel.refreshHistory()
-                        if (selectedTab == 1) growthViewModel.forceRefresh()
+                        if (selectedDestination == AppDestination.GROWTH) growthViewModel.forceRefresh()
                     },
                 )
             }

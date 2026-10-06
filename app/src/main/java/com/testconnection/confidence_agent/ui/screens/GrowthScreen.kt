@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -64,6 +66,7 @@ fun GrowthScreen(
     onEditRecord: (RecordDraft) -> Unit = {},
 ) {
     val state by growthViewModel.state.collectAsState()
+    val isExamWeek = state.period == "周" && state.review?.rangeStart == "2026-09-07" && state.review?.rangeEnd == "2026-09-13"
     var selectedRecord by remember { mutableStateOf<RecordDraft?>(null) }
     var missingRecordMoment by remember { mutableStateOf<ReviewMoment?>(null) }
     LaunchedEffect(Unit) { growthViewModel.refresh() }
@@ -155,8 +158,9 @@ fun GrowthScreen(
                 item { DaySources(state.anchorDate, state.review, ::openMoment, onAddRecord) }
             }
             "周" -> {
-                item { WeekDays(state.dailyReviews, growthViewModel::openDay) }
+                if (isExamWeek) item { ExamWeekStoryHero() }
                 item { GrowthTimeline(state.review?.moments.orEmpty(), ::openMoment) }
+                if (isExamWeek) item { ExamWeekStoryClosing() }
                 item {
                     OutlinedButton(
                         onClick = onOpenWeeklyReport,
@@ -177,6 +181,60 @@ fun GrowthScreen(
 }
 
 @Composable
+private fun ExamWeekStoryHero() {
+    WarmCard(containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Text("备战考研的这一周", style = MaterialTheme.typography.headlineSmall)
+                    Text("9月7日—13日 · 考研演示故事", style = MaterialTheme.typography.bodyMedium, color = SageDark)
+                    Text("目标还在前面，但我已经更会面对生活。", style = MaterialTheme.typography.bodyLarge)
+                }
+                DuckArt(R.drawable.duck_story_study, "备战考研的小鸭", Modifier.size(104.dp))
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center) {
+                StoryStage(R.drawable.duck_growth_start_v3, "起步")
+                Text("···", color = SageDark, modifier = Modifier.padding(horizontal = 6.dp))
+                StoryStage(R.drawable.duck_growth_try_v3, "尝试")
+                Text("···", color = SageDark, modifier = Modifier.padding(horizontal = 6.dp))
+                StoryStage(R.drawable.duck_growth_open_v3, "舒展")
+            }
+        }
+    }
+}
+
+@Composable
+private fun StoryStage(drawable: Int, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        DuckArt(drawable, "$label 阶段的小鸭", Modifier.size(58.dp))
+        Text(label, style = MaterialTheme.typography.bodySmall, color = SageDark)
+    }
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun ExamWeekStoryClosing() {
+    WarmCard {
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            SectionHeading("这一周看见的变化", "成长不是只看考试结果，也包括面对生活的方式")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("愿意行动", "主动求助", "会调整", "照顾自己").forEach { keyword ->
+                    Surface(color = SagePale, shape = RoundedCornerShape(50)) {
+                        Text(keyword, Modifier.padding(horizontal = 12.dp, vertical = 8.dp), color = SageDark,
+                            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            Text("结果尚未确定，但已经更敢提问、表达、求助，也愿意在学习之外照顾身体和生活。",
+                style = MaterialTheme.typography.bodyLarge)
+            Text("示例故事只用于演示回望，不会改变你的真实画像。",
+                style = MaterialTheme.typography.bodySmall, color = SageDark)
+        }
+    }
+}
+
+@Composable
 private fun GrowthHeader() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
@@ -184,7 +242,7 @@ private fun GrowthHeader() {
             Text("把真实生活慢慢连成自己的故事", style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        DuckArt(R.drawable.duck_step, "正在迈出一步的小鸭", Modifier.size(110.dp))
+        DuckArt(R.drawable.duck_growth_try_v3, "正在迈出一步的小鸭", Modifier.size(110.dp))
     }
 }
 
@@ -282,31 +340,6 @@ private fun DaySources(
                 modifier = Modifier.fillMaxWidth(),
                 shape = AppButtonShape,
             ) { Text("＋ 补充这一天的记录") }
-        }
-    }
-}
-
-@Composable
-private fun WeekDays(days: List<DailyReviewEntry>, onOpenDay: (LocalDate) -> Unit) {
-    WarmCard {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            SectionHeading("周一到周日", "先看每天的一句话，点击查看当天详情")
-            days.forEach { item ->
-                val summary = item.review?.let(::dailyCardSummary)
-                    ?: if (item.date.isAfter(LocalDate.now())) "还没到这一天" else "这天没有留下记录"
-                Surface(onClick = { onOpenDay(item.date) }, enabled = !item.date.isAfter(LocalDate.now()),
-                    shape = RoundedCornerShape(18.dp), color = SagePale) {
-                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.Top) {
-                        Column(Modifier.weight(1f)) {
-                            Text("${weekDayName(item.date)} · ${item.date.monthValue}/${item.date.dayOfMonth}",
-                                style = MaterialTheme.typography.titleMedium)
-                            Text(summary, style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
-                        }
-                        Text("›", style = MaterialTheme.typography.titleLarge, color = SageDark)
-                    }
-                }
-            }
         }
     }
 }
@@ -431,17 +464,6 @@ private fun shortSummary(review: ReviewSummary): String {
     return "留下了 ${moments.size} 个片段：${shortText(moments.first().title, 34)}；后来，${shortText(moments.last().title, 34)}"
 }
 
-private fun dailyCardSummary(review: ReviewSummary): String {
-    val happened = review.sections.firstOrNull { it.key == "happened" }?.content
-    if (!happened.isNullOrBlank()) return shortText(withoutLeadingDate(happened), 74)
-    val titles = review.moments.map { withoutLeadingDate(it.title.trim()) }.filter { it.isNotBlank() }.distinct()
-    return when {
-        titles.isEmpty() -> "这天没有留下记录"
-        titles.size == 1 -> shortText(titles.first(), 74)
-        else -> "${shortText(titles.first(), 34)}；${shortText(titles.last(), 34)}"
-    }
-}
-
 private fun weekCardSummary(review: ReviewSummary?): String {
     if (review == null || review.sourceEventIds.isEmpty()) return "这一周没有留下记录"
     val completed = review.sections.firstOrNull { it.key == "completed" }?.content
@@ -462,8 +484,6 @@ private fun sourceLabel(moment: ReviewMoment): String = when {
     moment.sourceMessageId != null -> "来自聊天 · 点击查看"
     else -> "已记录"
 }
-
-private fun weekDayName(date: LocalDate): String = listOf("周一", "周二", "周三", "周四", "周五", "周六", "周日")[date.dayOfWeek.value - 1]
 
 private fun rangeTitle(state: GrowthUiState): String = when (state.period) {
     "日" -> state.anchorDate.format(chineseDate)

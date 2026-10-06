@@ -37,7 +37,13 @@ data class ReviewSummary(
 )
 
 data class SyncedRecord(val serverId: Long, val clientId: String)
-data class DemoDataResult(val created: Int, val deleted: Int, val theme: String)
+data class DemoDataResult(
+    val created: Int,
+    val deleted: Int,
+    val theme: String,
+    val rangeStart: String? = null,
+    val rangeEnd: String? = null,
+)
 data class ReviewOverview(
     val review: ReviewSummary,
     val dailyReviews: List<Pair<String, ReviewSummary?>> = emptyList(),
@@ -111,6 +117,7 @@ class ReviewApiClient(private val baseUrl: String? = null) {
                 attempt = row.optString("attempt").takeIf { it.isNotBlank() && it != "null" },
                 confidence = if (row.isNull("confidence")) null else row.optDouble("confidence"),
                 sourceType = row.optString("source_type").takeIf { it.isNotBlank() && it != "null" },
+                feeling = row.optString("feeling").takeIf { it.isNotBlank() && it != "null" },
             )
         }
     }
@@ -217,8 +224,10 @@ class ReviewApiClient(private val baseUrl: String? = null) {
         request("/data?device_id=${Uri.encode(deviceId)}", "DELETE")
     }
 
-    suspend fun createDemoData(deviceId: String): DemoDataResult = withContext(Dispatchers.IO) {
-        parseDemoResult(JSONObject(request("/dev/demo-data", "POST", JSONObject().put("device_id", deviceId))))
+    suspend fun createDemoData(deviceId: String, preset: String? = null): DemoDataResult = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("device_id", deviceId)
+        if (preset != null) body.put("preset", preset)
+        parseDemoResult(JSONObject(request("/dev/demo-data", "POST", body)))
     }
 
     suspend fun clearDemoData(deviceId: String): DemoDataResult = withContext(Dispatchers.IO) {
@@ -229,6 +238,8 @@ class ReviewApiClient(private val baseUrl: String? = null) {
         created = row.optInt("created"),
         deleted = row.optInt("deleted"),
         theme = row.optString("theme"),
+        rangeStart = row.optString("range_start").takeIf { it.isNotBlank() && it != "null" },
+        rangeEnd = row.optString("range_end").takeIf { it.isNotBlank() && it != "null" },
     )
 
     companion object {

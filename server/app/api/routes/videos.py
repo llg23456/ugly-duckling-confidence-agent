@@ -11,7 +11,9 @@ from app.schemas.video import (
     VideoKeywordSuggestionRequest, VideoKeywordSuggestionResponse,
     VideoScriptRequest, VideoScriptResponse, VideoScriptUpdate,
 )
-from app.services.video_service import PROMPT_VERSION, generate_captions, scenes_for, suggest_keywords
+from app.services.video_service import (
+    PROMPT_VERSION, generate_captions, group_events_by_day, scenes_for, suggest_keywords,
+)
 from app.services.video_render_service import render_uploaded_video
 
 router = APIRouter(prefix="/videos", tags=["videos"])
@@ -67,6 +69,9 @@ def create_script(request: VideoScriptRequest, db: Session = Depends(get_db)) ->
         raise HTTPException(status_code=422, detail="部分事件已不存在，请返回周报告后重新进入")
     if any(item.sensitivity == "high" for item in events):
         raise HTTPException(status_code=422, detail="高敏感内容不能加入分享视频")
+    day_count = len(group_events_by_day(events))
+    if day_count not in range(3, 8):
+        raise HTTPException(status_code=422, detail="成长小片需要选择三到七天的素材")
     try:
         captions, model = generate_captions(events)
         scenes = scenes_for(events, captions)
@@ -92,13 +97,13 @@ def get_script(script_id: int, device_id: str, db: Session = Depends(get_db)) ->
 @router.patch("/scripts/{script_id}", response_model=VideoScriptResponse)
 def update_script(script_id: int, request: VideoScriptUpdate, db: Session = Depends(get_db)) -> VideoScriptResponse:
     script = _owned(db, script_id, request.device_id)
-    allowed = set(script.source_event_ids)
-    positions = {event_id: index for index, event_id in enumerate(script.source_event_ids)}
-    scene_ids = [scene.source_event_ids[0] for scene in request.scenes]
+    original_groups = [tuple(scene.get("source_event_ids", [])) for scene in script.scenes]
+    group_positions = {group: index for index, group in enumerate(original_groups)}
+    requested_groups = [tuple(scene.source_event_ids) for scene in request.scenes]
     if (
-        len(scene_ids) != len(set(scene_ids))
-        or any(event_id not in allowed for event_id in scene_ids)
-        or scene_ids != sorted(scene_ids, key=positions.get)
+        len(requested_groups) != len(set(requested_groups))
+        or any(group not in group_positions for group in requested_groups)
+        or requested_groups != sorted(requested_groups, key=group_positions.get)
         or any(not scene.text.strip() for scene in request.scenes)
     ):
         raise HTTPException(status_code=422, detail="片段来源或内容无效")
@@ -114,7 +119,7 @@ def render_video(
     script_id: int,
     device_id: str = Form(min_length=1, max_length=128),
     manifest: str = Form(min_length=2),
-    files: list[UploadFile] = File(min_length=3, max_length=21),
+    files: list[UploadFile] = File(min_length=3, max_length=120),
     db: Session = Depends(get_db),
 ) -> Response:
     _owned(db, script_id, device_id)

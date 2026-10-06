@@ -15,9 +15,11 @@ private val FriendlyArtFont = FontFamily(
 val Typography = Typography(
     displaySmall = TextStyle(fontFamily = FriendlyArtFont, fontWeight = FontWeight.Normal, fontSize = 32.sp, lineHeight = 40.sp, letterSpacing = 0.4.sp),
     headlineMedium = TextStyle(fontFamily = FriendlyArtFont, fontWeight = FontWeight.Normal, fontSize = 24.sp, lineHeight = 32.sp, letterSpacing = 0.3.sp),
-    titleLarge = TextStyle(fontFamily = FriendlyArtFont, fontWeight = FontWeight.Normal, fontSize = 20.sp, lineHeight = 27.sp, letterSpacing = 0.2.sp),
-    titleMedium = TextStyle(fontFamily = FriendlyArtFont, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 23.sp, letterSpacing = 0.15.sp),
-    bodyLarge = TextStyle(fontFamily = FriendlyArtFont, fontSize = 15.sp, lineHeight = 24.sp, letterSpacing = 0.1.sp),
-    bodyMedium = TextStyle(fontFamily = FriendlyArtFont, fontSize = 13.sp, lineHeight = 20.sp, letterSpacing = 0.05.sp),
-    labelLarge = TextStyle(fontFamily = FriendlyArtFont, fontWeight = FontWeight.Normal, fontSize = 13.sp, letterSpacing = 0.15.sp),
+    headlineSmall = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 22.sp, lineHeight = 30.sp),
+    titleLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 28.sp, letterSpacing = 0.1.sp),
+    titleMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 23.sp, letterSpacing = 0.1.sp),
+    bodyLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 15.sp, lineHeight = 24.sp, letterSpacing = 0.05.sp),
+    bodyMedium = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 13.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontFamily = FontFamily.SansSerif, fontSize = 12.sp, lineHeight = 18.sp),
+    labelLarge = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 13.sp, lineHeight = 18.sp),
 )

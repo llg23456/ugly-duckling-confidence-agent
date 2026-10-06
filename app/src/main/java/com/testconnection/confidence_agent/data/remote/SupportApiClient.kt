@@ -40,6 +40,7 @@ data class GrowthEvent(
     val attempt: String? = null,
     val confidence: Double? = null,
     val sourceType: String? = null,
+    val feeling: String? = null,
 )
 
 data class SupportFeedbackRecord(

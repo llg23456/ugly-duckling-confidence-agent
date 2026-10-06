@@ -36,6 +36,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import com.testconnection.confidence_agent.MainActivity
 import com.testconnection.confidence_agent.R
+import com.testconnection.confidence_agent.ui.AppDestination
 import com.testconnection.confidence_agent.data.model.RecordMode
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
 import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
@@ -68,10 +69,10 @@ object WidgetUpdater {
     }
 }
 
-private fun destinationIntent(context: Context, tab: Int, mode: RecordMode = RecordMode.TEXT, camera: Boolean = false) =
+private fun destinationIntent(context: Context, destination: AppDestination, mode: RecordMode = RecordMode.TEXT, camera: Boolean = false) =
     Intent(context, MainActivity::class.java).apply {
         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        putExtra(MainActivity.EXTRA_TARGET_TAB, tab)
+        putExtra(MainActivity.EXTRA_TARGET_TAB, destination.legacyCode)
         putExtra(MainActivity.EXTRA_RECORD_MODE, mode.name)
         putExtra(MainActivity.EXTRA_OPEN_CAMERA, camera)
     }
@@ -98,7 +99,7 @@ class TodayGrowthWidget : GlanceAppWidget() {
             val appContext = LocalContext.current
             Row(
                 modifier = GlanceModifier.fillMaxSize().background(cream).padding(16.dp)
-                    .clickable(actionStartActivity(destinationIntent(appContext, 1))),
+                    .clickable(actionStartActivity(destinationIntent(appContext, AppDestination.GROWTH))),
             ) {
                 Column(modifier = GlanceModifier.defaultWeight()) {
                     Title(if (snapshot.todaySelected) "我今天想留下的" else "今天也看见自己的进步")
@@ -132,14 +133,14 @@ class MonthlyFootprintWidget : GlanceAppWidget() {
             val appContext = LocalContext.current
             Column(
                 modifier = GlanceModifier.fillMaxSize().background(cream).padding(16.dp)
-                    .clickable(actionStartActivity(destinationIntent(appContext, 1))),
+                    .clickable(actionStartActivity(destinationIntent(appContext, AppDestination.GROWTH))),
             ) {
                 Title(if (snapshot.monthSelected) "我想留下的一笔" else "本月的小小足迹")
                 Spacer(GlanceModifier.height(6.dp))
                 Row {
                     val photo = loadWidgetBitmap(snapshot.monthPhotoPath, maxDimension = 140)
                     if (photo != null) Image(ImageProvider(photo), "选择的照片记录", modifier = GlanceModifier.size(70.dp))
-                    else Image(ImageProvider(R.drawable.duck_step), "向前走的小鸭", modifier = GlanceModifier.size(70.dp))
+                    else Image(ImageProvider(R.drawable.duck_growth_try_v3), "向前走的小鸭", modifier = GlanceModifier.size(70.dp))
                     Column(modifier = GlanceModifier.padding(start = 10.dp)) {
                         Text(if (snapshot.monthSelected) snapshot.monthText.ifBlank { "这条记录" } else if (snapshot.allowed) "${snapshot.monthCount} 个可展示事件" else "桌面展示未开启", style = TextStyle(color = sage, fontSize = 18.sp, fontWeight = FontWeight.Bold), maxLines = 3)
                         Text(if (snapshot.monthSelected) "你亲自选择的记录" else if (snapshot.allowed) "只统计适合公开的真实经历" else "打开应用后可自行选择", style = TextStyle(color = muted, fontSize = 13.sp))
@@ -173,9 +174,9 @@ private fun QuickRecordContent() {
         }
         Spacer(GlanceModifier.height(12.dp))
         Row(modifier = GlanceModifier.fillMaxWidth()) {
-            QuickAction("说一句", R.drawable.ic_record_voice, sagePale, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, 2, RecordMode.VOICE)))
-            QuickAction("写一句", R.drawable.ic_record_write, sagePale, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, 2, RecordMode.TEXT)))
-            QuickAction("拍一张", R.drawable.ic_record_photo, peach, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, 2, RecordMode.PHOTO, camera = true)))
+            QuickAction("说一句", R.drawable.ic_record_voice, sagePale, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, AppDestination.RECORD, RecordMode.VOICE)))
+            QuickAction("写一句", R.drawable.ic_record_write, sagePale, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, AppDestination.RECORD, RecordMode.TEXT)))
+            QuickAction("拍一张", R.drawable.ic_record_photo, peach, GlanceModifier.defaultWeight(), actionStartActivity(destinationIntent(context, AppDestination.RECORD, RecordMode.PHOTO, camera = true)))
         }
     }
 }

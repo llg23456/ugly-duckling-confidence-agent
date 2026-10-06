@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.testconnection.confidence_agent.ui.ConfidenceAgentApp
 import com.testconnection.confidence_agent.ui.ExternalDestination
+import com.testconnection.confidence_agent.ui.AppDestination
 import com.testconnection.confidence_agent.data.model.RecordMode
 import com.testconnection.confidence_agent.ui.theme.ConfidenceAgentTheme
 import androidx.compose.runtime.mutableStateOf
@@ -46,7 +47,7 @@ class MainActivity : ComponentActivity() {
             RecordMode.valueOf(intent.getStringExtra(EXTRA_RECORD_MODE) ?: RecordMode.TEXT.name)
         }.getOrDefault(RecordMode.TEXT)
         return ExternalDestination(
-            tab = intent.getIntExtra(EXTRA_TARGET_TAB, 0),
+            destination = AppDestination.fromLegacyCode(intent.getIntExtra(EXTRA_TARGET_TAB, 0)),
             recordMode = mode,
             openCamera = intent.getBooleanExtra(EXTRA_OPEN_CAMERA, false),
         )

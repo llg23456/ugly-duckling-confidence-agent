@@ -66,6 +66,7 @@ import com.testconnection.confidence_agent.data.repository.ChatRepository
 import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
 import com.testconnection.confidence_agent.data.model.RecordDraft
 import com.testconnection.confidence_agent.data.model.RecordMode
+import com.testconnection.confidence_agent.data.model.GrowthJourneyAnalyzer
 import com.testconnection.confidence_agent.R
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.WarmCard
@@ -168,7 +169,11 @@ fun VideoStudioScreen(
     }
     var sourceEventsError by remember(sourceEventIds) { mutableStateOf<String?>(null) }
     var sourceReloadToken by remember { mutableIntStateOf(0) }
-    val candidates = sourceEvents.filter { it.sensitivity != "high" }.take(40)
+    val candidates = sourceEvents.filter { it.sensitivity != "high" }
+        .sortedWith(compareBy<GrowthEvent> {
+            GrowthJourneyAnalyzer.day(it)?.toString().orEmpty()
+        }.thenBy { it.createdAt }.thenBy { it.id })
+        .take(40)
     val fallbackKeywordSuggestions = remember(candidates.map { it.id }) {
         fallbackVideoKeywordSuggestions(candidates)
     }
@@ -190,6 +195,11 @@ fun VideoStudioScreen(
     var notice by remember { mutableStateOf<String?>(null) }
     var voice by remember { mutableStateOf("Serena") }
     var keepOriginalVoice by remember { mutableStateOf(false) }
+    fun dayKey(event: GrowthEvent): String =
+        GrowthJourneyAnalyzer.day(event)?.toString() ?: event.createdAt.take(10)
+    val candidateById = candidates.associateBy { it.id }
+    val selectedDayKeys = selectedIds.mapNotNull(candidateById::get).map(::dayKey).toSet()
+    val selectedDayCount = selectedDayKeys.size
     val localRecords = remember(sourceEvents, resolvedRecordIds) { localRecordRepository.load().associateBy { it.id } }
     val recordForEvent: (Long) -> RecordDraft? = { eventId ->
         sourceEvents.firstOrNull { it.id == eventId }?.sourceRecordId
@@ -276,18 +286,20 @@ fun VideoStudioScreen(
         val score = keywordScore + topicScore
         event to score
     }.filter { (_, score) -> score > 0 }
-        .sortedByDescending { (_, score) -> score }
-        .take(20)
         .map { (event, _) -> event }
+        .sortedWith(compareBy<GrowthEvent> {
+            GrowthJourneyAnalyzer.day(it)?.toString().orEmpty()
+        }.thenBy { it.createdAt }.thenBy { it.id })
 
     fun createScript() {
-        if (selectedIds.size !in 3..7 || busy) return
+        if (selectedDayCount !in 3..7 || busy) return
         busy = true
         progressText = "正在生成故事脚本…"
         error = null
         video = null
         scope.launch {
-            runCatching { api.create(deviceId, selectedIds.toList()) }
+            val orderedIds = candidates.filter { it.id in selectedIds }.map { it.id }
+            runCatching { api.create(deviceId, orderedIds) }
                 .onSuccess { result -> script = result; scenes = result.scenes; notice = null }
                 .onFailure { failure -> error = failure.message ?: "脚本暂时无法生成，请检查服务后重试。" }
             busy = false
@@ -308,15 +320,20 @@ fun VideoStudioScreen(
             else { script = saved.getOrNull(); notice = null }
             val temporaryAudio = mutableListOf<File>()
             val renderScenes = runCatching {
-                scenes.mapIndexed { index, scene ->
+                val pages = mutableListOf<VideoRenderScene>()
+                scenes.forEachIndexed { index, scene ->
                     progressText = if (voice == "none") {
                         "正在准备第 ${index + 1}/${scenes.size} 段画面…"
                     } else {
                         "正在生成第 ${index + 1}/${scenes.size} 段配音…"
                     }
-                    val record = scene.sourceEventIds.firstNotNullOfOrNull(recordForEvent)
-                    val visualRecord = record?.takeIf { it.mode == RecordMode.PHOTO && it.photoPath?.let(::File)?.exists() == true }
-                    val voiceRecord = record?.takeIf { it.mode == RecordMode.VOICE && it.audioPath?.let(::File)?.exists() == true }
+                    val dayRecords = scene.sourceEventIds.mapNotNull(recordForEvent)
+                    val photoRecords = dayRecords.filter {
+                        it.mode == RecordMode.PHOTO && it.photoPath?.let(::File)?.exists() == true
+                    }.distinctBy { it.photoPath }
+                    val voiceRecord = dayRecords.firstOrNull {
+                        it.mode == RecordMode.VOICE && it.audioPath?.let(::File)?.exists() == true
+                    }
                     val narration = if (voice == "none") null else {
                         val target = File(context.cacheDir, "video-narration-${System.nanoTime()}-$index.wav")
                         val audio = chatRepository.synthesizeSpeech(scene.text, voice)
@@ -337,18 +354,32 @@ fun VideoStudioScreen(
                     val interAudioGap = if (narrationDuration > 0 && originalDuration > 0) 250L else 0L
                     val spokenDuration = narrationDuration + interAudioGap + originalDuration
                     val silentReadingDuration = (scene.text.length * 150L).coerceIn(4_000L, 18_000L)
-                    VideoRenderScene(
-                        scene = scene,
-                        photoPath = visualRecord?.photoPath,
-                        annotation = visualRecord?.photoComment.orEmpty().ifBlank { visualRecord?.aiDescription.orEmpty() },
-                        narrationPath = narration?.absolutePath,
-                        narrationDurationMs = narrationDuration,
-                        originalVoicePath = original?.absolutePath,
-                        originalVoiceDurationMs = originalDuration,
-                        durationMs = max(4_000L, if (spokenDuration > 0) spokenDuration + 800L else silentReadingDuration),
-                        isDemo = sourceEvents.any { it.id in scene.sourceEventIds && it.sourceType == "demo" },
-                    )
+                    val photoPages: List<List<RecordDraft>> = photoRecords.chunked(4).ifEmpty { listOf(emptyList()) }
+                    photoPages.forEachIndexed { pageIndex, pageRecords ->
+                        pages += VideoRenderScene(
+                            scene = scene,
+                            photoPaths = pageRecords.mapNotNull { it.photoPath },
+                            annotations = pageRecords.map {
+                                it.photoComment.ifBlank { it.aiDescription }
+                            },
+                            photoPage = pageIndex + 1,
+                            photoPageCount = photoPages.size,
+                            dayIndex = index + 1,
+                            dayCount = scenes.size,
+                            narrationPath = narration?.absolutePath.takeIf { pageIndex == 0 },
+                            narrationDurationMs = narrationDuration.takeIf { pageIndex == 0 } ?: 0L,
+                            originalVoicePath = original?.absolutePath.takeIf { pageIndex == 0 },
+                            originalVoiceDurationMs = originalDuration.takeIf { pageIndex == 0 } ?: 0L,
+                            durationMs = if (pageIndex == 0) {
+                                max(4_000L, if (spokenDuration > 0) spokenDuration + 800L else silentReadingDuration)
+                            } else {
+                                3_200L
+                            },
+                            isDemo = sourceEvents.any { it.id in scene.sourceEventIds && it.sourceType == "demo" },
+                        )
+                    }
                 }
+                pages
             }.getOrElse {
                 temporaryAudio.forEach(File::delete)
                 error = "配音生成失败，请检查网络，或选择无配音后重试。"
@@ -461,7 +492,7 @@ fun VideoStudioScreen(
         item {
             Text("‹ 成长小片", modifier = Modifier.noRippleClickable(onClick = onBack), style = MaterialTheme.typography.displaySmall)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("从本周报告里找出三到七个能连成故事的片段，不需要把整周都塞进视频。",
+                Text("从本周报告里选择三到七天的真实素材；同一天的多条记录会在下一步整理成一句完整故事。",
                     modifier = Modifier.weight(1f))
                 DuckArt(R.drawable.duck_story_picker, "挑选故事片段的小鸭", Modifier.height(112.dp))
             }
@@ -528,21 +559,27 @@ fun VideoStudioScreen(
                         Text("没有找到相关片段，换成更短的词或同义表达试试。")
                     }
                     if (searchResults.isNotEmpty()) {
-                        Text("找到 ${searchResults.size} 条，已按主题和关键词匹配度排序；视频最多选择 7 条。",
+                        Text("找到 ${searchResults.size} 条，已按记录时间从上到下排列；同一天可以选择多条，视频最多选择 7 天。",
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = {
-                                val additional = searchResults.map { it.id }
-                                    .filterNot(selectedIds::contains)
-                                    .take((7 - selectedIds.size).coerceAtLeast(0))
-                                selectedIds = selectedIds + additional
+                                val nextIds = selectedIds.toMutableSet()
+                                val nextDays = selectedDayKeys.toMutableSet()
+                                searchResults.forEach { event ->
+                                    val eventDay = dayKey(event)
+                                    if (eventDay in nextDays || nextDays.size < 7) {
+                                        nextIds += event.id
+                                        nextDays += eventDay
+                                    }
+                                }
+                                selectedIds = nextIds
                                 script = null; scenes = emptyList(); video = null
                             }) { Text("全选结果") }
                             TextButton(onClick = {
                                 selectedIds = emptySet()
                                 script = null; scenes = emptyList(); video = null
                             }) { Text("全部不选") }
-                            Text("已选 ${selectedIds.size}/7", modifier = Modifier.align(Alignment.CenterVertically), color = SageDark)
+                            Text("已选 ${selectedIds.size} 条 · $selectedDayCount/7 天", modifier = Modifier.align(Alignment.CenterVertically), color = SageDark)
                         }
                     }
                     searchResults.forEach { event ->
@@ -550,7 +587,8 @@ fun VideoStudioScreen(
                             Checkbox(
                                 checked = event.id in selectedIds,
                                 onCheckedChange = { checked ->
-                                    selectedIds = if (checked && selectedIds.size < 7) selectedIds + event.id
+                                    val eventDay = dayKey(event)
+                                    selectedIds = if (checked && (eventDay in selectedDayKeys || selectedDayCount < 7)) selectedIds + event.id
                                     else if (!checked) selectedIds - event.id else selectedIds
                                     script = null; scenes = emptyList(); video = null
                                 },
@@ -580,12 +618,12 @@ fun VideoStudioScreen(
                     }
                     Button(
                         onClick = ::createScript,
-                        enabled = selectedIds.size in 3..7 && !busy,
+                        enabled = selectedDayCount in 3..7 && !busy,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(if (selectedIds.size < 3) "还需选择 ${3 - selectedIds.size} 条" else "用已选片段生成故事脚本")
+                        Text(if (selectedDayCount < 3) "还需选择 ${3 - selectedDayCount} 天" else "用已选素材生成每日故事摘要")
                     }
-                    if (selectedIds.size in 1..2) Text("至少选择三条，故事才有开始、变化和继续。",
+                    if (selectedDayCount in 1..2) Text("至少选择三天；同一天有多条记录时会合并为一句摘要。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -593,7 +631,7 @@ fun VideoStudioScreen(
         if (script != null) item {
             WarmCard {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("预览并删改脚本", style = MaterialTheme.typography.titleLarge)
+                    Text("每日故事摘要", style = MaterialTheme.typography.titleLarge)
                     Text(if (script?.mock == true) "当前使用可编辑模板；未调用 AI。" else "已生成可编辑脚本，分享前请确认每一句都准确。")
                     Text("配音", style = MaterialTheme.typography.titleMedium)
                     listOf("Serena" to "温柔女声", "Ethan" to "温暖男声", "none" to "无配音").forEach { option ->
@@ -627,7 +665,7 @@ fun VideoStudioScreen(
                         }
                         OutlinedTextField(
                             value = scene.text,
-                            onValueChange = { value -> if (value.length <= 120) scenes = scenes.toMutableList().also { it[index] = scene.copy(text = value) } },
+                            onValueChange = { value -> if (value.length <= 1200) scenes = scenes.toMutableList().also { it[index] = scene.copy(text = value) } },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2,
                         )

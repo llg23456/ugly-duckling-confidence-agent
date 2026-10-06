@@ -20,6 +20,7 @@ import org.json.JSONObject
 class DataManagementRepository(private val context: Context) {
     private val appContext = context.applicationContext
     private val records = LocalRecordRepository(appContext)
+    private val communityPosts = CommunityPostStore(appContext)
     private val api = ReviewApiClient()
 
     suspend fun export(deviceId: String): File = withContext(Dispatchers.IO) {
@@ -35,6 +36,9 @@ class DataManagementRepository(private val context: Context) {
             addDirectory(zip, File(appContext.filesDir, "record_audio"), "media/audio")
             addDirectory(zip, File(appContext.filesDir, "chat_images"), "media/chat_images")
             addDirectory(zip, File(appContext.filesDir, "generated_videos"), "media/generated_videos")
+            addDirectory(zip, File(appContext.filesDir, CommunityPostStore.MEDIA_DIRECTORY), "media/community")
+            addDirectory(zip, File(appContext.filesDir, CommunityPostStore.PROFILE_DIRECTORY), "media/community_profile")
+            addDirectory(zip, File(appContext.filesDir, CommunityPostStore.CUSTOM_DIRECTORY), "media/community_custom")
         }
         output
     }
@@ -56,6 +60,7 @@ class DataManagementRepository(private val context: Context) {
         }
         val serverUnavailable = serverData.optBoolean("unavailable", false)
         val data = serverData.optJSONObject("data") ?: JSONObject()
+        val localCommunityPosts = communityPosts.exportJson()
         val localRows = buildLocalRows()
         val localByClientId = mutableMapOf<String, JSONObject>()
         for (index in 0 until localRows.length()) {
@@ -144,7 +149,8 @@ class DataManagementRepository(private val context: Context) {
                 .put("summary", JSONObject()
                     .put("chat_day_count", dailyChats.length())
                     .put("message_count", messages.length())
-                    .put("saved_record_count", savedRecords.length()))
+                    .put("saved_record_count", savedRecords.length())
+                    .put("community_post_count", localCommunityPosts.length()))
                 .put("assessment_rules", JSONObject()
                     .put("confidence_threshold", 0.75)
                     .put("value_formula", "0.30*long_term_value + 0.25*growth_significance + 0.20*specificity + 0.15*future_reuse + 0.10*support_value")
@@ -153,6 +159,9 @@ class DataManagementRepository(private val context: Context) {
                     .put("ignore", "value_score < 0.52 or no concrete fact")))
             .put("daily_chats", dailyChats)
             .put("saved_records", savedRecords)
+            .put("community_posts", localCommunityPosts)
+            .put("community_profile", communityPosts.exportProfileJson())
+            .put("community_customizations", communityPosts.exportCustomizationsJson())
             .put("memory_and_growth", JSONObject()
                 .put("growth_events", growthEvents)
                 .put("local_profile_history", journeyStore.export())
@@ -213,6 +222,7 @@ class DataManagementRepository(private val context: Context) {
         api.deleteAllData(deviceId)
         ChatDatabase.get(appContext).messages().clear()
         records.clearAll()
+        communityPosts.clearAll()
         ReviewCacheStore(appContext).clear()
         listOf("chat_images", "generated_videos").forEach { name ->
             File(appContext.filesDir, name).deleteRecursively()

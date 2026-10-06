@@ -52,6 +52,11 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
     private val reviewCache = ReviewCacheStore(application)
     private val _state = MutableStateFlow(GrowthUiState())
     private var requestVersion = 0
+    private val lastAnchors = mutableMapOf(
+        "日" to LocalDate.now().minusDays(1),
+        "周" to weekStart(LocalDate.now()).minusWeeks(1),
+        "月" to YearMonth.from(LocalDate.now()).atDay(1),
+    )
     val state = _state.asStateFlow()
 
     fun localRecordFor(serverId: Long): RecordDraft? {
@@ -141,12 +146,7 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun selectPeriod(period: String) {
-        val today = LocalDate.now()
-        val anchor = when (period) {
-            "日" -> today.minusDays(1)
-            "周" -> weekStart(today).minusWeeks(1)
-            else -> YearMonth.from(today).atDay(1)
-        }
+        val anchor = lastAnchors[period] ?: LocalDate.now().minusDays(1)
         loadSelection(period, anchor)
     }
 
@@ -181,6 +181,27 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun createExamWeekDemoData(onReady: (LocalDate) -> Unit) {
+        if (_state.value.loading || _state.value.refreshing) return
+        _state.update { it.copy(loading = true, error = null, demoNotice = null) }
+        viewModelScope.launch {
+            runCatching { api.createDemoData(deviceId, "exam_week_2026_09_07") }
+                .onSuccess { result ->
+                    reviewCache.markDirty()
+                    val start = result.rangeStart?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                        ?: LocalDate.of(2026, 9, 7)
+                    _state.update { it.copy(
+                        loading = false,
+                        demoNotice = "已生成 ${result.created} 天固定考研故事：${result.theme}",
+                    ) }
+                    onReady(start)
+                }
+                .onFailure { error ->
+                    _state.update { it.copy(loading = false, error = "固定故事生成失败：${error.message}") }
+                }
+        }
+    }
+
     fun clearDemoData() {
         if (_state.value.loading || _state.value.refreshing) return
         _state.update { it.copy(loading = true, error = null, demoNotice = null) }
@@ -197,6 +218,7 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun loadSelection(period: String, anchor: LocalDate) {
         if (_state.value.loading) return
+        lastAnchors[period] = anchor
         val (start, end) = selectionRange(period, anchor)
         val cached = reviewCache.load(periodKey(period), start.toString(), end.toString())
         val cachedData = cached?.let(::overviewToPeriodData)

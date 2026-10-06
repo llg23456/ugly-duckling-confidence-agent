@@ -23,7 +23,7 @@ class RenderScene(BaseModel):
 
 
 class RenderManifest(BaseModel):
-    scenes: list[RenderScene] = Field(min_length=3, max_length=7)
+    scenes: list[RenderScene] = Field(min_length=3, max_length=40)
 
 
 def _run(command: list[str], *, timeout: int = 120) -> subprocess.CompletedProcess:

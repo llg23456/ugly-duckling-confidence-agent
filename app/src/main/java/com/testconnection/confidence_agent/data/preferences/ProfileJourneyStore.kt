@@ -116,7 +116,8 @@ class ProfileJourneyStore(private val context: Context) {
             GrowthEvent(row.getLong("id"), row.getString("fact"), text("own_effort"), text("support_received"),
                 id("source_id") ?: id("source_user_message_id"), id("source_feedback_id"), id("source_record_id"), text("sensitivity"),
                 row.optJSONArray("people")?.let { people -> (0 until people.length()).map { people.getString(it) } }.orEmpty(),
-                row.getString("created_at"), text("attempt"), if (row.isNull("confidence")) null else row.optDouble("confidence"), text("source_type"))
+                row.getString("created_at"), text("attempt"), if (row.isNull("confidence")) null else row.optDouble("confidence"),
+                text("source_type"), text("feeling"))
         }.getOrNull()
 
         private fun eventJson(event: GrowthEvent) = JSONObject()
@@ -124,6 +125,7 @@ class ProfileJourneyStore(private val context: Context) {
             .put("support_received", event.supportReceived).put("source_id", event.sourceId)
             .put("source_feedback_id", event.sourceFeedbackId).put("source_record_id", event.sourceRecordId)
             .put("sensitivity", event.sensitivity).put("confidence", event.confidence).put("source_type", event.sourceType)
+            .put("feeling", event.feeling)
             .put("people", JSONArray(event.people)).put("created_at", event.createdAt)
     }
 }

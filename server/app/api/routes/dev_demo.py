@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -16,16 +16,21 @@ from app.services.check_in_service import evaluate_check_in
 router = APIRouter(prefix="/dev/demo-data", tags=["development"])
 DEMO_PREFIX = "demo-growth-"
 DEMO_THEME = "四周考研准备：从怀疑自己，到学会求助、调整和照顾生活"
+EXAM_WEEK_PRESET = "exam_week_2026_09_07"
+EXAM_WEEK_THEME = "备战考研的这一周：目标还在前面，但我已经更会面对生活"
 
 
 class DemoDataRequest(BaseModel):
     device_id: str = Field(min_length=1, max_length=128)
+    preset: str | None = Field(default=None, max_length=64)
 
 
 class DemoDataResponse(BaseModel):
     created: int = 0
     deleted: int = 0
     theme: str
+    range_start: str | None = None
+    range_end: str | None = None
 
 
 DEMO_DAYS = [
@@ -57,6 +62,16 @@ DEMO_DAYS = [
     ("向师姐反馈最近的调整，她说我能具体表达问题了，我也看见自己的主动。", "向师姐反馈进展并认真听取意见", "师姐给了关于表达问题的具体反馈"),
     ("我和父母聊了备考近况，既说学习，也说最近散步、运动和交朋友的经历。", "主动分享备考和生活近况", "父母愿意听我讲生活里的变化"),
     ("回看四周，我还没有考试结果，但遇到困难时更愿意尝试、求助和照顾自己。", "完成四周回顾并保留下一步计划", None),
+]
+
+EXAM_WEEK_DAYS = [
+    ("决定准备考研时，我既期待又紧张，也怀疑自己是不是适合这条路。", "愿意认真面对考研目标，并写下此刻的担心", None),
+    ("查了目标院校的招生说明，把专业课程、复习资料和备考节奏三个问题写在纸上。", "查阅招生说明并把模糊焦虑整理成三个具体问题", None),
+    ("联系学院老师请教专业方向和课程内容。老师没有替我决定，而是帮我看清可以继续了解什么。", "主动向学院老师请教考研方向", "学院老师帮我澄清了专业选择"),
+    ("做题错了很多，我把压力告诉父母，也和小鸭把今天的任务拆成二十分钟。父母愿意先听我说。", "说出受挫感受并完成二十分钟学习", "父母认真听我表达压力，小鸭陪我拆小任务"),
+    ("联系目标院校的师兄师姐，请教基础阶段怎样安排。他们建议我先抓薄弱点，我把计划精简成两项。", "写下问题并联系目标院校师兄师姐，随后调整计划", "师兄师姐分享经验，帮助我找到更适合的节奏"),
+    ("和同学慢跑十分钟，又到户外散步一会儿。我开始明白，休息不是放弃，是给生活留一点空间。", "学习之余慢跑并到户外散步", "同学陪我一起运动和放松"),
+    ("回望这一周，考试结果还没有发生，但我更敢提问、调整、求助和表达，也愿意照顾自己的生活。", "完成一周回顾，为下一周只保留一个小步骤", "老师、师兄师姐、父母和同学的支持让我不必独自硬撑"),
 ]
 
 
@@ -91,16 +106,19 @@ def _clear_demo_rows(db: Session, conversation_id: int) -> int:
 @router.post("", response_model=DemoDataResponse)
 def create_demo_data(request: DemoDataRequest, db: Session = Depends(get_db)) -> DemoDataResponse:
     _ensure_development()
+    if request.preset not in (None, "four_week", EXAM_WEEK_PRESET):
+        raise HTTPException(status_code=400, detail="不支持的演示故事预设")
     conversation = get_or_create_conversation(db, request.device_id)
     _clear_demo_rows(db, conversation.id)
-    yesterday = today_local() - timedelta(days=1)
-    first_day = yesterday - timedelta(days=len(DEMO_DAYS) - 1)
-    for index, (fact, effort, support) in enumerate(DEMO_DAYS):
+    is_exam_week = request.preset == EXAM_WEEK_PRESET
+    demo_days = EXAM_WEEK_DAYS if is_exam_week else DEMO_DAYS
+    first_day = date(2026, 9, 7) if is_exam_week else today_local() - timedelta(days=len(demo_days))
+    for index, (fact, effort, support) in enumerate(demo_days):
         day = first_day + timedelta(days=index)
         created_at = datetime.combine(day, time(hour=4), tzinfo=UTC)  # 北京时间中午 12 点
         record = UserRecord(
             conversation_id=conversation.id,
-            client_record_id=f"{DEMO_PREFIX}{day.isoformat()}",
+            client_record_id=f"{DEMO_PREFIX}{request.preset or 'four-week'}-{day.isoformat()}",
             mode="text",
             text=fact,
             photo_comment="",
@@ -126,13 +144,19 @@ def create_demo_data(request: DemoDataRequest, db: Session = Depends(get_db)) ->
             memory_decision="ignore",
             sensitivity="low",
             model="demo_seed",
-            prompt_version="demo.v3",
+            prompt_version="demo.exam-week.v1" if is_exam_week else "demo.v3",
             created_at=created_at,
         ))
     db.flush()
     evaluate_check_in(db, conversation.id)
     db.commit()
-    return DemoDataResponse(created=len(DEMO_DAYS), theme=DEMO_THEME)
+    last_day = first_day + timedelta(days=len(demo_days) - 1)
+    return DemoDataResponse(
+        created=len(demo_days),
+        theme=EXAM_WEEK_THEME if is_exam_week else DEMO_THEME,
+        range_start=first_day.isoformat(),
+        range_end=last_day.isoformat(),
+    )
 
 
 @router.delete("", response_model=DemoDataResponse)

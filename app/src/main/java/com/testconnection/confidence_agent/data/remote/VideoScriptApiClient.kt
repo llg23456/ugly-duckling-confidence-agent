@@ -108,7 +108,7 @@ class VideoScriptApiClient(private val baseUrl: String? = null) {
 
     suspend fun render(deviceId: String, scriptId: Long, assets: List<VideoRenderAsset>): ByteArray =
         withContext(Dispatchers.IO) {
-            require(assets.size in 3..7) { "视频需要三到七个片段" }
+            require(assets.size in 3..40) { "视频需要三到七天的片段" }
             val boundary = "confidence-video-${System.nanoTime()}"
             val manifestScenes = JSONArray()
             val uploads = mutableListOf<Triple<String, String, File>>()

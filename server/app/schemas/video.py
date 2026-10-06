@@ -25,13 +25,13 @@ class VideoScene(BaseModel):
     stage: Stage
     title: str = Field(default="成长记录", min_length=1, max_length=40)
     date: str | None = Field(default=None, max_length=10)
-    text: str = Field(min_length=1, max_length=120)
-    source_event_ids: list[int] = Field(default_factory=list, min_length=1, max_length=1)
+    text: str = Field(min_length=1, max_length=1200)
+    source_event_ids: list[int] = Field(default_factory=list, min_length=1, max_length=40)
 
 
 class VideoScriptRequest(BaseModel):
     device_id: str = Field(min_length=1, max_length=128)
-    event_ids: list[int] = Field(min_length=3, max_length=7)
+    event_ids: list[int] = Field(min_length=3, max_length=40)
 
 
 class VideoScriptUpdate(BaseModel):
