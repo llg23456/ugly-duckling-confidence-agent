@@ -30,7 +30,7 @@ FOLLOW_UP = {
     "current_context": "你最近主要在忙什么，或者正在经历什么呢？",
     "main_challenge": "现在最让你没信心或最想慢慢改善的是什么？",
     "preferred_support_style": "难受时，你更希望我先听你说、帮你回想经历，还是给一个小建议？",
-    "important_supporters": "遇到困难时，老师、同学、朋友或家人中，有谁可能愿意帮你呢？暂时没有也可以。",
+    "important_supporters": "遇到困难时，老师、师兄师姐、同学、朋友或家人中，有谁可能愿意帮你呢？暂时没有也可以。",
 }
 
 

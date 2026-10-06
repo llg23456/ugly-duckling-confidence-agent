@@ -108,6 +108,9 @@ class ReviewApiClient(private val baseUrl: String? = null) {
                 row.optString("sensitivity").takeIf { it.isNotBlank() && it != "null" },
                 row.optJSONArray("people")?.let { people -> (0 until people.length()).map { people.getString(it) } } ?: emptyList(),
                 row.getString("created_at"),
+                attempt = row.optString("attempt").takeIf { it.isNotBlank() && it != "null" },
+                confidence = if (row.isNull("confidence")) null else row.optDouble("confidence"),
+                sourceType = row.optString("source_type").takeIf { it.isNotBlank() && it != "null" },
             )
         }
     }

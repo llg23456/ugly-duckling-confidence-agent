@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.testconnection.confidence_agent.R
@@ -99,7 +100,9 @@ fun GrowthScreen(
         when {
             moment.sourceRecordId != null -> {
                 selectedRecord = growthViewModel.localRecordFor(moment.sourceRecordId)
-                if (selectedRecord == null) missingRecordMoment = moment
+                if (selectedRecord == null) growthViewModel.recordForEdit(moment.sourceRecordId) { record ->
+                    if (record != null) selectedRecord = record else missingRecordMoment = moment
+                }
             }
             moment.sourceFeedbackId != null -> onOpenFeedback()
             moment.sourceMessageId != null -> onOpenSource(moment.sourceMessageId)
@@ -133,6 +136,9 @@ fun GrowthScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        if (state.events.any { it.sourceType == "demo" && it.id in state.review?.sourceEventIds.orEmpty() }) item {
+            Text("考研演示故事 · 示例记录", style = MaterialTheme.typography.bodySmall, color = SageDark)
         }
         state.error?.let { message -> item {
             WarmCard {
@@ -223,10 +229,11 @@ private fun RangeNavigator(title: String, loading: Boolean, onPrevious: () -> Un
 
 @Composable
 private fun DailyOverview(date: LocalDate, review: ReviewSummary?) {
+    var expanded by remember(date) { mutableStateOf(false) }
     WarmCard {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionHeading(if (date == LocalDate.now().minusDays(1)) "昨天的生活回望" else date.format(chineseDate),
-                "聊天和生活记录汇成的一天")
+                "当天的一句话")
             if (review == null || review.sourceEventIds.isEmpty()) {
                 Text("这一天还没有留下记录。空白也没有关系，生活不需要每天都交作业。",
                     style = MaterialTheme.typography.bodyLarge)
@@ -238,14 +245,12 @@ private fun DailyOverview(date: LocalDate, review: ReviewSummary?) {
                 }
                 DuckArt(R.drawable.duck_writing, "翻看一天记录的小鸭", Modifier.size(86.dp))
             }
-            review.sections.filterNot { it.key == "happened" || it.key == "response" }.forEach {
-                ReviewSection(it.title, it.content)
+            if (expanded) {
+                review.sections.forEach { ReviewSection(it.title, it.content) }
+                if (review.sections.isEmpty()) Text(review.story)
+                Text(review.closing.ifBlank { "愿意留下这些，就已经是在认真看见自己。" }, color = SageDark)
             }
-            review.sections.firstOrNull { it.key == "response" }?.let {
-                ReviewSection(it.title, it.content)
-            }
-            Text(review.closing.ifBlank { "愿意留下这些，就已经是在认真看见自己。" },
-                style = MaterialTheme.typography.titleMedium, color = SageDark)
+            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "收起完整回望 ▴" else "展开完整回望 ▾") }
         }
     }
 }
@@ -257,24 +262,26 @@ private fun DaySources(
     onOpen: (ReviewMoment) -> Unit,
     onAddRecord: (LocalDate) -> Unit,
 ) {
+    var expanded by remember(date) { mutableStateOf(false) }
     WarmCard {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SectionHeading("这一天留下的记录", "点击可以回到文字、照片、语音或聊天来源")
+            SectionHeading("原始记录", "点开查看文字、照片、语音或聊天")
             val moments = review?.moments.orEmpty()
             if (moments.isEmpty()) Text("还没有可以查看的来源。")
-            moments.forEach { moment ->
+            (if (expanded) moments else moments.take(3)).forEach { moment ->
                 Surface(onClick = { onOpen(moment) }, shape = RoundedCornerShape(18.dp), color = SagePale) {
                     Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                        Text(moment.title, style = MaterialTheme.typography.bodyLarge)
+                        Text(moment.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(sourceLabel(moment), style = MaterialTheme.typography.bodyMedium, color = SageDark)
                     }
                 }
             }
+            if (moments.size > 3) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "收起记录" else "查看全部 ${moments.size} 条记录") }
             OutlinedButton(
                 onClick = { onAddRecord(date) },
                 modifier = Modifier.fillMaxWidth(),
                 shape = AppButtonShape,
-            ) { Text("＋ 为 ${date.monthValue}月${date.dayOfMonth}日补充文字、照片或语音") }
+            ) { Text("＋ 补充这一天的记录") }
         }
     }
 }
@@ -306,31 +313,35 @@ private fun WeekDays(days: List<DailyReviewEntry>, onOpenDay: (LocalDate) -> Uni
 
 @Composable
 private fun GrowthTimeline(moments: List<ReviewMoment>, onOpen: (ReviewMoment) -> Unit) {
+    var expanded by remember(moments) { mutableStateOf(false) }
     WarmCard {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SectionHeading("这周的成长线", "只串联有代表性的真实节点")
+            SectionHeading("这周的成长线")
             if (moments.isEmpty()) Text("这一周还没有形成成长节点。")
-            moments.take(7).forEachIndexed { index, moment ->
+            val shown = if (expanded) moments else moments.take(3)
+            shown.forEachIndexed { index, moment ->
                 Row(verticalAlignment = Alignment.Top) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Box(Modifier.size(11.dp).background(if (index % 2 == 0) SageDark else Terracotta, CircleShape))
-                        if (index < minOf(moments.size, 7) - 1) Box(Modifier.size(2.dp, 42.dp).background(SagePale))
+                        if (index < shown.size - 1) Box(Modifier.size(2.dp, 42.dp).background(SagePale))
                     }
                     Surface(onClick = { onOpen(moment) }, color = MaterialTheme.colorScheme.surface,
                         modifier = Modifier.padding(start = 12.dp).weight(1f)) {
                         Column {
                             Text(moment.date, style = MaterialTheme.typography.bodyMedium, color = SageDark)
-                            Text(moment.title, style = MaterialTheme.typography.bodyLarge)
+                            Text(moment.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
             }
+            if (moments.size > 3) TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "收起成长线" else "查看完整成长线 ›") }
         }
     }
 }
 
 @Composable
 private fun MonthlyOverview(review: ReviewSummary?) {
+    var expanded by remember(review?.id, review?.rangeStart) { mutableStateOf(false) }
     WarmCard {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SectionHeading("这个月，留下了什么", "用几句话看看长时间里的变化")
@@ -348,8 +359,8 @@ private fun MonthlyOverview(review: ReviewSummary?) {
                 DuckArt(R.drawable.duck_monthly_reflection, "翻看一个月记忆的小鸭", Modifier.size(118.dp))
             }
             if (review.sections.isNotEmpty()) {
-                review.sections.take(4).forEachIndexed { index, section ->
-                    HighlightCard(section.title, shortText(section.content, 90),
+                (if (expanded) review.sections else review.sections.take(3)).forEachIndexed { index, section ->
+                    HighlightCard(section.title, if (expanded) section.content else shortText(section.content, 58),
                         if (index % 2 == 0) SagePale else MaterialTheme.colorScheme.secondaryContainer)
                 }
             } else {
@@ -359,6 +370,11 @@ private fun MonthlyOverview(review: ReviewSummary?) {
                 }
                 HighlightCard("接下来的一小步", shortText(review.nextStep), MaterialTheme.colorScheme.surfaceVariant)
             }
+            if (expanded) {
+                if (review.sections.isEmpty()) Text(review.story)
+                if (review.closing.isNotBlank()) Text(review.closing, color = SageDark)
+            }
+            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "收起完整回望 ▴" else "查看完整月回望 ▾") }
         }
     }
 }

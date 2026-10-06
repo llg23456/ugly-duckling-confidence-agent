@@ -166,8 +166,8 @@ fun DataToolsScreen(
         if (BuildConfig.DEBUG) item {
             WarmCard {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                    SectionHeading("测试数据准备", "藏在数据管理里，不会出现在成长页和正式演示主线")
-                    Text("生成截至昨天的四周记录；其中 9 月 7—13 日是“从怀疑自己考不上，到带着忐忑坚定备考”的完整案例。",
+                    SectionHeading("测试数据准备", "仅开发版本可用，演示记录会在成长回望中标明来源")
+                    Text("生成截至昨天的四周考研故事：学习尝试、向师兄师姐和学院老师请教、家人支持，以及运动、户外和休息。演示故事不计入你的成长阶段。",
                         style = MaterialTheme.typography.bodyLarge)
                     state.demoNotice?.let { Text(it, color = SageDark) }
                     if (state.loading) CircularProgressIndicator(Modifier.size(24.dp), color = SageDark)

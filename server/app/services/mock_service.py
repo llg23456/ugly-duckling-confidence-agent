@@ -10,6 +10,11 @@ from app.schemas.review import ReviewMoment
 
 
 def mock_chat(request: ChatRequest) -> ChatResponse:
+    wants_step = request.mode == "suggest" or any(word in request.message for word in ("怎么办", "建议", "怎么调整"))
+    if wants_step and any(word in request.message for word in ("累", "疲惫", "学不进去", "熬夜")):
+        return ChatResponse(reply="听起来你有些累了。如果愿意，先离开书桌散步五分钟，回来再决定下一步。", strategy="small_step", evidence=[])
+    if wants_step and any(word in request.message for word in ("目标院校", "师兄", "师姐", "备考经验")):
+        return ChatResponse(reply="院校信息不清楚时，可以先写下一个问题，再问问目标院校的师兄师姐什么时候方便交流。", strategy="seek_support", evidence=[])
     return ChatResponse(
         reply="听起来你现在有些紧张。愿意说说最担心的那一小部分吗？",
         strategy="seek_support" if "答辩" in request.message else "listen",

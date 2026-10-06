@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -40,7 +42,7 @@ import com.testconnection.confidence_agent.ui.theme.SagePale
 import kotlinx.coroutines.launch
 
 private val kindLabels = listOf(
-    "teacher" to "老师", "classmate" to "同学", "friend" to "朋友",
+    "teacher" to "老师", "senior" to "师兄师姐", "classmate" to "同学", "friend" to "朋友",
     "family" to "家人", "professional" to "专业人士",
 )
 
@@ -120,7 +122,7 @@ fun SupportCircleScreen(onBack: () -> Unit) {
         dismissButton = { TextButton(onClick = { deleting = null }) { Text("取消") } },
     ) }
 
-    Column(Modifier.fillMaxSize().background(Cream).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(Modifier.fillMaxSize().background(Cream).statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text("‹ 支持圈", modifier = Modifier.noRippleClickable(onClick = onBack), style = MaterialTheme.typography.displaySmall)
         Text("只填写你愿意记下的人和适合求助的场景。不会读取通讯录，也不会自动联系任何人。", style = MaterialTheme.typography.bodyLarge)
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }

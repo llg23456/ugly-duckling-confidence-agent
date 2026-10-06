@@ -26,6 +26,7 @@ data class VideoRenderScene(
     val originalVoicePath: String? = null,
     val originalVoiceDurationMs: Long = 0,
     val durationMs: Long = 4_000,
+    val isDemo: Boolean = false,
 )
 
 class GrowthVideoRenderer(private val context: Context) {
@@ -92,14 +93,20 @@ class GrowthVideoRenderer(private val context: Context) {
                 }
             }
         } else {
-            val lines = sequenceOf(42f, 38f, 34f, 31f, 28f)
+            val illustration = BitmapFactory.decodeResource(context.resources, storyArt(caption))
+            if (illustration != null) {
+                canvas.drawBitmap(illustration, null, RectF(196f, 310f, 524f, 638f), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+                illustration.recycle()
+            }
+            sage.textSize = 21f
+            canvas.drawText("主题插画 · 装饰画面", 244f, 670f, sage)
+            val lines = sequenceOf(32f, 29f, 26f, 24f)
                 .map { size -> ink.textSize = size; size to wrap(caption, ink, 548f) }
-                .firstOrNull { (_, wrapped) -> wrapped.size <= 9 }
-                ?: (28f to wrap(caption, ink.apply { textSize = 28f }, 548f))
+                .firstOrNull { (_, wrapped) -> wrapped.size <= 8 }
+                ?: (24f to wrap(caption, ink.apply { textSize = 24f }, 548f))
             ink.textSize = lines.first
             val lineHeight = ink.textSize * 1.45f
-            val totalHeight = lines.second.size * lineHeight
-            val firstBaseline = 360f + ((590f - totalHeight) / 2f).coerceAtLeast(0f) + ink.textSize
+            val firstBaseline = 730f
             lines.second.forEachIndexed { lineIndex, line ->
                 canvas.drawText(line, 86f, firstBaseline + lineIndex * lineHeight, ink)
             }
@@ -111,11 +118,19 @@ class GrowthVideoRenderer(private val context: Context) {
         }
 
         sage.textSize = 28f
-        canvas.drawText("${index + 1} / $total  ·  只讲真实发生过的事", 52f, 1210f, sage)
+        canvas.drawText("${index + 1} / $total  ·  ${if (item.isDemo) "考研演示故事 · 示例记录" else "只讲真实发生过的事"}", 52f, 1210f, sage)
         val file = File(directory, "frame-${System.nanoTime()}-$index.png")
         file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
         return file
+    }
+
+    private fun storyArt(text: String): Int = when {
+        listOf("户外", "公园", "散步", "湖边").any(text::contains) -> R.drawable.duck_story_outdoors
+        listOf("运动", "慢跑", "健身", "操场").any(text::contains) -> R.drawable.duck_story_exercise
+        listOf("师兄", "师姐", "老师", "请教", "提问", "求助", "沟通").any(text::contains) -> R.drawable.duck_story_guidance
+        listOf("考研", "备考", "学习", "复习", "书", "做题").any(text::contains) -> R.drawable.duck_story_study
+        else -> R.drawable.duck_step
     }
 
     private fun displayDate(raw: String?): String {
