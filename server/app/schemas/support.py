@@ -4,7 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-SupporterType = Literal["teacher", "classmate", "friend", "family", "professional"]
+SupporterType = Literal["teacher", "senior", "classmate", "friend", "family", "professional"]
 FeedbackOutcome = Literal["helped", "not_helped", "not_contacted"]
 
 

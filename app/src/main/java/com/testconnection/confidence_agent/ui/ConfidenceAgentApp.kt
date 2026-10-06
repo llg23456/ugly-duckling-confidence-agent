@@ -130,13 +130,23 @@ fun ConfidenceAgentApp(
                 showMemoryCenter = false
             },
             onRestartOnboarding = {
+                userProfile = onboardingStore.loadProfile()
                 onboardingStore.reset()
                 showMemoryCenter = false
                 showOnboarding = true
             },
             onProfileUpdated = { updated ->
                 userProfile = updated
-                onboardingStore.saveProfile(updated, complete = true)
+                onboardingStore.saveProfile(updated, complete = true, reason = "画像更新")
+            },
+            onOpenFeedback = { showMemoryCenter = false; showSupportCircle = true },
+            onEditRecord = { record ->
+                requestedRecordMode = record.mode
+                requestedRecordDateEpochDay = java.time.Instant.ofEpochMilli(record.createdAt)
+                    .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
+                requestedEditRecord = record
+                selectedTab = 2
+                showMemoryCenter = false
             },
         )
         return
@@ -306,7 +316,7 @@ fun ConfidenceAgentApp(
                         voicePreferences = it
                         voicePreferencesStore.save(it)
                     },
-                    onOpenMemoryCenter = { showMemoryCenter = true },
+                    onOpenMemoryCenter = { userProfile = onboardingStore.loadProfile(); showMemoryCenter = true },
                     onOpenSupportCircle = { showSupportCircle = true },
                     onOpenDataTools = { showDataTools = true },
                     onServerEndpointChanged = {

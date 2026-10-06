@@ -1,0 +1,32 @@
+{
+  "tool": "built-in image_gen",
+  "transparent_background": true,
+  "reference": "app/src/main/res/drawable-nodpi/duck_step.png",
+  "destination": "app/src/main/res/drawable-nodpi",
+  "assets": [
+    {
+      "file": "duck_growth_start.png",
+      "prompt": "Use case: illustration-story. Asset: Android growth companion portrait PNG. Reference image is the current mascot style and identity, not an edit target. Generate stage 1 'starting': a small fluffy grey and cream duckling with sage green scarf, large kind brown eyes, golden bill and feet, slightly hesitant but warm expression, wings tucked, standing. Match the hand drawn pencil and soft watercolor storybook texture in the reference. Full body centered, lots of transparent padding, isolated character, genuine transparent background. No text, no badge, no extra objects. Keep this a young duck, not a swan yet."
+    },
+    {
+      "file": "duck_growth_open.png",
+      "prompt": "Use case: illustration-story. Asset: Android growth story decorative PNG, square framing. Reference image is mascot identity and artistic style, not edit target. The same mascot now a graceful young cream-white swan: slightly longer elegant neck, fluffy feather tuft and familiar brown eyes, golden bill, sage green scarf. Standing full body with wings softly open, calm confident expression. Still recognizably the same friendly companion, no crown or reward symbol. Match hand-drawn pencil and soft watercolor storybook texture, cream feathers, muted sage green and warm terracotta details. Centered composition, generous padding, isolated on a genuinely transparent background. No text, no letters, no labels, no watermark, no realistic human photographs."
+    },
+    {
+      "file": "duck_story_study.png",
+      "prompt": "Use case: illustration-story. Asset: Android growth story decorative PNG, square framing. Reference image is mascot identity and artistic style, not edit target. The familiar duckling reading an open book beside a small stack of books at a wooden library table, a simple warm desk lamp. A compact vignette of calm postgraduate study. Match hand-drawn pencil and soft watercolor storybook texture, cream feathers, muted sage green and warm terracotta details. Centered composition, generous padding, isolated on a genuinely transparent background. No text, no letters, no labels, no watermark, no realistic human photographs."
+    },
+    {
+      "file": "duck_story_guidance.png",
+      "prompt": "Use case: illustration-story. Asset: Android growth story decorative PNG, square framing. Reference image is mascot identity and artistic style, not edit target. The familiar duckling showing an open notebook to one slightly taller friendly duck with a sage scarf, in a simple campus corner. A compact vignette of asking a senior or teacher a question, listening and learning together. Match hand-drawn pencil and soft watercolor storybook texture, cream feathers, muted sage green and warm terracotta details. Centered composition, generous padding, isolated on a genuinely transparent background. No text, no letters, no labels, no watermark, no realistic human photographs."
+    },
+    {
+      "file": "duck_story_exercise.png",
+      "prompt": "Use case: illustration-story. Asset: Android growth story decorative PNG, square framing. Reference image is mascot identity and artistic style, not edit target. The familiar duckling walking briskly on a curved running track with a little water bottle nearby, wings relaxed, cheerful but gentle. A compact vignette of a short exercise break. Match hand-drawn pencil and soft watercolor storybook texture, cream feathers, muted sage green and warm terracotta details. Centered composition, generous padding, isolated on a genuinely transparent background. No text, no letters, no labels, no watermark, no realistic human photographs."
+    },
+    {
+      "file": "duck_story_outdoors.png",
+      "prompt": "Use case: illustration-story. Asset: Android growth story decorative PNG, square framing. Reference image is mascot identity and artistic style, not edit target. The familiar duckling strolling beside a small pond, a tree and reeds, enjoying a quiet park. A compact vignette of an outdoor rest. Match hand-drawn pencil and soft watercolor storybook texture, cream feathers, muted sage green and warm terracotta details. Centered composition, generous padding, isolated on a genuinely transparent background. No text, no letters, no labels, no watermark, no realistic human photographs."
+    }
+  ]
+}

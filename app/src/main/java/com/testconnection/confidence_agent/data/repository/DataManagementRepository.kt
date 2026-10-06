@@ -63,6 +63,10 @@ class DataManagementRepository(private val context: Context) {
         }
 
         val growthEvents = data.optJSONArray("growth_events") ?: JSONArray()
+        val journeyStore = com.testconnection.confidence_agent.data.preferences.ProfileJourneyStore(appContext)
+        if (!serverUnavailable) journeyStore.reconcile((0 until growthEvents.length()).mapNotNull {
+            com.testconnection.confidence_agent.data.preferences.ProfileJourneyStore.parseEvent(growthEvents.getJSONObject(it))
+        })
         val eventByMessageId = mutableMapOf<Long, JSONObject>()
         val eventByRecordId = mutableMapOf<Long, JSONObject>()
         for (index in 0 until growthEvents.length()) {
@@ -151,6 +155,7 @@ class DataManagementRepository(private val context: Context) {
             .put("saved_records", savedRecords)
             .put("memory_and_growth", JSONObject()
                 .put("growth_events", growthEvents)
+                .put("local_profile_history", journeyStore.export())
                 .put("long_term_memories", data.optJSONArray("memories") ?: JSONArray())
                 .put("daily_summaries", data.optJSONArray("daily_summaries") ?: JSONArray())
                 .put("period_reviews", data.optJSONArray("reviews") ?: JSONArray()))

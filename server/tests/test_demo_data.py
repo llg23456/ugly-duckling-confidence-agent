@@ -22,6 +22,13 @@ def test_demo_data_can_be_created_and_cleared_without_deleting_real_records(clie
     events = client.get(f"/api/v1/events?device_id={device_id}").json()["events"]
     assert len(events) == 29
     assert sum(item["source_type"] == "demo" for item in events) == 28
+    demo_text = " ".join(item["fact"] for item in events if item["source_type"] == "demo")
+    assert all(word in demo_text for word in ("考研", "师姐", "师兄", "学院老师", "运动", "户外", "休息"))
+    assert "小组汇报" not in demo_text and "正式汇报" not in demo_text
+    keywords = client.post("/api/v1/videos/keywords", json={
+        "device_id": device_id, "event_ids": [item["id"] for item in events if item["source_type"] == "demo"],
+    }).json()
+    assert {"师兄师姐", "老师指导", "运动与户外"}.issubset({item["label"] for item in keywords["suggestions"]})
 
     cleared = client.request("DELETE", "/api/v1/dev/demo-data", json={"device_id": device_id})
     assert cleared.status_code == 200, cleared.text

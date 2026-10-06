@@ -63,6 +63,7 @@ class LocalRecordRepository(private val context: Context) {
         target.photoPath?.let { File(it).takeIf(File::exists)?.delete() }
         val pending = pendingDeletions().toMutableSet().apply { add(recordId) }
         preferences.edit().putStringSet("pending_deletions", pending).apply()
+        com.testconnection.confidence_agent.data.preferences.ProfileJourneyStore(context).removeRecord(recordId)
     }
 
     fun pendingDeletions(): Set<String> =

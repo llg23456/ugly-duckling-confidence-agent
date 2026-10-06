@@ -34,7 +34,9 @@ data class UserProfile(
         "想慢慢改变" to mainChallenge.value,
         "喜欢的陪伴" to preferredSupportStyle.value,
         "支持我的人" to importantSupporters.value,
-    ).filter { it.second != "unknown" }
+    ).filter { it.second != "unknown" }.map { (label, value) ->
+        label to when (value) { "prefer_not_to_say" -> "暂不透露"; "none" -> "暂时没有"; else -> value }
+    }
 
     companion object {
         fun fromJson(json: JSONObject): UserProfile = UserProfile(
