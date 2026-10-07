@@ -92,6 +92,7 @@ fun HomeScreen(
     val state by viewModel.uiState.collectAsState()
     val listState = rememberLazyListState()
     var requestedSourceId by remember { mutableStateOf<Long?>(null) }
+    var evidenceExpanded by remember(state.lastEvidence) { mutableStateOf(false) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var currentHour by remember { mutableStateOf(LocalTime.now().hour) }
@@ -454,32 +455,45 @@ fun HomeScreen(
                 shape = RoundedCornerShape(18.dp),
                 color = SagePale,
             ) {
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("想起一件事", style = MaterialTheme.typography.bodyMedium, color = SageDark)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            state.lastEvidence.first().summary,
+                            if (state.lastEvidence.size == 1) "想起一件事"
+                            else "想起一件事 · 另有 ${state.lastEvidence.size - 1} 条",
                             style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+                            color = SageDark,
+                            modifier = Modifier.weight(1f),
                         )
+                        if (state.lastEvidence.size > 1) TextButton(onClick = { evidenceExpanded = !evidenceExpanded }) {
+                            Text(if (evidenceExpanded) "收起" else "展开")
+                        }
                     }
-                    state.lastEvidence.first().sourceId?.let { sourceId ->
-                        TextButton(onClick = {
-                            viewModel.dismissEvidence()
-                            requestedSourceId = sourceId
-                            if (state.messages.none { it.id == sourceId }) viewModel.refreshHistory(includeArchived = true)
-                        }) { Text("查看") }
-                    }
-                    state.lastEvidence.first().sourceRecordId?.let { recordId ->
-                        TextButton(onClick = {
-                            viewModel.dismissEvidence()
-                            onOpenRecordSource(recordId)
-                        }) { Text("查看") }
+                    (if (evidenceExpanded) state.lastEvidence else state.lastEvidence.take(1)).forEach { evidence ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                evidence.summary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = if (evidenceExpanded) 4 else 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                            evidence.sourceId?.let { sourceId ->
+                                TextButton(onClick = {
+                                    viewModel.dismissEvidence()
+                                    requestedSourceId = sourceId
+                                    if (state.messages.none { it.id == sourceId }) viewModel.refreshHistory(includeArchived = true)
+                                }) { Text("查看") }
+                            }
+                            evidence.sourceRecordId?.let { recordId ->
+                                TextButton(onClick = {
+                                    viewModel.dismissEvidence()
+                                    onOpenRecordSource(recordId)
+                                }) { Text("查看") }
+                            }
+                        }
                     }
                 }
             }

@@ -207,7 +207,7 @@ fun MemoryCenterScreen(
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         CurrentStageHero(journey.stage, displayedProfile) {
                             selected = "成长阶段怎样变化" to
-                                "留下两个不同日期的真实尝试，会进入“尝试”；留下四个不同日期的尝试，并出现求助、调整方法或照顾自己，会进入“舒展”。停止记录不会降级，删除依据后会重新整理。"
+                                "留下两个不同日期的真实尝试，会进入“尝试”；留下四个不同日期的尝试，并出现求助、调整方法或照顾自己，会进入“成长”。停止记录不会降级，删除依据后会重新整理。"
                         }
                         GrowthStageTrack(journey.stage)
                     }

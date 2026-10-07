@@ -15,6 +15,8 @@ def test_support_strategy_uses_request_and_repeated_blockage() -> None:
     assert not needs_support("我今天完成了", [{"role": "user", "content": "之前卡住了"}])
     assert needs_support("考研专业方向不清楚，可以找谁请教")
     assert not needs_support("今天继续准备考研，感觉状态挺好")
+    assert needs_support("我现在很难过，不知道该怎么办")
+    assert not needs_support("我今天有一点难过")
 
 
 def test_postgraduate_support_selects_senior_and_teacher_by_situation(client: TestClient) -> None:
@@ -31,6 +33,19 @@ def test_postgraduate_support_selects_senior_and_teacher_by_situation(client: Te
     assert "自己的理解" in teacher["small_step"]
     unnamed = client.post("/api/v1/support/suggest", json={"situation": "想了解目标院校"}).json()
     assert unnamed["supporter_id"] is None and unnamed["supporter_type"] == "senior"
+
+
+def test_saved_support_circle_person_is_used_before_generic_fallback(client: TestClient) -> None:
+    saved = client.post("/api/v1/support-people", json={
+        "device_id": "sad-user", "name": "小雨", "relationship": "好朋友", "kind": "friend",
+        "scenarios": ["心情低落"],
+    }).json()
+    proposal = client.post("/api/v1/support/suggest", json={
+        "device_id": "sad-user", "situation": "我现在很难过，需要有人帮帮我",
+    }).json()
+    assert proposal["supporter_id"] == saved["id"]
+    assert proposal["supporter_name"] == "小雨"
+    assert "支持圈" in proposal["reason"]
 
 
 def test_support_people_crud_and_ownership(client: TestClient) -> None:

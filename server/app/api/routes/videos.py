@@ -14,7 +14,7 @@ from app.schemas.video import (
 from app.services.video_service import (
     PROMPT_VERSION, generate_captions, group_events_by_day, scenes_for, suggest_keywords,
 )
-from app.services.video_render_service import render_uploaded_video
+from app.services.video_render_service import render_uploaded_video, scene_music_moods
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 
@@ -122,8 +122,13 @@ def render_video(
     files: list[UploadFile] = File(min_length=3, max_length=120),
     db: Session = Depends(get_db),
 ) -> Response:
-    _owned(db, script_id, device_id)
-    video = render_uploaded_video(manifest, files)
+    script = _owned(db, script_id, device_id)
+    events = list(db.scalars(select(GrowthEvent).where(
+        GrowthEvent.conversation_id == script.conversation_id,
+        GrowthEvent.id.in_(script.source_event_ids),
+    )))
+    music_moods = scene_music_moods(script.scenes, events)
+    video = render_uploaded_video(manifest, files, scene_music_moods=music_moods)
     return Response(
         content=video,
         media_type="video/mp4",

@@ -150,6 +150,7 @@ fun VideoStudioScreen(
     sourceEventIds: Set<Long>,
     recordIds: Map<Long, String>,
     onBack: () -> Unit,
+    onPublishToCommunity: (File) -> Unit = {},
 ) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
@@ -402,6 +403,7 @@ fun VideoStudioScreen(
                         VideoRenderAsset(
                             frame = frames[index],
                             durationMs = scene.durationMs,
+                            scriptSceneIndex = scene.dayIndex - 1,
                             narration = scene.narrationPath?.let(::File),
                             narrationDurationMs = scene.narrationDurationMs,
                             originalVoice = scene.originalVoicePath?.let(::File),
@@ -707,6 +709,10 @@ fun VideoStudioScreen(
                         ) { Text("保存副本") }
                         OutlinedButton(onClick = { shareVideo(file) }, modifier = Modifier.weight(1f)) { Text("系统分享") }
                     }
+                    Button(
+                        onClick = { onPublishToCommunity(file) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("去社区写配文并发布") }
                 }
             }
         } }

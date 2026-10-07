@@ -15,7 +15,7 @@ data class GrowthJourney(
     val milestones: List<GrowthMilestone> = emptyList(),
 )
 
-val growthStageNames = listOf("起步", "尝试", "舒展")
+val growthStageNames = listOf("起步", "尝试", "成长")
 
 /** All labels describe evidenced behaviours, never a personality score or an exam result. */
 object GrowthJourneyAnalyzer {

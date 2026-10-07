@@ -187,7 +187,7 @@ private fun ExamWeekStoryHero() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text("备战考研的这一周", style = MaterialTheme.typography.headlineSmall)
-                    Text("9月7日—13日 · 考研演示故事", style = MaterialTheme.typography.bodyMedium, color = SageDark)
+                    Text("9月7日—13日", style = MaterialTheme.typography.bodyMedium, color = SageDark)
                     Text("目标还在前面，但我已经更会面对生活。", style = MaterialTheme.typography.bodyLarge)
                 }
                 DuckArt(R.drawable.duck_story_study, "备战考研的小鸭", Modifier.size(104.dp))
@@ -198,7 +198,7 @@ private fun ExamWeekStoryHero() {
                 Text("···", color = SageDark, modifier = Modifier.padding(horizontal = 6.dp))
                 StoryStage(R.drawable.duck_growth_try_v3, "尝试")
                 Text("···", color = SageDark, modifier = Modifier.padding(horizontal = 6.dp))
-                StoryStage(R.drawable.duck_growth_open_v3, "舒展")
+                StoryStage(R.drawable.duck_growth_open_v3, "成长")
             }
         }
     }

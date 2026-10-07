@@ -17,8 +17,20 @@ class GrowthEvent(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
+class ExtractedMemoryPoint(BaseModel):
+    content: str
+    kind: Literal["identity", "preference", "goal", "ongoing_context", "support_person", "experience"]
+    evidence_quote: str
+    confidence: float = Field(ge=0, le=1)
+    sensitivity: Literal["low", "medium", "high"]
+    temporal_scope: Literal["stable", "ongoing", "dated", "one_off"]
+    fact_status: Literal["asserted", "planned", "completed", "negated"]
+    memory_decision: Literal["ignore", "long_term", "confirm"]
+
+
 class EventExtractionResponse(BaseModel):
     event: GrowthEvent
     memory_decision: Literal["ignore", "daily", "long_term", "confirm"]
     reason: str
     mock: bool = True
+    memory_points: list[ExtractedMemoryPoint] = Field(default_factory=list)

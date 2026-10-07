@@ -2,14 +2,20 @@ from importlib import import_module
 from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, inspect, select, text
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.db.models import Conversation, Memory, Message
 from app.db.session import engine_for_url
 from app.schemas import ChatResponse
-from app.services.event_service import EventCandidate, decision
+from app.services.event_service import (
+    EventCandidate,
+    MemoryPointCandidate,
+    TurnExtraction,
+    decision,
+    memory_point_decision,
+)
 from app.services.memory_service import local_day, recall
 
 
@@ -23,6 +29,24 @@ def candidate(**changes) -> EventCandidate:
     return EventCandidate(**payload)
 
 
+def memory_point(message_id: int = 1, **changes) -> MemoryPointCandidate:
+    payload = dict(
+        content="我会主动向老师提问",
+        kind="experience",
+        evidence_quote="我今天在课堂上主动提问了",
+        source_message_ids=[message_id],
+        confidence=.95,
+        sensitivity="low",
+        temporal_scope="dated",
+        fact_status="completed",
+        importance=.85,
+        future_reuse=.8,
+        canonical_key="experience:ask_teacher",
+    )
+    payload.update(changes)
+    return MemoryPointCandidate(**payload)
+
+
 def test_decision_thresholds_and_sensitive_gate() -> None:
     assert decision(candidate())[1] == "long_term"
     assert decision(candidate(long_term_value=.6, growth_significance=.6, specificity=.6, future_reuse=.6, support_value=.6))[1] == "daily"
@@ -31,6 +55,11 @@ def test_decision_thresholds_and_sensitive_gate() -> None:
     assert decision(candidate(confidence=.5))[1] == "confirm"
     assert decision(candidate(is_conflicting=True))[1] == "confirm"
     assert decision(candidate(fact=""))[1] == "ignore"
+    assert decision(candidate(fact_status="planned"))[1] == "ignore"
+    assert decision(candidate(fact_status="negated"))[1] == "ignore"
+    assert memory_point_decision(memory_point())[1] == "long_term"
+    assert memory_point_decision(memory_point(fact_status="planned"))[1] == "ignore"
+    assert memory_point_decision(memory_point(sensitivity="medium"))[1] == "confirm"
 
 
 def test_extract_store_recall_edit_and_delete(client: TestClient, monkeypatch) -> None:
@@ -38,7 +67,15 @@ def test_extract_store_recall_edit_and_delete(client: TestClient, monkeypatch) -
     event_service = import_module("app.services.event_service")
     settings = Settings(_env_file=None, enable_live_ai=True, dashscope_api_key="test")
     monkeypatch.setattr(event_service, "get_settings", lambda: settings)
-    monkeypatch.setattr(event_service, "extract_candidate", lambda text, existing: candidate() if "今天" in text else candidate(fact=""))
+    def fake_extract(text, existing, context=None, current_message_id=None):
+        if "今天" not in text:
+            return TurnExtraction()
+        return TurnExtraction(
+            growth_event=candidate(),
+            memory_points=[memory_point(current_message_id, source_message_ids=[current_message_id])],
+        )
+
+    monkeypatch.setattr(event_service, "extract_turn", fake_extract)
     observed = []
 
     def fake_chat(request, history=None, evidence=None):
@@ -77,7 +114,15 @@ def test_pending_confirmation(client: TestClient, monkeypatch) -> None:
     chat_route = import_module("app.api.routes.chat")
     event_service = import_module("app.services.event_service")
     monkeypatch.setattr(event_service, "get_settings", lambda: Settings(_env_file=None, enable_live_ai=True, dashscope_api_key="test"))
-    monkeypatch.setattr(event_service, "extract_candidate", lambda text, existing: candidate(sensitivity="medium"))
+    monkeypatch.setattr(event_service, "extract_turn", lambda text, existing, context=None, current_message_id=None: TurnExtraction(
+        growth_event=candidate(sensitivity="medium"),
+        memory_points=[memory_point(
+            current_message_id,
+            source_message_ids=[current_message_id],
+            sensitivity="medium",
+            evidence_quote=text,
+        )],
+    ))
     monkeypatch.setattr(chat_route, "chat_with_fallback", lambda request, history=None, evidence=None: ChatResponse(reply="收到", strategy="listen", mock=False))
     client.post("/api/v1/chat", json={"device_id": "sensitive", "message": "我在课堂上主动提问"})
     item = client.get("/api/v1/memories?device_id=sensitive").json()["memories"][0]
@@ -91,8 +136,10 @@ def test_daily_draft_and_extraction_failure_do_not_break_chat(client: TestClient
     chat_route = import_module("app.api.routes.chat")
     event_service = import_module("app.services.event_service")
     monkeypatch.setattr(event_service, "get_settings", lambda: Settings(_env_file=None, enable_live_ai=True, dashscope_api_key="test"))
-    monkeypatch.setattr(event_service, "extract_candidate", lambda text, existing: candidate(
-        long_term_value=.6, growth_significance=.6, specificity=.6, future_reuse=.6, support_value=.6,
+    monkeypatch.setattr(event_service, "extract_turn", lambda text, existing, context=None, current_message_id=None: TurnExtraction(
+        growth_event=candidate(
+            long_term_value=.6, growth_significance=.6, specificity=.6, future_reuse=.6, support_value=.6,
+        ),
     ) if text != "broken" else (_ for _ in ()).throw(ValueError("invalid JSON")))
     monkeypatch.setattr(chat_route, "chat_with_fallback", lambda request, history=None, evidence=None: ChatResponse(reply="收到", strategy="listen", mock=False))
     assert client.post("/api/v1/chat", json={"device_id": "daily", "message": "今天试了一次"}).status_code == 200
@@ -101,6 +148,110 @@ def test_daily_draft_and_extraction_failure_do_not_break_chat(client: TestClient
     assert len(summaries) == 1 and summaries[0]["status"] == "draft"
     assert client.post("/api/v1/chat", json={"device_id": "daily", "message": "broken"}).status_code == 200
     assert len(client.get("/api/v1/events?device_id=daily").json()["events"]) == 1
+
+
+def test_multiple_memory_points_merge_and_explicit_correction(client: TestClient, monkeypatch) -> None:
+    chat_route = import_module("app.api.routes.chat")
+    event_service = import_module("app.services.event_service")
+    settings = Settings(_env_file=None, enable_live_ai=True, dashscope_api_key="test")
+    monkeypatch.setattr(event_service, "get_settings", lambda: settings)
+    monkeypatch.setattr(chat_route, "chat_with_fallback", lambda request, history=None, evidence=None: ChatResponse(
+        reply="收到", strategy="listen", mock=False,
+    ))
+
+    def fake_extract(text, existing, context=None, current_message_id=None):
+        if "小李" in text:
+            return TurnExtraction(memory_points=[
+                memory_point(
+                    current_message_id,
+                    content="用户希望被称为小李",
+                    kind="identity",
+                    evidence_quote="我叫小李",
+                    source_message_ids=[current_message_id],
+                    temporal_scope="stable",
+                    fact_status="asserted",
+                    canonical_key="identity:preferred_name",
+                ),
+                memory_point(
+                    current_message_id,
+                    content="用户的目标院校是北大",
+                    kind="goal",
+                    evidence_quote="目标院校是北大",
+                    source_message_ids=[current_message_id],
+                    temporal_scope="ongoing",
+                    fact_status="asserted",
+                    canonical_key="goal:target_school",
+                ),
+            ])
+        if "还是北大" in text:
+            return TurnExtraction(memory_points=[memory_point(
+                current_message_id,
+                content="用户的目标院校是北大",
+                kind="goal",
+                evidence_quote="目标院校还是北大",
+                source_message_ids=[current_message_id],
+                temporal_scope="ongoing",
+                fact_status="asserted",
+                canonical_key="goal:target_school",
+            )])
+        if "不是北大" in text:
+            return TurnExtraction(memory_points=[memory_point(
+                current_message_id,
+                content="用户的目标院校是北师大",
+                kind="goal",
+                evidence_quote="不是北大，是北师大",
+                source_message_ids=[current_message_id],
+                temporal_scope="ongoing",
+                fact_status="asserted",
+                canonical_key="goal:target_school",
+                explicit_correction=True,
+            )])
+        return TurnExtraction()
+
+    monkeypatch.setattr(event_service, "extract_turn", fake_extract)
+    client.post("/api/v1/chat", json={"device_id": "atomic", "message": "我叫小李，目标院校是北大"})
+    client.post("/api/v1/chat", json={"device_id": "atomic", "message": "我的目标院校还是北大"})
+    rows = client.get("/api/v1/memories?device_id=atomic").json()["memories"]
+    assert len(rows) == 2
+    assert next(item for item in rows if item["canonical_key"] == "goal:target_school")["occurrence_count"] == 2
+
+    client.post("/api/v1/chat", json={"device_id": "atomic", "message": "不是北大，是北师大"})
+    rows = client.get("/api/v1/memories?device_id=atomic").json()["memories"]
+    goals = [item for item in rows if item["canonical_key"] == "goal:target_school"]
+    assert {item["status"] for item in goals} == {"active", "superseded"}
+    assert next(item for item in goals if item["status"] == "active")["content"] == "用户的目标院校是北师大"
+
+
+def test_forget_previous_removes_memory_and_skips_recall(client: TestClient, monkeypatch) -> None:
+    chat_route = import_module("app.api.routes.chat")
+    event_service = import_module("app.services.event_service")
+    monkeypatch.setattr(event_service, "get_settings", lambda: Settings(
+        _env_file=None, enable_live_ai=True, dashscope_api_key="test",
+    ))
+    observed = []
+
+    def fake_chat(request, history=None, evidence=None):
+        observed.append(evidence or [])
+        return ChatResponse(reply="收到", strategy="listen", mock=False, evidence=evidence or [])
+
+    monkeypatch.setattr(chat_route, "chat_with_fallback", fake_chat)
+    monkeypatch.setattr(event_service, "extract_turn", lambda text, existing, context=None, current_message_id=None: TurnExtraction(
+        memory_points=[memory_point(
+            current_message_id,
+            content="用户准备报考北大",
+            kind="goal",
+            evidence_quote=text,
+            source_message_ids=[current_message_id],
+            temporal_scope="ongoing",
+            fact_status="asserted",
+            canonical_key="goal:target_school",
+        )],
+    ))
+    client.post("/api/v1/chat", json={"device_id": "forget", "message": "我准备报考北大"})
+    assert len(client.get("/api/v1/memories?device_id=forget").json()["memories"]) == 1
+    client.post("/api/v1/chat", json={"device_id": "forget", "message": "忘掉刚才那件事"})
+    assert observed[-1] == []
+    assert client.get("/api/v1/memories?device_id=forget").json()["memories"] == []
 
 
 def test_p0_sqlite_migration_keeps_rows(tmp_path) -> None:
@@ -118,6 +269,8 @@ def test_p0_sqlite_migration_keeps_rows(tmp_path) -> None:
         assert db.get(Message, 1).content == "以前的消息"
         assert db.get(Message, 1).used_memory_ids is None
         assert db.scalars(select(Memory)).all() == []
+        columns = {item["name"] for item in inspect(upgraded).get_columns("memories")}
+        assert {"kind", "confidence", "canonical_key", "source_excerpt", "occurrence_count"}.issubset(columns)
 
 
 def test_three_day_old_memory_has_source_and_is_recalled(tmp_path) -> None:

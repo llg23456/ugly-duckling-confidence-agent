@@ -9,7 +9,11 @@ from app.db.models import Base
 
 
 SQLITE_ADDITIONS = {
-    "messages": {"used_memory_ids": "JSON"},
+    "messages": {
+        "used_memory_ids": "JSON",
+        "model": "VARCHAR(100)",
+        "prompt_version": "VARCHAR(32)",
+    },
     "growth_events": {
         "source_user_message_id": "INTEGER",
         "source_type": "VARCHAR(16)",
@@ -36,6 +40,16 @@ SQLITE_ADDITIONS = {
         "is_user_edited": "BOOLEAN",
         "model": "VARCHAR(100)",
         "prompt_version": "VARCHAR(32)",
+        "kind": "VARCHAR(32)",
+        "confidence": "FLOAT",
+        "canonical_key": "VARCHAR(160)",
+        "source_excerpt": "TEXT",
+        "temporal_scope": "VARCHAR(16)",
+        "fact_status": "VARCHAR(16)",
+        "source_fingerprint": "VARCHAR(64)",
+        "last_seen_at": "DATETIME",
+        "occurrence_count": "INTEGER",
+        "supersedes_id": "INTEGER",
         "embedding": "JSON",
         "embedding_model": "VARCHAR(100)",
         "updated_at": "DATETIME",
@@ -76,6 +90,12 @@ def upgrade_existing_sqlite(engine) -> None:
         ))
         connection.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_memories_event_id ON memories (event_id)"
+        ))
+        connection.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_memories_canonical_key ON memories (canonical_key)"
+        ))
+        connection.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_memories_source_fingerprint ON memories (source_fingerprint)"
         ))
         connection.execute(text(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_growth_events_source_feedback_id "

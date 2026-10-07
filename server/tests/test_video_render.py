@@ -6,11 +6,54 @@ import struct
 import subprocess
 import wave
 import zlib
+from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException, UploadFile
 
-from app.services.video_render_service import render_uploaded_video
+from app.services.video_render_service import (
+    BACKGROUND_MUSIC_TRACKS, RenderManifest, _expanded_music_moods, _music_runs,
+    render_uploaded_video, scene_music_moods,
+)
+
+
+def test_background_music_asset_is_bundled():
+    assert set(BACKGROUND_MUSIC_TRACKS) == {"reflective", "bright"}
+    assert all(path.is_file() and path.stat().st_size > 100_000 for path in BACKGROUND_MUSIC_TRACKS.values())
+
+
+def test_scene_music_moods_and_adjacent_runs():
+    events = [
+        SimpleNamespace(id=1, feeling="忐忑", fact="担心复试", attempt=None, own_effort=None, support_received=None),
+        SimpleNamespace(id=2, feeling="低落", fact="今天有点难过", attempt=None, own_effort=None, support_received=None),
+        SimpleNamespace(id=3, feeling="平稳", fact="按计划完成复习", attempt=None, own_effort=None, support_received=None),
+        SimpleNamespace(id=4, feeling="轻松", fact="散步后轻松了", attempt=None, own_effort=None, support_received=None),
+    ]
+    scenes = [{"source_event_ids": [index]} for index in range(1, 5)]
+    moods = scene_music_moods(scenes, events)
+    assert moods == ["reflective", "reflective", "bright", "bright"]
+    assert _music_runs(moods, [1.0, 2.0, 3.0, 4.0]) == [
+        ("reflective", 3.0), ("bright", 7.0),
+    ]
+
+
+def test_music_mood_defaults_to_bright_for_tie_or_recovery():
+    events = [
+        SimpleNamespace(id=1, feeling="", fact="虽然担心但完成了", attempt=None, own_effort=None, support_received=None),
+        SimpleNamespace(id=2, feeling="没那么焦虑了", fact="缓过来一些", attempt=None, own_effort=None, support_received=None),
+    ]
+    assert scene_music_moods([{"source_event_ids": [1, 2]}], events) == ["bright"]
+
+
+def test_expanded_photo_pages_keep_their_script_scene_music():
+    draft = RenderManifest.model_validate({"scenes": [
+        {"frame": "a.png", "duration_ms": 1000, "script_scene_index": 0},
+        {"frame": "b.png", "duration_ms": 1000, "script_scene_index": 0},
+        {"frame": "c.png", "duration_ms": 1000, "script_scene_index": 1},
+    ]})
+    assert _expanded_music_moods(draft, ["reflective", "bright"]) == [
+        "reflective", "reflective", "bright",
+    ]
 
 
 def _png() -> bytes:
@@ -60,6 +103,12 @@ def test_render_rejects_total_over_five_minutes():
     assert error.value.status_code == 422
 
 
+def test_render_rejects_music_mood_count_mismatch():
+    with pytest.raises(HTTPException) as error:
+        render_uploaded_video(json.dumps(_manifest()), _uploads(), ["bright"])
+    assert error.value.status_code == 422
+
+
 def test_render_plays_narration_then_capped_original_and_repairs_wave(tmp_path):
     ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
     if not ffmpeg or not ffprobe:
@@ -69,7 +118,11 @@ def test_render_plays_narration_then_capped_original_and_repairs_wave(tmp_path):
     struct.pack_into("<I", narration, 40, 0xFFFFFFFF)
     draft = _manifest()
     draft["scenes"][0].update(narration="n.audio", original="o.audio", narration_duration_ms=99999)
-    video = render_uploaded_video(json.dumps(draft), _uploads({"n.audio": bytes(narration), "o.audio": _wave(6, 12000)}))
+    video = render_uploaded_video(
+        json.dumps(draft),
+        _uploads({"n.audio": bytes(narration), "o.audio": _wave(6, 12000)}),
+        ["reflective", "bright", "bright"],
+    )
     path = tmp_path / "test.mp4"
     path.write_bytes(video)
     result = subprocess.run([ffprobe, "-v", "error", "-show_entries", "format=duration:stream=codec_name,width,height", "-of", "json", str(path)], capture_output=True, check=True)

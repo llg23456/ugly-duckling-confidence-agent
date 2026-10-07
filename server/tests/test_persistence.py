@@ -1,6 +1,7 @@
 from importlib import import_module
 from types import SimpleNamespace
 import sys
+import json
 
 from fastapi.testclient import TestClient
 from sqlalchemy import inspect
@@ -8,6 +9,7 @@ from sqlalchemy import inspect
 from app.core.config import Settings
 from app.db.session import engine_for_url
 from app.schemas import ChatRequest, ChatResponse, MultimodalChatResponse
+from app.schemas.chat import MemoryEvidence
 from app.services.chat_service import _live_chat
 
 
@@ -27,7 +29,14 @@ def test_live_chat_sends_history_to_model(monkeypatch) -> None:
 
         def create(self, **kwargs):
             captured.update(kwargs)
-            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="我记得你刚才说的事。"))])
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({
+                "reply": "先把最卡的一题标出来，再决定下一步。",
+                "intent": "direct_question",
+                "strategy": "listen",
+                "topic": "学习下一步",
+                "used_memory_ids": [],
+                "used_record_ids": [],
+            }, ensure_ascii=False)))])
 
     monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
     settings = Settings(_env_file=None, enable_live_ai=True, dashscope_api_key="test-key")
@@ -39,6 +48,35 @@ def test_live_chat_sends_history_to_model(monkeypatch) -> None:
     assert response.mock is False
     assert [item["role"] for item in captured["messages"]] == ["system", "user", "assistant", "user"]
     assert captured["messages"][-1]["content"] == "那下一步呢？"
+    assert captured["response_format"] == {"type": "json_object"}
+    assert "strategy=listen" in captured["messages"][0]["content"]
+    assert response.reply.startswith("先把")
+
+
+def test_live_chat_returns_only_evidence_used_by_model(monkeypatch) -> None:
+    class FakeOpenAI:
+        def __init__(self, **_kwargs):
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+        def create(self, **_kwargs):
+            content = json.dumps({
+                "reply": "你之前说过数学容易卡住，可以先从那道错题开始。",
+                "intent": "direct_question",
+                "strategy": "listen",
+                "topic": "数学复习",
+                "used_memory_ids": [2, 999],
+                "used_record_ids": [],
+            }, ensure_ascii=False)
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
+
+    monkeypatch.setitem(sys.modules, "openai", SimpleNamespace(OpenAI=FakeOpenAI))
+    settings = Settings(_env_file=None, enable_live_ai=True, dashscope_api_key="test-key")
+    evidence = [
+        MemoryEvidence(summary="目标院校是北师大", source_date="2026-10-01", source_type="chat", source_id=1, memory_id=1),
+        MemoryEvidence(summary="数学复习容易卡住", source_date="2026-10-02", source_type="chat", source_id=2, memory_id=2),
+    ]
+    response = _live_chat(ChatRequest(device_id="test", message="数学怎么继续？"), settings, evidence=evidence)
+    assert [item.memory_id for item in response.evidence] == [2]
 
 
 def test_conversation_persists_and_uses_only_last_12_messages(client: TestClient, monkeypatch) -> None:

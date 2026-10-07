@@ -14,9 +14,33 @@ from pydantic import BaseModel, Field, ValidationError
 from app.core.config import get_settings
 
 
+ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets"
+BACKGROUND_MUSIC_TRACKS = {
+    "reflective": ASSET_ROOT / "bgm_reflective_chillax.m4a",
+    "bright": ASSET_ROOT / "bgm_bright_side.m4a",
+}
+BACKGROUND_MUSIC_VOLUME = 0.174  # About 10 dB below the previous 0.55 mix gain.
+# Keep the old constant for callers that only need the default track path.
+BACKGROUND_MUSIC = BACKGROUND_MUSIC_TRACKS["bright"]
+
+_REFLECTIVE_WORDS = (
+    "绝望", "崩溃", "低落", "难过", "沮丧", "紧张", "忐忑", "焦虑", "压力",
+    "担心", "害怕", "不自信", "怀疑", "受挫", "想放弃", "错了很多",
+)
+_BRIGHT_WORDS = (
+    "轻松", "平静", "平稳", "开心", "快乐", "有力量", "期待", "更敢", "愿意",
+    "帮助", "支持", "陪伴", "调整", "完成", "弄清楚", "看清", "休息", "运动", "户外",
+)
+_RECOVERY_WORDS = (
+    "不再焦虑", "不焦虑", "没那么焦虑", "不再紧张", "不紧张", "没那么紧张",
+    "不再难过", "没那么难过", "缓过来", "好多了",
+)
+
+
 class RenderScene(BaseModel):
     frame: str = Field(min_length=1)
     duration_ms: int = Field(ge=1, le=300_000)
+    script_scene_index: int | None = Field(default=None, ge=0, le=39)
     narration: str = ""
     narration_duration_ms: int = Field(default=0, ge=0, le=300_000)
     original: str = ""
@@ -24,6 +48,66 @@ class RenderScene(BaseModel):
 
 class RenderManifest(BaseModel):
     scenes: list[RenderScene] = Field(min_length=3, max_length=40)
+
+
+def _event_music_mood(event: object) -> str:
+    feeling = str(getattr(event, "feeling", "") or "").strip()
+    text = "；".join(str(getattr(event, field, "") or "") for field in (
+        "fact", "attempt", "own_effort", "support_received",
+    ))
+    combined = f"{feeling}；{text}"
+    if any(word in combined for word in _RECOVERY_WORDS):
+        return "bright"
+    if any(word in feeling for word in _REFLECTIVE_WORDS):
+        return "reflective"
+    if any(word in feeling for word in _BRIGHT_WORDS):
+        return "bright"
+    reflective_score = sum(combined.count(word) for word in _REFLECTIVE_WORDS)
+    bright_score = sum(combined.count(word) for word in _BRIGHT_WORDS)
+    return "reflective" if reflective_score > bright_score else "bright"
+
+
+def scene_music_moods(scenes: list[dict], events: list[object]) -> list[str]:
+    """Map every video scene to one of the two approved music moods."""
+    event_by_id = {getattr(event, "id", None): event for event in events}
+    result: list[str] = []
+    for scene in scenes:
+        moods = [
+            _event_music_mood(event_by_id[event_id])
+            for event_id in scene.get("source_event_ids", [])
+            if event_id in event_by_id
+        ]
+        reflective_count = moods.count("reflective")
+        # A tie or missing mood evidence uses the calm/positive track.
+        result.append("reflective" if reflective_count > len(moods) - reflective_count else "bright")
+    return result
+
+
+def _music_runs(moods: list[str], durations: list[float]) -> list[tuple[str, float]]:
+    """Merge adjacent scenes with the same mood so their track keeps playing."""
+    runs: list[tuple[str, float]] = []
+    for mood, duration in zip(moods, durations, strict=True):
+        selected = mood if mood in BACKGROUND_MUSIC_TRACKS else "bright"
+        if runs and runs[-1][0] == selected:
+            runs[-1] = (selected, runs[-1][1] + duration)
+        else:
+            runs.append((selected, duration))
+    return runs
+
+
+def _expanded_music_moods(draft: RenderManifest, moods: list[str] | None) -> list[str]:
+    if moods is None:
+        return ["bright"] * len(draft.scenes)
+    if any(mood not in BACKGROUND_MUSIC_TRACKS for mood in moods):
+        raise HTTPException(422, "视频情绪与片段配置不一致")
+    indexes = [scene.script_scene_index for scene in draft.scenes]
+    if any(index is not None for index in indexes):
+        if any(index is None or index >= len(moods) for index in indexes):
+            raise HTTPException(422, "视频情绪与片段配置不一致")
+        return [moods[index] for index in indexes if index is not None]
+    if len(moods) != len(draft.scenes):
+        raise HTTPException(422, "视频情绪与片段配置不一致")
+    return moods
 
 
 def _run(command: list[str], *, timeout: int = 120) -> subprocess.CompletedProcess:
@@ -62,11 +146,16 @@ def _duration(ffprobe: str, path: Path) -> float:
         raise HTTPException(422, "无法读取音频时长") from exc
 
 
-def render_uploaded_video(manifest: str, files: list[UploadFile]) -> bytes:
+def render_uploaded_video(
+    manifest: str,
+    files: list[UploadFile],
+    scene_music_moods: list[str] | None = None,
+) -> bytes:
     try:
         draft = RenderManifest.model_validate_json(manifest)
     except ValidationError as exc:
         raise HTTPException(422, "视频片段配置无效") from exc
+    expanded_music_moods = _expanded_music_moods(draft, scene_music_moods)
     filenames = [file.filename or "" for file in files]
     referenced = {name for scene in draft.scenes for name in (scene.frame, scene.narration, scene.original) if name}
     if (len(filenames) != len(set(filenames)) or set(filenames) != referenced
@@ -128,7 +217,47 @@ def render_uploaded_video(manifest: str, files: list[UploadFile]) -> bytes:
             clips.append(clip)
         listing = root / "clips.txt"
         listing.write_text("\n".join(f"file '{clip.name}'" for clip in clips), encoding="utf-8")
-        output = root / "growth.mp4"
+        base_output = root / "growth-base.mp4"
         _run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-f", "concat", "-safe", "1", "-i", str(listing),
-              "-c", "copy", "-movflags", "+faststart", str(output)])
+              "-c", "copy", "-movflags", "+faststart", str(base_output)])
+        if any(not path.is_file() for path in BACKGROUND_MUSIC_TRACKS.values()):
+            raise HTTPException(503, "视频背景音乐资源缺失")
+        output = root / "growth.mp4"
+        fade_out_start = max(0.0, total_duration - 1.5)
+        runs = _music_runs(expanded_music_moods, [item[3] for item in prepared])
+        mix_command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(base_output)]
+        filters = ["[0:a]aresample=48000,volume=0.5[main]"]
+        crossfade_duration = 0.5
+        for index, (mood, duration) in enumerate(runs):
+            mix_command += ["-stream_loop", "-1", "-i", str(BACKGROUND_MUSIC_TRACKS[mood])]
+            # Give every non-final run a small overlap so a crossfade does not shorten the video.
+            trim_duration = duration + (crossfade_duration if index < len(runs) - 1 else 0.0)
+            filters.append(
+                f"[{index + 1}:a]aresample=48000,atrim=duration={trim_duration:.3f},"
+                "asetpts=PTS-STARTPTS,loudnorm=I=-22:LRA=7:TP=-2.0,"
+                "aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                f"volume={BACKGROUND_MUSIC_VOLUME:.3f}[bg{index}]"
+            )
+        background_label = "[bg0]"
+        for index in range(1, len(runs)):
+            output_label = f"bgmix{index}"
+            filters.append(
+                f"{background_label}[bg{index}]acrossfade=d={crossfade_duration}:c1=tri:c2=tri"
+                f"[{output_label}]"
+            )
+            background_label = f"[{output_label}]"
+        filters.append(
+            f"{background_label}afade=t=in:st=0:d=1.5,"
+            f"afade=t=out:st={fade_out_start:.3f}:d=1.5[bg]"
+        )
+        filters.append(
+            "[main][bg]amix=inputs=2:duration=first:dropout_transition=1:normalize=0,"
+            "alimiter=limit=0.95[audio]"
+        )
+        mix_command += [
+            "-filter_complex", ";".join(filters), "-map", "0:v:0", "-map", "[audio]",
+            "-t", f"{total_duration:.3f}", "-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-ac", "2",
+            "-movflags", "+faststart", str(output),
+        ]
+        _run(mix_command)
         return output.read_bytes()

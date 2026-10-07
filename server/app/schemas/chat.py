@@ -17,6 +17,9 @@ class MemoryEvidence(BaseModel):
     source_id: int | None = None
     source_record_id: int | None = None
     memory_id: int | None = None
+    kind: str | None = None
+    confidence: float | None = None
+    relevance_score: float | None = None
 
 
 class ChatResponse(BaseModel):
@@ -29,6 +32,7 @@ class ChatResponse(BaseModel):
     user_message_id: int | None = None
     assistant_message_id: int | None = None
     check_in_scheduled: bool = False
+    safety_triggered: bool = False
 
 
 class ConversationMessage(BaseModel):
@@ -38,6 +42,8 @@ class ConversationMessage(BaseModel):
     content: str
     media_ref: str | None = None
     mock: bool = False
+    model: str | None = None
+    prompt_version: str | None = None
     created_at: datetime
 
 

@@ -38,7 +38,18 @@ def _item(db: Session, memory: Memory) -> MemoryItem:
         source_id=source_id,
         source_date=source_date,
         source_type=source_type,
-        value_score=memory.value_score, sensitivity=memory.sensitivity, created_at=memory.created_at,
+        value_score=memory.value_score,
+        sensitivity=memory.sensitivity,
+        kind=memory.kind or "experience",
+        confidence=memory.confidence,
+        canonical_key=memory.canonical_key,
+        source_excerpt=memory.source_excerpt,
+        temporal_scope=memory.temporal_scope,
+        fact_status=memory.fact_status,
+        last_seen_at=memory.last_seen_at,
+        occurrence_count=memory.occurrence_count or 1,
+        supersedes_id=memory.supersedes_id,
+        created_at=memory.created_at,
     )
 
 
@@ -60,6 +71,8 @@ def edit_memory(memory_id: int, request: MemoryUpdateRequest, db: Session = Depe
     memory.status = "active"
     memory.is_user_edited = True
     memory.updated_at = datetime.now(UTC)
+    memory.last_seen_at = memory.updated_at
+    memory.confidence = 1.0
     memory.embedding = None
     memory.embedding_model = None
     set_memory_embedding(memory)
@@ -72,6 +85,11 @@ def confirm_memory(memory_id: int, device_id: str = Query(min_length=1, max_leng
     memory = _owned(db, memory_id, device_id)
     if memory.status != "pending":
         raise HTTPException(status_code=409, detail="这条记忆无需确认")
+    if memory.supersedes_id:
+        previous = db.get(Memory, memory.supersedes_id)
+        if previous and previous.conversation_id == memory.conversation_id and previous.status == "active":
+            previous.status = "superseded"
+            previous.updated_at = datetime.now(UTC)
     memory.status = "active"
     memory.updated_at = datetime.now(UTC)
     db.commit()
@@ -81,6 +99,12 @@ def confirm_memory(memory_id: int, device_id: str = Query(min_length=1, max_leng
 @router.delete("/{memory_id}", status_code=204)
 def delete_memory(memory_id: int, device_id: str = Query(min_length=1, max_length=128), db: Session = Depends(get_db)) -> None:
     memory = _owned(db, memory_id, device_id)
+    dependents = list(db.scalars(select(Memory).where(
+        Memory.conversation_id == memory.conversation_id,
+        Memory.supersedes_id == memory.id,
+    )))
+    for dependent in dependents:
+        dependent.supersedes_id = None
     db.add(MemoryDeletion(
         conversation_id=memory.conversation_id,
         deleted_memory_id=memory.id,

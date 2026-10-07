@@ -5,6 +5,9 @@ from app.schemas.support import SupportSuggestionRequest, SupportSuggestionRespo
 BLOCKED_WORDS = ("卡住", "做不到", "不会", "失败", "没进展", "太难", "不敢")
 DIRECT_HELP_WORDS = ("帮我", "帮忙", "求助", "请人", "陪练", "找人", "找谁", "能问谁", "需要帮助")
 HARD_TASK_WORDS = ("答辩", "面试", "考试", "汇报", "完全不会", "一直做不到")
+DISTRESS_WORDS = ("压力很大", "撑不住", "很害怕", "非常紧张", "完全不会", "一直做不到")
+EMOTIONAL_DISTRESS_WORDS = ("难过", "低落", "无助", "崩溃", "撑不住", "很害怕", "很焦虑")
+EMOTIONAL_HELP_CUES = ("怎么办", "陪陪我", "陪我", "找谁", "找个人", "需要人", "帮帮我")
 
 
 def suggested_kind(situation: str) -> str:
@@ -16,9 +19,13 @@ def suggested_kind(situation: str) -> str:
 
 
 def needs_support(message: str, history: list[dict[str, str]] | None = None) -> bool:
+    if any(word in message for word in EMOTIONAL_DISTRESS_WORDS) and any(word in message for word in EMOTIONAL_HELP_CUES):
+        return True
     if any(word in message for word in ("考研", "目标院校")) and any(word in message for word in ("请教", "找谁", "不清楚", "不懂")):
         return True
-    if any(word in message for word in DIRECT_HELP_WORDS + HARD_TASK_WORDS):
+    if any(word in message for word in DIRECT_HELP_WORDS):
+        return True
+    if any(word in message for word in HARD_TASK_WORDS) and any(word in message for word in DISTRESS_WORDS):
         return True
     if not any(word in message for word in BLOCKED_WORDS):
         return False
@@ -38,10 +45,9 @@ def choose_person(
         match = sum(1 for scene in person.scenarios or [] if scene.strip() and scene.lower() in situation)
         context_match = int(person.kind == suggested_kind(situation))
         return preferred, match, context_match, -person.id
-    suitable = [person for person in people if person.kind in request.preferred_supporters
-                or person.kind == suggested_kind(situation)
-                or any(scene.strip() and scene.lower() in situation for scene in person.scenarios or [])]
-    return max(suitable, key=rank) if suitable else None
+    # 支持圈中的联系人由用户亲自保存。只要存在联系人，就优先从中选择；
+    # 场景、关系类型和本轮偏好只影响排序，不再退回虚构的泛称联系人。
+    return max(people, key=rank)
 
 
 def build_suggestion(request: SupportSuggestionRequest, person: SupportPerson | None) -> SupportSuggestionResponse:
@@ -68,7 +74,11 @@ def build_suggestion(request: SupportSuggestionRequest, person: SupportPerson | 
         small_step = "先把最难的一小部分写下来，试 5 分钟即可。"
         editable = f"{name}，我最近有件事有点卡住。你方便时愿意听我说说吗？"
     scenario_match = next((scene for scene in person.scenarios or [] if scene.strip() and scene.lower() in request.situation.lower()), None) if person else None
-    reason = f"你把{name}列为“{scenario_match}”时可求助的人，可以先问问对方是否方便。" if scenario_match else f"可以考虑联系{name}，先从一个小问题说起。"
+    reason = (
+        f"你把{name}列为“{scenario_match}”时可求助的人，可以先问问对方是否方便。"
+        if scenario_match
+        else f"{name}已经在你的支持圈里，可以先从一个小问题说起。"
+    ) if person else f"可以考虑联系{name}，先从一个小问题说起。"
     return SupportSuggestionResponse(
         supporter_type=kind, supporter_id=person.id if person else None,
         supporter_name=name, reason=reason, editable_message=editable,

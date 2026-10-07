@@ -15,8 +15,16 @@ def mock_chat(request: ChatRequest) -> ChatResponse:
         return ChatResponse(reply="听起来你有些累了。如果愿意，先离开书桌散步五分钟，回来再决定下一步。", strategy="small_step", evidence=[])
     if wants_step and any(word in request.message for word in ("目标院校", "师兄", "师姐", "备考经验")):
         return ChatResponse(reply="院校信息不清楚时，可以先写下一个问题，再问问目标院校的师兄师姐什么时候方便交流。", strategy="seek_support", evidence=[])
+    if "?" in request.message or "？" in request.message or any(
+        word in request.message for word in ("怎么", "为什么", "是什么", "能不能", "可以吗")
+    ):
+        return ChatResponse(
+            reply="我先记下了这个问题。当前是演示模式，暂时不能可靠回答具体内容；模型连接恢复后可以继续聊。",
+            strategy="listen",
+            evidence=[],
+        )
     return ChatResponse(
-        reply="听起来你现在有些紧张。愿意说说最担心的那一小部分吗？",
+        reply="我看到你说的这件事了。你可以继续补充最想让我回应的部分，也可以直接告诉我是想被倾听还是想要一个小建议。",
         strategy="seek_support" if "答辩" in request.message else "listen",
         evidence=[],
     )

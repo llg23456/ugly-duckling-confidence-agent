@@ -155,6 +155,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     handleCheckInScheduling(response.checkInScheduled)
+                    if (response.strategy == "seek_support") {
+                        requestSupport(prompt, response.userMessageId)
+                    }
                 }
                 .onFailure {
                     _uiState.update { state ->
@@ -190,6 +193,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 handleCheckInScheduling(response.checkInScheduled)
+                if (response.strategy == "seek_support") {
+                    requestSupport(transcript, response.userMessageId)
+                }
             } catch (error: Throwable) {
                 _uiState.update {
                     it.copy(
@@ -333,6 +339,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         lastReplyWasMock = response.isMock,
                         lastEvidence = response.evidence,
                     )
+                }
+                if (response.strategy == "seek_support") {
+                    requestSupport(message, response.userMessageId)
                 }
             }
             .onFailure {

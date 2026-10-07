@@ -28,6 +28,7 @@ class CommunityPostStore(context: Context) {
                         title = row.optString("title"),
                         content = row.optString("content"),
                         imagePath = row.optString("image_path").takeIf(String::isNotBlank),
+                        videoPath = row.optString("video_path").takeIf(String::isNotBlank),
                         sourceRecordId = row.optString("source_record_id").takeIf(String::isNotBlank),
                         topic = row.optString("topic").takeIf(String::isNotBlank),
                         createdAt = row.optLong("created_at", System.currentTimeMillis()),
@@ -72,17 +73,60 @@ class CommunityPostStore(context: Context) {
     fun importCustomPostImage(postId: String, uri: Uri): String =
         importCustomAsset(postId, uri, "post", KEY_CUSTOM_IMAGE_PREFIX)
 
+    fun importDraftVideo(uri: Uri): String {
+        val resolver = appContext.contentResolver
+        val mimeType = resolver.getType(uri).orEmpty().lowercase()
+        require(mimeType.startsWith("video/")) { "请选择视频文件" }
+        val extension = when (mimeType) {
+            "video/mp4" -> "mp4"
+            "video/webm" -> "webm"
+            "video/3gpp" -> "3gp"
+            "video/quicktime" -> "mov"
+            else -> "video"
+        }
+        val directory = File(appContext.cacheDir, DRAFT_DIRECTORY).apply { mkdirs() }
+        val target = File(directory, "draft-${UUID.randomUUID()}.$extension")
+        try {
+            resolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var total = 0L
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read < 0) break
+                        total += read
+                        require(total <= MAX_VIDEO_BYTES) { "视频不能超过 250 MB" }
+                        output.write(buffer, 0, read)
+                    }
+                }
+            } ?: error("无法读取视频文件")
+            require(target.length() > 0L) { "视频文件为空" }
+            return target.absolutePath
+        } catch (error: Throwable) {
+            target.delete()
+            throw error
+        }
+    }
+
+    fun discardDraftVideo(path: String?) {
+        val file = path?.let(::File) ?: return
+        val directory = File(appContext.cacheDir, DRAFT_DIRECTORY)
+        if (runCatching { file.parentFile?.canonicalFile == directory.canonicalFile }.getOrDefault(false)) file.delete()
+    }
+
     fun publish(draft: CommunityDraft, authorName: String): CommunityPost {
         val title = draft.title.trim().ifBlank {
             draft.content.trim().take(22).ifBlank { "今天留下的一点" }
         }
         val content = draft.content.trim()
         val hasSourcePhoto = draft.sourcePhotoPath?.let { File(it).isFile } == true
-        require(title.isNotBlank() && (content.isNotBlank() || hasSourcePhoto)) {
-            "写下一点内容或选择一张照片后再发布"
+        val hasSourceVideo = draft.sourceVideoPath?.let { File(it).isFile } == true
+        require(title.isNotBlank() && (content.isNotBlank() || hasSourcePhoto || hasSourceVideo)) {
+            "写下一点内容，或选择照片、视频后再发布"
         }
         val id = UUID.randomUUID().toString()
         val copiedPhoto = draft.sourcePhotoPath?.let { copyCommunityPhoto(it, id) }
+        val copiedVideo = draft.sourceVideoPath?.let { copyCommunityVideo(it, id) }
         val post = CommunityPost(
             id = id,
             authorName = authorName.ifBlank { "我" },
@@ -90,18 +134,20 @@ class CommunityPostStore(context: Context) {
             title = title.take(80),
             content = content.take(4000),
             imagePath = copiedPhoto,
+            videoPath = copiedVideo,
             sourceRecordId = draft.sourceRecordId,
             topic = draft.topic?.take(40),
             createdAt = System.currentTimeMillis(),
             isMine = true,
         )
         write(listOf(post) + loadOwnPosts())
+        discardDraftVideo(draft.sourceVideoPath)
         return post
     }
 
     fun delete(postId: String) {
         val target = loadOwnPosts().firstOrNull { it.id == postId } ?: return
-        target.imagePath?.let { path ->
+        listOfNotNull(target.imagePath, target.videoPath).forEach { path ->
             val file = File(path)
             val mediaDir = File(appContext.filesDir, MEDIA_DIRECTORY)
             if (file.parentFile?.canonicalFile == mediaDir.canonicalFile) file.delete()
@@ -131,7 +177,8 @@ class CommunityPostStore(context: Context) {
                 .put("source_record_id", post.sourceRecordId ?: JSONObject.NULL)
                 .put("created_at_ms", post.createdAt)
                 .put("liked_by_me", isLiked(post.id))
-                .put("photo_file_in_zip", post.imagePath?.let { "media/community/${File(it).name}" } ?: JSONObject.NULL))
+                .put("photo_file_in_zip", post.imagePath?.let { "media/community/${File(it).name}" } ?: JSONObject.NULL)
+                .put("video_file_in_zip", post.videoPath?.let { "media/community/${File(it).name}" } ?: JSONObject.NULL))
         }
     }
 
@@ -194,11 +241,19 @@ class CommunityPostStore(context: Context) {
     }
 
     private fun copyCommunityPhoto(sourcePath: String, postId: String): String? {
+        return copyCommunityMedia(sourcePath, "image-$postId", "jpg")
+    }
+
+    private fun copyCommunityVideo(sourcePath: String, postId: String): String? {
+        return copyCommunityMedia(sourcePath, "video-$postId", "mp4")
+    }
+
+    private fun copyCommunityMedia(sourcePath: String, targetName: String, fallbackExtension: String): String? {
         val source = File(sourcePath)
         if (!source.exists() || !source.isFile) return null
-        val extension = source.extension.takeIf { it.length in 2..5 } ?: "jpg"
+        val extension = source.extension.takeIf { it.length in 2..5 } ?: fallbackExtension
         val directory = File(appContext.filesDir, MEDIA_DIRECTORY).apply { mkdirs() }
-        val target = File(directory, "$postId.$extension")
+        val target = File(directory, "$targetName.$extension")
         source.inputStream().use { input -> target.outputStream().use(input::copyTo) }
         return target.absolutePath
     }
@@ -213,6 +268,7 @@ class CommunityPostStore(context: Context) {
                 .put("title", post.title)
                 .put("content", post.content)
                 .put("image_path", post.imagePath.orEmpty())
+                .put("video_path", post.videoPath.orEmpty())
                 .put("source_record_id", post.sourceRecordId.orEmpty())
                 .put("topic", post.topic.orEmpty())
                 .put("created_at", post.createdAt)
@@ -237,6 +293,8 @@ class CommunityPostStore(context: Context) {
         const val MEDIA_DIRECTORY = "community_media"
         const val PROFILE_DIRECTORY = "community_profile"
         const val CUSTOM_DIRECTORY = "community_custom"
+        const val DRAFT_DIRECTORY = "community_video_drafts"
+        private const val MAX_VIDEO_BYTES = 250L * 1024L * 1024L
         private const val KEY_POSTS = "posts"
         private const val KEY_LIKED = "liked_post_ids"
         private const val KEY_AVATAR_PATH = "avatar_path"

@@ -417,7 +417,22 @@ fun RecordScreen(
                         )
                     }
                     message?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = SageDark) }
-                    Text("▣ 保存的文字、转写与照片说明会进入成长回望；原声和照片留在本机。", style = MaterialTheme.typography.bodyMedium, color = InkMuted)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_record_growth_hint),
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        Text(
+                            "保存的文字、转写与照片说明会进入成长回望；原声和照片留在本机。",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = InkMuted,
+                        )
+                    }
                     Button(
                         onClick = { save("saved") },
                         modifier = Modifier.fillMaxWidth().height(52.dp),

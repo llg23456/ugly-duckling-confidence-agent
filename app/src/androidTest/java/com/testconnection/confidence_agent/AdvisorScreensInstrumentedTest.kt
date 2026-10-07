@@ -93,7 +93,7 @@ class AdvisorScreensInstrumentedTest {
         launchProfile()
         compose.onNodeWithText("记忆中心").performClick()
         compose.waitUntil(10_000) { compose.onAllNodesWithText("现在的关键词").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("舒展").assertIsDisplayed()
+        compose.onNodeWithText("成长").assertIsDisplayed()
         compose.onNodeWithText("照顾自己").assertIsDisplayed()
         screenshot("memory-offline")
         compose.onNodeWithText("照顾自己").performClick()

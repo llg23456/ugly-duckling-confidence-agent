@@ -31,6 +31,9 @@ data class MemoryEvidence(
     val sourceId: Long?,
     val sourceRecordId: Long?,
     val memoryId: Long?,
+    val kind: String? = null,
+    val confidence: Double? = null,
+    val relevanceScore: Double? = null,
 )
 
 private fun parseEvidence(json: JSONObject): List<MemoryEvidence> {
@@ -43,6 +46,9 @@ private fun parseEvidence(json: JSONObject): List<MemoryEvidence> {
                 item.optLong("source_id").takeIf { it > 0 },
                 item.optLong("source_record_id").takeIf { it > 0 },
                 item.optLong("memory_id").takeIf { it > 0 },
+                item.optString("kind").takeIf { it.isNotBlank() && it != "null" },
+                if (item.isNull("confidence")) null else item.optDouble("confidence"),
+                if (item.isNull("relevance_score")) null else item.optDouble("relevance_score"),
             ))
         }
     }

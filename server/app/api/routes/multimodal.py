@@ -12,6 +12,7 @@ from app.services.multimodal_service import chat_with_audio, chat_with_image, sy
 from app.services.check_in_service import schedule_explicit_follow_up
 from app.services.event_service import process_turn
 from app.services.memory_service import recall
+from app.services.chat_service import CHAT_PROMPT_VERSION, suppress_memory_for_message
 
 
 router = APIRouter(prefix="/multimodal", tags=["multimodal"])
@@ -54,7 +55,11 @@ async def image_chat(
     conversation = get_conversation(db, device_id)
     history = model_history(recent_messages(db, conversation.id)) if conversation else []
     try:
-        evidence = recall(db, conversation.id, prompt) if conversation else []
+        evidence = (
+            recall(db, conversation.id, prompt, history=history, intent="listen")
+            if conversation and not suppress_memory_for_message(prompt)
+            else []
+        )
         result = chat_with_image(content, mime_type, prompt.strip(), history=history, evidence=evidence)
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"图片理解失败：{type(exc).__name__}") from exc
@@ -67,13 +72,16 @@ async def image_chat(
         media_ref=media_fingerprint(content),
         is_mock=result.mock,
         used_memory_ids=[item.memory_id for item in result.evidence if item.memory_id],
+        assistant_model=result.model,
+        prompt_version="safety-rule-v1" if result.safety_triggered else CHAT_PROMPT_VERSION,
     )
     result.user_message_id = user_message.id
     result.assistant_message_id = assistant_message.id
-    if schedule_explicit_follow_up(db, conversation.id, prompt) is not None:
+    if not result.safety_triggered and schedule_explicit_follow_up(db, conversation.id, prompt) is not None:
         db.commit()
         result.check_in_scheduled = True
-    background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
+    if not result.safety_triggered:
+        background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
     return result
 
 
@@ -94,7 +102,11 @@ async def audio_chat(
     try:
         result = chat_with_audio(
             content, mime_type, audio_format, device_id, history=history,
-            recall_for_text=(lambda transcript: recall(db, conversation.id, transcript)) if conversation else None,
+            recall_for_text=(
+                lambda transcript: [] if suppress_memory_for_message(transcript) else recall(
+                    db, conversation.id, transcript, history=history, intent="listen"
+                )
+            ) if conversation else None,
         )
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"语音理解失败：{type(exc).__name__}") from exc
@@ -107,13 +119,16 @@ async def audio_chat(
         media_ref=media_fingerprint(content),
         is_mock=result.mock,
         used_memory_ids=[item.memory_id for item in result.evidence if item.memory_id],
+        assistant_model=result.model,
+        prompt_version="safety-rule-v1" if result.safety_triggered else CHAT_PROMPT_VERSION,
     )
     result.user_message_id = user_message.id
     result.assistant_message_id = assistant_message.id
-    if schedule_explicit_follow_up(db, conversation.id, result.user_text) is not None:
+    if not result.safety_triggered and schedule_explicit_follow_up(db, conversation.id, result.user_text) is not None:
         db.commit()
         result.check_in_scheduled = True
-    background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
+    if not result.safety_triggered:
+        background_tasks.add_task(process_turn, str(db.get_bind().url), conversation.id, user_message.id, assistant_message.id)
     return result
 
 

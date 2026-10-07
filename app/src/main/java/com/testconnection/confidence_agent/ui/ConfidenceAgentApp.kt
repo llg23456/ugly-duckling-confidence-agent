@@ -75,6 +75,7 @@ fun ConfidenceAgentApp(
     var showVideoStudio by rememberSaveable { mutableStateOf(false) }
     var showWeeklyReport by rememberSaveable { mutableStateOf(false) }
     var showDataTools by rememberSaveable { mutableStateOf(false) }
+    var pendingCommunityVideoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceMessageId by rememberSaveable { mutableStateOf<Long?>(null) }
     var requestedRecordMode by remember { mutableStateOf(RecordMode.TEXT) }
     var requestedRecordDateEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -173,6 +174,12 @@ fun ConfidenceAgentApp(
             sourceEventIds = sourceIds,
             recordIds = growthState.recordIds,
             onBack = { showVideoStudio = false },
+            onPublishToCommunity = { file ->
+                pendingCommunityVideoPath = file.absolutePath
+                showVideoStudio = false
+                communityDetailOpen = false
+                selectedDestination = AppDestination.COMMUNITY
+            },
         )
         return
     }
@@ -326,6 +333,8 @@ fun ConfidenceAgentApp(
                     contentPadding = padding,
                     userName = displayName,
                     onDetailVisibilityChanged = { communityDetailOpen = it },
+                    initialVideoPath = pendingCommunityVideoPath,
+                    onInitialVideoConsumed = { pendingCommunityVideoPath = null },
                 )
                 AppDestination.RECORD -> RecordScreen(
                     contentPadding = padding,

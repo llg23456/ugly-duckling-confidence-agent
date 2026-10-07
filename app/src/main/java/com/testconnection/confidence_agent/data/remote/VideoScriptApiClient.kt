@@ -41,6 +41,7 @@ data class VideoScript(
 data class VideoRenderAsset(
     val frame: File,
     val durationMs: Long,
+    val scriptSceneIndex: Int,
     val narration: File? = null,
     val narrationDurationMs: Long = 0,
     val originalVoice: File? = null,
@@ -119,6 +120,7 @@ class VideoScriptApiClient(private val baseUrl: String? = null) {
                 manifestScenes.put(JSONObject()
                     .put("frame", frameName)
                     .put("duration_ms", asset.durationMs)
+                    .put("script_scene_index", asset.scriptSceneIndex)
                     .put("narration", narrationName ?: "")
                     .put("narration_duration_ms", asset.narrationDurationMs)
                     .put("original", originalName ?: ""))

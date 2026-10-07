@@ -15,6 +15,10 @@ data class SavedMemory(
     val sourceId: Long?,
     val sourceDate: String?,
     val sourceType: String?,
+    val kind: String? = null,
+    val confidence: Double? = null,
+    val sourceExcerpt: String? = null,
+    val occurrenceCount: Int = 1,
 )
 
 data class DailySummaryDraft(val day: String, val content: String)
@@ -55,6 +59,10 @@ class MemoryApiClient(private val baseUrl: String? = null) {
                     sourceId = item.optLong("source_id").takeIf { it > 0 },
                     sourceDate = item.optString("source_date").takeIf { it.isNotBlank() && it != "null" },
                     sourceType = item.optString("source_type").takeIf { it.isNotBlank() && it != "null" },
+                    kind = item.optString("kind").takeIf { it.isNotBlank() && it != "null" },
+                    confidence = if (item.isNull("confidence")) null else item.optDouble("confidence"),
+                    sourceExcerpt = item.optString("source_excerpt").takeIf { it.isNotBlank() && it != "null" },
+                    occurrenceCount = item.optInt("occurrence_count", 1).coerceAtLeast(1),
                 ))
             }
         }

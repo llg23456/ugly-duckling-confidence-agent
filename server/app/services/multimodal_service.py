@@ -7,9 +7,13 @@ from openai import OpenAI
 
 from app.core.config import Settings, get_settings
 from app.schemas import ChatRequest, MultimodalChatResponse
-from app.services.chat_service import SYSTEM_PROMPT, chat_with_fallback
+from app.services.chat_service import (
+    chat_with_fallback,
+    dialogue_system_prompt,
+    generate_structured_dialogue,
+    is_crisis_message,
+)
 from app.schemas.chat import MemoryEvidence
-from app.services.memory_service import memory_prompt
 
 
 TRANSCRIPTION_PROMPT = """请准确转写这段用户语音。
@@ -60,22 +64,6 @@ def _finalize_streaming_wav(content: bytes) -> bytes:
     return bytes(audio)
 
 
-def _message_text(content) -> str:
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, dict):
-                parts.append(str(item.get("text", "")))
-            else:
-                text = getattr(item, "text", None)
-                if text:
-                    parts.append(str(text))
-        return "".join(parts).strip()
-    return ""
-
-
 def chat_with_image(
     image_bytes: bytes,
     mime_type: str,
@@ -85,10 +73,18 @@ def chat_with_image(
     evidence: list[MemoryEvidence] | None = None,
 ) -> MultimodalChatResponse:
     active_settings = settings or get_settings()
-    completion = _client(active_settings).chat.completions.create(
-        model=active_settings.chat_model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT + "\n" + memory_prompt(evidence or [])},
+    evidence = evidence or []
+    request = ChatRequest(device_id="image-chat", message=prompt, mode="listen")
+    if is_crisis_message(prompt):
+        safety = chat_with_fallback(request, settings=active_settings, history=history, evidence=[])
+        return MultimodalChatResponse(
+            modality="image", user_text=prompt, reply=safety.reply,
+            model=safety.model or "safety-rule-v1", evidence=[],
+            strategy=safety.strategy, safety_triggered=True,
+        )
+    system_prompt, _intent, required_strategy = dialogue_system_prompt(request, history, evidence)
+    messages = [
+            {"role": "system", "content": system_prompt},
             *(history or []),
             {
                 "role": "user",
@@ -100,19 +96,33 @@ def chat_with_image(
                     {"type": "text", "text": f"{prompt}\n\n{IMAGE_PROMPT_SUFFIX}"},
                 ],
             },
-        ],
-        reasoning_effort="none",
-        max_tokens=240,
-    )
-    reply = _message_text(completion.choices[0].message.content)
-    if not reply:
-        raise RuntimeError("Image model returned empty content")
+        ]
+    try:
+        envelope, strategy, used_evidence = generate_structured_dialogue(
+            _client(active_settings),
+            model=active_settings.chat_model,
+            messages=messages,
+            required_strategy=required_strategy,
+            evidence=evidence,
+            max_tokens=500,
+        )
+    except Exception:
+        return MultimodalChatResponse(
+            modality="image",
+            user_text=prompt,
+            reply="图片这次没有被可靠识别，请稍后重试，或用一句话补充你希望我关注的内容。",
+            model=active_settings.chat_model,
+            evidence=[],
+            strategy="listen",
+            mock=True,
+        )
     return MultimodalChatResponse(
         modality="image",
         user_text=prompt,
-        reply=reply,
+        reply=envelope.reply,
         model=active_settings.chat_model,
-        evidence=evidence or [],
+        evidence=used_evidence,
+        strategy=strategy,
     )
 
 
@@ -137,15 +147,15 @@ def chat_with_audio(
         history=history,
         evidence=evidence,
     )
-    if chat_response.mock:
-        raise RuntimeError(chat_response.mock_reason or "Chat fallback was used")
     return MultimodalChatResponse(
         modality="audio",
         user_text=transcript,
         reply=chat_response.reply,
-        model=active_settings.chat_model,
+        model=chat_response.model or active_settings.chat_model,
+        mock=chat_response.mock,
         evidence=chat_response.evidence,
         strategy=chat_response.strategy,
+        safety_triggered=chat_response.safety_triggered,
     )
 
 

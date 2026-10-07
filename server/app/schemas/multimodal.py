@@ -15,6 +15,7 @@ class MultimodalChatResponse(BaseModel):
     evidence: list[MemoryEvidence] = Field(default_factory=list)
     strategy: str | None = None
     check_in_scheduled: bool = False
+    safety_triggered: bool = False
 
 
 class SpeechSynthesisRequest(BaseModel):

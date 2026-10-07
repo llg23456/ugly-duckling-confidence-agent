@@ -30,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.testconnection.confidence_agent.R
@@ -45,7 +44,6 @@ import com.testconnection.confidence_agent.ui.components.noRippleClickable
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
-import com.testconnection.confidence_agent.ui.theme.Terracotta
 import com.testconnection.confidence_agent.ui.theme.WarmOutline
 import java.time.Instant
 import java.time.LocalDate
@@ -166,7 +164,7 @@ private fun WeeklyMoodCard(dailyReviews: List<DailyReviewEntry>, events: List<Gr
                 if (maxWidth < 260.dp) {
                     Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
                         MoodTrendChart(moods, Modifier.fillMaxWidth())
-                        MoodDonutChart(moods, Modifier.fillMaxWidth())
+                        MoodPieChart(moods, Modifier.fillMaxWidth())
                     }
                 } else {
                     Row(
@@ -175,7 +173,7 @@ private fun WeeklyMoodCard(dailyReviews: List<DailyReviewEntry>, events: List<Gr
                         verticalAlignment = Alignment.Top,
                     ) {
                         MoodTrendChart(moods, Modifier.weight(1f))
-                        MoodDonutChart(moods, Modifier.width(112.dp))
+                        MoodPieChart(moods, Modifier.width(128.dp))
                     }
                 }
             }
@@ -253,7 +251,7 @@ private fun MoodTrendChart(moods: List<DailyMood>, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun MoodDonutChart(moods: List<DailyMood>, modifier: Modifier = Modifier) {
+private fun MoodPieChart(moods: List<DailyMood>, modifier: Modifier = Modifier) {
     val recorded = moods.mapNotNull { it.mood }
     val counts = MoodBand.entries.associateWith { band -> recorded.count { it == band } }
     Column(
@@ -262,25 +260,21 @@ private fun MoodDonutChart(moods: List<DailyMood>, modifier: Modifier = Modifier
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Text("心情分布", style = MaterialTheme.typography.titleMedium, color = SageDark)
-        Box(Modifier.size(86.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(112.dp), contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
-                val stroke = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Butt)
                 if (recorded.isEmpty()) {
-                    drawArc(WarmOutline, -90f, 360f, false, style = stroke)
+                    drawCircle(WarmOutline)
                 } else {
                     var start = -90f
                     MoodBand.entries.forEach { band ->
                         val sweep = 360f * (counts.getValue(band).toFloat() / recorded.size)
-                        if (sweep > 0f) drawArc(moodColor(band), start, sweep, false, style = stroke)
+                        if (sweep > 0f) drawArc(moodColor(band), start, sweep, useCenter = true)
                         start += sweep
                     }
                 }
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(recorded.size.toString(), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("天", style = MaterialTheme.typography.labelSmall, color = InkMuted)
-            }
         }
+        Text("已记录 ${recorded.size} 天", style = MaterialTheme.typography.labelSmall, color = InkMuted)
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
             MoodBand.entries.reversed().forEach { band ->
                 val count = counts.getValue(band)
@@ -347,8 +341,8 @@ private fun eventLocalDate(value: String): LocalDate? =
 private fun weekdayLabel(date: LocalDate): String = listOf("一", "二", "三", "四", "五", "六", "日")[date.dayOfWeek.value - 1]
 
 private fun moodColor(mood: MoodBand): Color = when (mood) {
-    MoodBand.LOW -> Color(0xFFC98A88)
-    MoodBand.TENSE -> Terracotta
+    MoodBand.LOW -> Color(0xFF7E72A8)
+    MoodBand.TENSE -> Color(0xFFE0A83E)
     MoodBand.STEADY -> Color(0xFF83A99A)
     MoodBand.BRIGHT -> Color(0xFF76A979)
 }

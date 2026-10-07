@@ -4,12 +4,17 @@ from sqlalchemy.orm import Session
 
 from app.schemas import EventExtractionRequest, EventExtractionResponse
 from app.services.mock_service import mock_extract
-from app.services.event_service import decision, extract_candidate
+from app.services.event_service import (
+    EventCandidate,
+    decision,
+    extract_turn,
+    memory_point_decision,
+)
 from app.core.config import get_settings
 from app.db.models import DailySummary, GrowthEvent
 from app.db.repository import get_conversation
 from app.db.session import get_db
-from app.schemas.event import GrowthEvent as GrowthEventSchema
+from app.schemas.event import ExtractedMemoryPoint, GrowthEvent as GrowthEventSchema
 from app.schemas.memory import DailySummaryItem, DailySummaryListResponse, EventItem, EventListResponse
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -20,8 +25,25 @@ def extract_event(request: EventExtractionRequest) -> EventExtractionResponse:
     settings = get_settings()
     if not settings.enable_live_ai or not settings.dashscope_api_key.strip():
         return mock_extract(request)
-    candidate = extract_candidate(request.text, [])
+    extracted = extract_turn(request.text, [])
+    candidate = extracted.growth_event or EventCandidate(
+        fact="", confidence=1.0, sensitivity="low", long_term_value=0,
+        growth_significance=0, specificity=0, future_reuse=0, support_value=0,
+    )
     score, outcome = decision(candidate)
+    memory_points = []
+    for item in extracted.memory_points:
+        _memory_score, memory_outcome = memory_point_decision(item)
+        memory_points.append(ExtractedMemoryPoint(
+            content=item.content,
+            kind=item.kind,
+            evidence_quote=item.evidence_quote,
+            confidence=item.confidence,
+            sensitivity=item.sensitivity,
+            temporal_scope=item.temporal_scope,
+            fact_status=item.fact_status,
+            memory_decision=memory_outcome,
+        ))
     return EventExtractionResponse(
         event=GrowthEventSchema(
             fact=candidate.fact, feeling=candidate.feeling, attempt=candidate.attempt,
@@ -30,6 +52,7 @@ def extract_event(request: EventExtractionRequest) -> EventExtractionResponse:
         ), memory_decision=outcome,
         reason=f"规则评分 {score:.3f}；敏感度 {candidate.sensitivity}。",
         mock=False,
+        memory_points=memory_points,
     )
 
 

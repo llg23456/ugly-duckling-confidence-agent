@@ -113,8 +113,8 @@ class TodayGrowthWidget : GlanceAppWidget() {
                     Spacer(GlanceModifier.height(8.dp))
                     Text("查看来源  ›", style = TextStyle(color = sage, fontSize = 15.sp, fontWeight = FontWeight.Bold))
                 }
-                val photo = loadWidgetBitmap(snapshot.todayPhotoPath, maxDimension = 180)
-                if (photo != null) Image(ImageProvider(photo), "选择的照片记录", modifier = GlanceModifier.size(90.dp))
+                val photo = loadWidgetBitmap(snapshot.todayPhotoPath, maxDimension = 240)
+                if (photo != null) Image(ImageProvider(photo), "选择的照片记录", modifier = GlanceModifier.size(120.dp))
                 else Image(ImageProvider(R.drawable.duck_writing), "正在书写的小鸭", modifier = GlanceModifier.size(90.dp))
             }
         }

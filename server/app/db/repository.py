@@ -35,7 +35,10 @@ def recent_messages(session: Session, conversation_id: int, limit: int = 12) -> 
     for deletion in session.scalars(select(MemoryDeletion).where(MemoryDeletion.conversation_id == conversation_id)):
         blocked_sources.update(deletion.source_message_ids or [])
         blocked_memory_ids.add(deletion.deleted_memory_id)
-    for memory in session.scalars(select(Memory).where(Memory.conversation_id == conversation_id, Memory.is_user_edited == True)):
+    for memory in session.scalars(select(Memory).where(
+        Memory.conversation_id == conversation_id,
+        (Memory.is_user_edited == True) | (Memory.status == "superseded"),
+    )):
         blocked_sources.update(memory.source_message_ids or [])
         blocked_memory_ids.add(memory.id)
     newest_first = session.scalars(
@@ -76,6 +79,8 @@ def append_exchange(
     media_ref: str | None = None,
     is_mock: bool = False,
     used_memory_ids: list[int] | None = None,
+    assistant_model: str | None = None,
+    prompt_version: str | None = None,
 ) -> tuple[Message, Message]:
     user_message = Message(
         conversation_id=conversation.id,
@@ -91,6 +96,8 @@ def append_exchange(
         content=assistant_content,
         is_mock=is_mock,
         used_memory_ids=used_memory_ids or [],
+        model=assistant_model,
+        prompt_version=prompt_version,
     )
     session.add_all((user_message, assistant_message))
     conversation.updated_at = datetime.now(UTC)
@@ -116,5 +123,7 @@ def as_schema(message: Message) -> ConversationMessage:
         content=message.content,
         media_ref=message.media_ref,
         mock=message.is_mock,
+        model=message.model,
+        prompt_version=message.prompt_version,
         created_at=created_at,
     )

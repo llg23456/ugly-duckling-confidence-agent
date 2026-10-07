@@ -12,6 +12,15 @@ class MemoryItem(BaseModel):
     source_type: str | None
     value_score: float | None
     sensitivity: str | None
+    kind: str | None = None
+    confidence: float | None = None
+    canonical_key: str | None = None
+    source_excerpt: str | None = None
+    temporal_scope: str | None = None
+    fact_status: str | None = None
+    last_seen_at: datetime | None = None
+    occurrence_count: int = 1
+    supersedes_id: int | None = None
     created_at: datetime
 
 

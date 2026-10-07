@@ -7,6 +7,7 @@ data class CommunityPost(
     val title: String,
     val content: String,
     val imagePath: String? = null,
+    val videoPath: String? = null,
     val sourceRecordId: String? = null,
     val topic: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
@@ -21,6 +22,7 @@ data class CommunityDraft(
     val content: String = "",
     val sourceRecordId: String? = null,
     val sourcePhotoPath: String? = null,
+    val sourceVideoPath: String? = null,
     val topic: String? = null,
 )
 
