@@ -1,6 +1,7 @@
 package com.testconnection.confidence_agent.ui.screens
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,6 +56,7 @@ fun DataToolsScreen(
     onAllDataDeleted: () -> Unit,
     onBack: () -> Unit,
 ) {
+    BackHandler(onBack = onBack)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val repository = remember { DataManagementRepository(context.applicationContext) }

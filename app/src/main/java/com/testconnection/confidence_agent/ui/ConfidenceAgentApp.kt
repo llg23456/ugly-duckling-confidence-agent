@@ -1,5 +1,13 @@
 package com.testconnection.confidence_agent.ui
 
+import android.os.SystemClock
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -64,6 +72,7 @@ private val tabs = listOf(
 fun ConfidenceAgentApp(
     externalDestination: ExternalDestination? = null,
     onExternalDestinationConsumed: () -> Unit = {},
+    onExitRequest: () -> Unit = {},
 ) {
     val context = LocalContext.current
     var selectedDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
@@ -75,6 +84,10 @@ fun ConfidenceAgentApp(
     var showVideoStudio by rememberSaveable { mutableStateOf(false) }
     var showWeeklyReport by rememberSaveable { mutableStateOf(false) }
     var showDataTools by rememberSaveable { mutableStateOf(false) }
+    var supportFromMemory by rememberSaveable { mutableStateOf(false) }
+    var onboardingFromMemory by rememberSaveable { mutableStateOf(false) }
+    var recordParent by rememberSaveable { mutableStateOf<AppDestination?>(null) }
+    var recordFromMemory by rememberSaveable { mutableStateOf(false) }
     var pendingCommunityVideoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var sourceMessageId by rememberSaveable { mutableStateOf<Long?>(null) }
     var requestedRecordMode by remember { mutableStateOf(RecordMode.TEXT) }
@@ -109,6 +122,11 @@ fun ConfidenceAgentApp(
     }
 
     if (showOnboarding) {
+        BackHandler(enabled = onboardingFromMemory) {
+            showOnboarding = false
+            onboardingFromMemory = false
+            showMemoryCenter = true
+        }
         OnboardingScreen(
             voicePreferences = voicePreferences,
             initialProfile = userProfile ?: com.testconnection.confidence_agent.data.model.UserProfile(),
@@ -116,10 +134,14 @@ fun ConfidenceAgentApp(
                 userProfile = it
                 onboardingStore.saveProfile(it, complete = true)
                 showOnboarding = false
+                showMemoryCenter = onboardingFromMemory
+                onboardingFromMemory = false
             },
             onSkip = {
                 onboardingStore.skip()
                 showOnboarding = false
+                showMemoryCenter = onboardingFromMemory
+                onboardingFromMemory = false
             },
         )
         return
@@ -136,7 +158,7 @@ fun ConfidenceAgentApp(
             },
             onRestartOnboarding = {
                 userProfile = onboardingStore.loadProfile()
-                onboardingStore.reset()
+                onboardingFromMemory = true
                 showMemoryCenter = false
                 showOnboarding = true
             },
@@ -144,8 +166,10 @@ fun ConfidenceAgentApp(
                 userProfile = updated
                 onboardingStore.saveProfile(updated, complete = true, reason = "画像更新")
             },
-            onOpenFeedback = { showMemoryCenter = false; showSupportCircle = true },
+            onOpenFeedback = { supportFromMemory = true; showMemoryCenter = false; showSupportCircle = true },
             onEditRecord = { record ->
+                recordParent = selectedDestination
+                recordFromMemory = true
                 requestedRecordMode = record.mode
                 requestedRecordDateEpochDay = java.time.Instant.ofEpochMilli(record.createdAt)
                     .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
@@ -158,7 +182,11 @@ fun ConfidenceAgentApp(
     }
 
     if (showSupportCircle) {
-        SupportCircleScreen(onBack = { showSupportCircle = false })
+        SupportCircleScreen(onBack = {
+            showSupportCircle = false
+            showMemoryCenter = supportFromMemory
+            supportFromMemory = false
+        })
         return
     }
 
@@ -222,6 +250,8 @@ fun ConfidenceAgentApp(
     LaunchedEffect(externalDestination) {
         externalDestination?.let {
             selectedDestination = it.destination
+            recordParent = null
+            recordFromMemory = false
             communityDetailOpen = false
             requestedRecordMode = it.recordMode
             requestedRecordDateEpochDay = null
@@ -239,6 +269,53 @@ fun ConfidenceAgentApp(
             onClose = { showVoiceCall = false },
         )
         return
+    }
+
+    // Registered before the child screens so their handlers and dialogs take priority.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var lastHomeBackAt by remember(selectedDestination) { mutableStateOf<Long?>(null) }
+    val exitToast = remember { Toast.makeText(context, "再按一次返回键退出应用", Toast.LENGTH_SHORT) }
+    DisposableEffect(lifecycleOwner, selectedDestination) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) {
+                lastHomeBackAt = null
+                exitToast.cancel()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lastHomeBackAt = null
+            exitToast.cancel()
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+    BackHandler {
+        when {
+            selectedDestination == AppDestination.RECORD && recordParent != null -> {
+                selectedDestination = requireNotNull(recordParent)
+                showMemoryCenter = recordFromMemory
+                recordParent = null
+                recordFromMemory = false
+                requestedEditRecord = null
+                requestedRecordDateEpochDay = null
+            }
+            selectedDestination != AppDestination.HOME -> {
+                selectedDestination = AppDestination.HOME
+                communityDetailOpen = false
+            }
+            else -> {
+                val now = SystemClock.elapsedRealtime()
+                val previous = lastHomeBackAt
+                if (previous != null && now - previous < 2_000L) {
+                    lastHomeBackAt = null
+                    exitToast.cancel()
+                    onExitRequest()
+                } else {
+                    lastHomeBackAt = now
+                    exitToast.show()
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -259,6 +336,8 @@ fun ConfidenceAgentApp(
                         NavigationBarItem(
                             selected = selectedDestination == tab.destination,
                             onClick = {
+                                recordParent = null
+                                recordFromMemory = false
                                 communityDetailOpen = false
                                 if (tab.destination == AppDestination.RECORD) {
                                     requestedRecordMode = RecordMode.TEXT
@@ -298,6 +377,8 @@ fun ConfidenceAgentApp(
                     onOpenRecordSource = { recordId ->
                         growthViewModel.recordForEdit(recordId) { record ->
                             if (record != null) {
+                                recordParent = AppDestination.HOME
+                                recordFromMemory = false
                                 requestedRecordMode = record.mode
                                 requestedRecordDateEpochDay = java.time.Instant.ofEpochMilli(record.createdAt)
                                     .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
@@ -316,12 +397,16 @@ fun ConfidenceAgentApp(
                     growthViewModel = growthViewModel,
                     onOpenWeeklyReport = { showWeeklyReport = true },
                     onAddRecord = { date ->
+                        recordParent = AppDestination.GROWTH
+                        recordFromMemory = false
                         requestedRecordMode = RecordMode.TEXT
                         requestedRecordDateEpochDay = date.toEpochDay()
                         requestedEditRecord = null
                         selectedDestination = AppDestination.RECORD
                     },
                     onEditRecord = { record ->
+                        recordParent = AppDestination.GROWTH
+                        recordFromMemory = false
                         requestedRecordMode = record.mode
                         requestedRecordDateEpochDay = java.time.Instant.ofEpochMilli(record.createdAt)
                             .atZone(java.time.ZoneId.systemDefault()).toLocalDate().toEpochDay()
