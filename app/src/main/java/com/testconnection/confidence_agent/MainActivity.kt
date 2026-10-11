@@ -28,6 +28,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             ConfidenceAgentTheme {
                 ConfidenceAgentApp(
+                    onExitRequest = { finish() },
                     externalDestination = externalDestination.value,
                     onExternalDestinationConsumed = { externalDestination.value = null },
                 )
