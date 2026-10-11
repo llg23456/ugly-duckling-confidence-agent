@@ -109,7 +109,7 @@ fun ProfileScreen(
     fun detectServer() {
         if (serverChecking) return
         serverChecking = true
-        serverStatus = "正在扫描当前 Wi-Fi…"
+        serverStatus = "正在检测当前局域网…"
         coroutineScope.launch {
             runCatching { ServerConnectionManager.detectOnWifi(context) }
                 .onSuccess { health ->
@@ -155,7 +155,7 @@ fun ProfileScreen(
                 Text("遇到紧急危险时，请优先联系身边可信任的人或当地紧急援助。小鸭不会替你自动发送消息。")
                 HorizontalDivider()
                 Text("后端连接 · 测试工具", style = MaterialTheme.typography.titleMedium)
-                Text("手机和电脑连接同一 Wi-Fi、电脑已启动后端时，可以自动找到并保存新地址。")
+                Text("手机和电脑连接同一 Wi-Fi，或电脑连接当前手机热点时，可以自动找到并保存后端地址。")
                 OutlinedTextField(
                     value = serverAddress,
                     onValueChange = { serverAddress = it; serverStatus = "地址尚未检测" },
@@ -171,7 +171,7 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = AppButtonShape,
                     colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                ) { Text("一键检测当前 Wi-Fi") }
+                ) { Text("一键检测局域网") }
                 TextButton(
                     onClick = ::checkAndSaveServer,
                     enabled = !serverChecking,
