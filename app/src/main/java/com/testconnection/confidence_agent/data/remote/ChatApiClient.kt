@@ -109,6 +109,27 @@ class ChatApiClient(
         }
     }
 
+    suspend fun deleteMessage(deviceId: String, messageId: Long): Unit = withContext(Dispatchers.IO) {
+        val encodedId = Uri.encode(deviceId)
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/conversations/$encodedId/messages/$messageId")
+            .openConnection() as HttpURLConnection).apply {
+            requestMethod = "DELETE"
+            connectTimeout = 10_000
+            readTimeout = 40_000
+            setRequestProperty("Accept", "application/json")
+        }
+        try {
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                val responseText = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                val detail = runCatching { JSONObject(responseText).optString("detail") }.getOrNull()
+                throw IllegalStateException(detail?.takeIf { it.isNotBlank() } ?: "删除消息失败（$status）")
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     suspend fun sendMessage(deviceId: String, message: String): ChatApiReply = withContext(Dispatchers.IO) {
         val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/chat").openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"

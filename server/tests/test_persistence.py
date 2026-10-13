@@ -111,6 +111,34 @@ def test_conversation_persists_and_uses_only_last_12_messages(client: TestClient
     assert client.get("/api/v1/conversations/other-device/messages").json()["messages"] == []
 
 
+def test_delete_one_message_keeps_the_other_message(client: TestClient, monkeypatch) -> None:
+    chat_route = import_module("app.api.routes.chat")
+    monkeypatch.setattr(
+        chat_route,
+        "chat_with_fallback",
+        lambda request, history=None, evidence=None: ChatResponse(
+            reply="这条回答会单独保留。", strategy="listen", mock=False,
+        ),
+    )
+    sent = client.post(
+        "/api/v1/chat",
+        json={"device_id": "single-delete-device", "message": "这条问题要单独删除"},
+    )
+    assert sent.status_code == 200
+    user_id = sent.json()["user_message_id"]
+    assistant_id = sent.json()["assistant_message_id"]
+
+    deleted_user = client.delete(f"/api/v1/conversations/single-delete-device/messages/{user_id}")
+    assert deleted_user.status_code == 204
+    remaining = client.get("/api/v1/conversations/single-delete-device/messages").json()["messages"]
+    assert [item["id"] for item in remaining] == [assistant_id]
+
+    deleted_assistant = client.delete(f"/api/v1/conversations/single-delete-device/messages/{assistant_id}")
+    assert deleted_assistant.status_code == 204
+    assert client.get("/api/v1/conversations/single-delete-device/messages").json()["messages"] == []
+    assert client.delete(f"/api/v1/conversations/single-delete-device/messages/{assistant_id}").status_code == 404
+
+
 def test_image_and_audio_share_conversation_and_keep_source_refs(client: TestClient, monkeypatch) -> None:
     multimodal_route = import_module("app.api.routes.multimodal")
     observed_history = []

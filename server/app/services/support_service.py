@@ -8,17 +8,31 @@ HARD_TASK_WORDS = ("答辩", "面试", "考试", "汇报", "完全不会", "一�
 DISTRESS_WORDS = ("压力很大", "撑不住", "很害怕", "非常紧张", "完全不会", "一直做不到")
 EMOTIONAL_DISTRESS_WORDS = ("难过", "低落", "无助", "崩溃", "撑不住", "很害怕", "很焦虑")
 EMOTIONAL_HELP_CUES = ("怎么办", "陪陪我", "陪我", "找谁", "找个人", "需要人", "帮帮我")
+STUDY_CONTEXT_WORDS = ("考研", "备考", "复习")
+STUDY_SETBACK_WORDS = ("卡住", "做不出来", "错了很多", "没进展", "复习不下去")
+STUDY_SELF_DOUBT_WORDS = ("不适合", "不行", "做不到", "是不是不", "怀疑自己")
+
+
+def is_postgraduate_setback(message: str) -> bool:
+    compact = "".join(message.split())
+    return (
+        any(word in compact for word in STUDY_CONTEXT_WORDS)
+        and any(word in compact for word in STUDY_SETBACK_WORDS)
+        and any(word in compact for word in STUDY_SELF_DOUBT_WORDS)
+    )
 
 
 def suggested_kind(situation: str) -> str:
-    if any(word in situation for word in ("师兄", "师姐", "目标院校", "复习经验", "备考经验")):
-        return "senior"
     if any(word in situation for word in ("专业方向", "概念", "研究方向", "学院老师")):
         return "teacher"
+    if any(word in situation for word in ("师兄", "师姐", "目标院校", "考研", "备考", "复习")):
+        return "senior"
     return "classmate"
 
 
 def needs_support(message: str, history: list[dict[str, str]] | None = None) -> bool:
+    if is_postgraduate_setback(message):
+        return True
     if any(word in message for word in EMOTIONAL_DISTRESS_WORDS) and any(word in message for word in EMOTIONAL_HELP_CUES):
         return True
     if any(word in message for word in ("考研", "目标院校")) and any(word in message for word in ("请教", "找谁", "不清楚", "不懂")):

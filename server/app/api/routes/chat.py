@@ -1,4 +1,5 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, Path
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.repository import (
@@ -6,12 +7,14 @@ from app.db.repository import (
     get_or_create_conversation, model_history, recent_messages,
 )
 from app.db.session import get_db
+from app.db.models import GrowthEvent, Memory, Message, SupportSuggestion
 from app.schemas import ChatRequest, ChatResponse
 from app.schemas.chat import ConversationMessagesResponse
 from app.services.chat_service import CHAT_PROMPT_VERSION, chat_with_fallback, suppress_memory_for_message
 from app.services.check_in_service import schedule_explicit_follow_up
 from app.services.event_service import process_turn
-from app.services.memory_service import recall
+from app.services.memory_service import postgraduate_setback_evidence, recall
+from app.services.support_service import is_postgraduate_setback
 
 router = APIRouter(tags=["chat"])
 
@@ -25,6 +28,14 @@ def chat(request: ChatRequest, background_tasks: BackgroundTasks, db: Session = 
         if conversation and not suppress_memory_for_message(request.message)
         else []
     )
+    if conversation and is_postgraduate_setback(request.message):
+        preferred = postgraduate_setback_evidence(db, conversation.id)
+        if preferred is not None:
+            preferred_key = (preferred.memory_id, preferred.source_record_id, preferred.source_id)
+            evidence = [preferred, *[
+                item for item in evidence
+                if (item.memory_id, item.source_record_id, item.source_id) != preferred_key
+            ]][:4]
     response = chat_with_fallback(request, history=history, evidence=evidence)
     conversation = conversation or get_or_create_conversation(db, request.device_id)
     user_message, assistant_message = append_exchange(
@@ -35,7 +46,11 @@ def chat(request: ChatRequest, background_tasks: BackgroundTasks, db: Session = 
         is_mock=response.mock,
         used_memory_ids=[item.memory_id for item in response.evidence if item.memory_id],
         assistant_model=response.model,
-        prompt_version="safety-rule-v1" if response.safety_triggered else CHAT_PROMPT_VERSION,
+        prompt_version=(
+            "safety-rule-v1" if response.safety_triggered
+            else "postgraduate-setback-rule-v1" if response.model == "postgraduate-setback-rule-v1"
+            else CHAT_PROMPT_VERSION
+        ),
     )
     response.user_message_id = user_message.id
     response.assistant_message_id = assistant_message.id
@@ -55,3 +70,32 @@ def get_messages(
     conversation = get_conversation(db, device_id)
     messages = all_messages(db, conversation.id) if conversation else []
     return ConversationMessagesResponse(device_id=device_id, messages=[as_schema(item) for item in messages])
+
+
+@router.delete("/conversations/{device_id}/messages/{message_id}", status_code=204)
+def delete_message(
+    device_id: str = Path(min_length=1, max_length=128),
+    message_id: int = Path(gt=0),
+    db: Session = Depends(get_db),
+) -> None:
+    conversation = get_conversation(db, device_id)
+    message = db.get(Message, message_id)
+    if conversation is None or message is None or message.conversation_id != conversation.id:
+        raise HTTPException(status_code=404, detail="消息不存在")
+
+    for event in db.scalars(select(GrowthEvent).where(GrowthEvent.conversation_id == conversation.id)):
+        if event.source_user_message_id == message_id:
+            event.source_user_message_id = None
+        if message_id in (event.source_message_ids or []):
+            event.source_message_ids = [item for item in event.source_message_ids if item != message_id]
+    for memory in db.scalars(select(Memory).where(Memory.conversation_id == conversation.id)):
+        if message_id in (memory.source_message_ids or []):
+            memory.source_message_ids = [item for item in memory.source_message_ids if item != message_id]
+    for suggestion in db.scalars(select(SupportSuggestion).where(
+        SupportSuggestion.conversation_id == conversation.id,
+        SupportSuggestion.source_message_id == message_id,
+    )):
+        suggestion.source_message_id = None
+
+    db.delete(message)
+    db.commit()

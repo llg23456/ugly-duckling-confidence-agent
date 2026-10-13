@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import SupportPerson
 from app.db.session import engine_for_url
-from app.services.support_service import needs_support
+from app.services.support_service import needs_support, suggested_kind
 
 
 def test_support_strategy_uses_request_and_repeated_blockage() -> None:
@@ -14,9 +14,52 @@ def test_support_strategy_uses_request_and_repeated_blockage() -> None:
     assert needs_support("我又卡住了", [{"role": "user", "content": "昨天就卡住了"}])
     assert not needs_support("我今天完成了", [{"role": "user", "content": "之前卡住了"}])
     assert needs_support("考研专业方向不清楚，可以找谁请教")
+    assert needs_support("复习又卡住了，我是不是不适合考研？")
+    assert suggested_kind("复习又卡住了，我是不是不适合考研？") == "senior"
     assert not needs_support("今天继续准备考研，感觉状态挺好")
     assert needs_support("我现在很难过，不知道该怎么办")
     assert not needs_support("我今天有一点难过")
+
+
+def test_postgraduate_setback_fallback_returns_memory_and_support(client: TestClient) -> None:
+    seeded = client.post("/api/v1/dev/demo-data", json={
+        "device_id": "setback-demo",
+        "preset": "exam_week_2026_09_07",
+    })
+    assert seeded.status_code == 200
+    person = client.post("/api/v1/support-people", json={
+        "device_id": "setback-demo",
+        "name": "林师姐",
+        "relationship": "目标院校师姐",
+        "kind": "senior",
+        "scenarios": ["考研", "复习"],
+    })
+    assert person.status_code == 201
+
+    chat = client.post("/api/v1/chat", json={
+        "device_id": "setback-demo",
+        "message": "复习又卡住了，我是不是不适合考研？",
+    })
+    assert chat.status_code == 200
+    payload = chat.json()
+    assert payload["strategy"] == "seek_support"
+    assert payload["mock"] is False
+    assert "卡住不代表不适合" in payload["reply"]
+    assert "演示" not in payload["reply"]
+    assert payload["evidence"]
+    assert "专业课程" in payload["evidence"][0]["summary"]
+    assert payload["evidence"][0]["source_record_id"] is not None
+
+    suggestion = client.post("/api/v1/support/suggest", json={
+        "device_id": "setback-demo",
+        "source_message_id": payload["user_message_id"],
+        "situation": "复习又卡住了，我是不是不适合考研？",
+    })
+    assert suggestion.status_code == 200
+    proposal = suggestion.json()
+    assert proposal["supporter_type"] == "senior"
+    assert proposal["supporter_name"] == "林师姐"
+    assert "什么时候方便" in proposal["editable_message"]
 
 
 def test_postgraduate_support_selects_senior_and_teacher_by_situation(client: TestClient) -> None:

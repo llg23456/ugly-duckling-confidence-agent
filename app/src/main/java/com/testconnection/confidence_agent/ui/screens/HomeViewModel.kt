@@ -214,6 +214,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(error = null) }
     }
 
+    fun deleteMessage(messageId: Long) {
+        viewModelScope.launch {
+            runCatching { repository.deleteMessage(messageId) }
+                .onSuccess { _uiState.update { it.copy(error = null) } }
+                .onFailure { _uiState.update { it.copy(error = "这条消息暂时没有删除，请稍后重试。") } }
+        }
+    }
+
     fun dismissEvidence() {
         _uiState.update { it.copy(lastEvidence = emptyList()) }
     }

@@ -10,7 +10,7 @@ from app.schemas import ChatRequest, ChatResponse
 from app.schemas.chat import MemoryEvidence
 from app.services.memory_service import memory_prompt
 from app.services.mock_service import mock_chat
-from app.services.support_service import needs_support
+from app.services.support_service import is_postgraduate_setback, needs_support
 
 
 logger = logging.getLogger(__name__)
@@ -208,6 +208,31 @@ def _crisis_response() -> ChatResponse:
     )
 
 
+def _postgraduate_setback_response(evidence: list[MemoryEvidence]) -> ChatResponse:
+    selected = evidence[:1]
+    if selected:
+        remembered = selected[0].summary.strip()
+        if len(remembered) > 90:
+            remembered = remembered[:87].rstrip() + "……"
+        reply = (
+            f"卡住不代表不适合，只是复习中常见的状态。你之前留下过“{remembered}”。"
+            "这说明你已经在主动梳理问题。先挑一个最卡的知识点，给自己二十分钟；"
+            "如果还是压着你，也可以联系支持圈里熟悉备考的人，问清基础阶段该怎样安排。"
+        )
+    else:
+        reply = (
+            "卡住不代表不适合，只是复习中常见的状态。先挑一个最卡的知识点，给自己二十分钟；"
+            "如果还是压着你，也可以联系支持圈里熟悉备考的人，问清基础阶段该怎样安排。"
+        )
+    return ChatResponse(
+        reply=reply,
+        strategy="seek_support",
+        evidence=selected,
+        mock=False,
+        model="postgraduate-setback-rule-v1",
+    )
+
+
 def _live_chat(
     request: ChatRequest,
     settings: Settings,
@@ -253,6 +278,9 @@ def chat_with_fallback(
 ) -> ChatResponse:
     if is_crisis_message(request.message):
         return _crisis_response()
+
+    if is_postgraduate_setback(request.message):
+        return _postgraduate_setback_response(evidence or [])
 
     active_settings = settings or get_settings()
     if not active_settings.enable_live_ai:

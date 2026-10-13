@@ -80,6 +80,77 @@ def _record_text(record: UserRecord) -> str:
     return {"photo": "保存了一张照片记录", "voice": "保存了一段语音记录"}.get(record.mode, "保存了一条生活记录")
 
 
+def postgraduate_setback_evidence(
+    session: Session,
+    conversation_id: int,
+) -> MemoryEvidence | None:
+    """Find one traceable study-history item for the postgraduate setback fallback."""
+    preferred_cues = {
+        "专业课程": 6,
+        "复习资料": 6,
+        "备考节奏": 6,
+        "三个问题": 4,
+        "招生说明": 3,
+        "目标院校": 2,
+        "考研": 2,
+        "复习": 1,
+        "备考": 1,
+    }
+
+    def score(text: str) -> int:
+        if not any(word in text for word in ("考研", "备考", "复习", "目标院校")):
+            return 0
+        return sum(weight for cue, weight in preferred_cues.items() if cue in text)
+
+    records = list(session.scalars(select(UserRecord).where(
+        UserRecord.conversation_id == conversation_id,
+        UserRecord.status == "saved",
+    ).order_by(UserRecord.id.desc()).limit(300)))
+    ranked_records = sorted(
+        ((score(_record_text(record)), record) for record in records),
+        key=lambda item: (item[0], item[1].id),
+        reverse=True,
+    )
+    if ranked_records and ranked_records[0][0] > 0:
+        _score, record = ranked_records[0]
+        return MemoryEvidence(
+            summary=_record_text(record),
+            source_date=local_day(record.created_at),
+            source_type={"text": "record", "photo": "photo", "voice": "voice"}.get(record.mode, "record"),
+            source_record_id=record.id,
+            kind="experience",
+            confidence=1.0,
+            relevance_score=1.0,
+        )
+
+    memories = list(session.scalars(select(Memory).where(
+        Memory.conversation_id == conversation_id,
+        Memory.status == "active",
+    ).order_by(Memory.id.desc()).limit(300)))
+    ranked_memories = sorted(
+        ((score(memory.content), memory) for memory in memories if memory.sensitivity in (None, "low")),
+        key=lambda item: (item[0], item[1].id),
+        reverse=True,
+    )
+    if not ranked_memories or ranked_memories[0][0] <= 0:
+        return None
+    _score, memory = ranked_memories[0]
+    source_info = _source(session, memory, conversation_id)
+    if not source_info:
+        return None
+    source, source_id, source_type = source_info
+    return MemoryEvidence(
+        summary=memory.content,
+        source_date=local_day(source.created_at),
+        source_type=source_type,
+        source_id=source_id,
+        memory_id=memory.id,
+        kind=memory.kind or "experience",
+        confidence=memory.confidence,
+        relevance_score=1.0,
+    )
+
+
 def _contextual_query(query: str, history: list[dict[str, str]] | None) -> str:
     compact = query.strip()
     references_previous = len(compact) <= 12 or any(

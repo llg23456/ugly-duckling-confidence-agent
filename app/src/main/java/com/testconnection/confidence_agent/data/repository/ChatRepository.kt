@@ -70,6 +70,19 @@ class ChatRepository(
         }
     }
 
+    suspend fun deleteMessage(messageId: Long) {
+        val db = requireNotNull(database)
+        val cached = db.messages().findById(messageId)
+        apiClient.deleteMessage(deviceId, messageId)
+        cacheMutex.withLock {
+            db.messages().deleteById(messageId)
+        }
+        cached?.localImagePath?.let { path ->
+            withContext(Dispatchers.IO) { runCatching { File(path).delete() } }
+        }
+        appContext?.let { ReviewCacheStore(it).markDirty() }
+    }
+
     private suspend fun cacheExchange(
         userText: String,
         response: ChatApiReply,

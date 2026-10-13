@@ -11,6 +11,7 @@ import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +51,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,6 +65,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.testconnection.confidence_agent.R
+import com.testconnection.confidence_agent.data.model.ChatMessage
 import com.testconnection.confidence_agent.ui.components.AppButtonShape
 import com.testconnection.confidence_agent.ui.components.DuckArt
 import com.testconnection.confidence_agent.ui.components.WarmCard
@@ -93,6 +96,7 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     var requestedSourceId by remember { mutableStateOf<Long?>(null) }
     var evidenceExpanded by remember(state.lastEvidence) { mutableStateOf(false) }
+    var pendingDeleteMessage by remember { mutableStateOf<ChatMessage?>(null) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var currentHour by remember { mutableStateOf(LocalTime.now().hour) }
@@ -119,6 +123,29 @@ fun HomeScreen(
     var feedbackChoice by remember { mutableStateOf<String?>(null) }
     var effortText by remember { mutableStateOf("") }
     var helpText by remember { mutableStateOf("") }
+
+    pendingDeleteMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteMessage = null },
+            title = { Text("删除这条消息？") },
+            text = {
+                Text(
+                    if (message.fromUser) "只删除这条问题，AI 回答会保留。"
+                    else "只删除这条 AI 回答，你的问题会保留。",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    message.id?.let(viewModel::deleteMessage)
+                    pendingDeleteMessage = null
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteMessage = null }) { Text("取消") }
+            },
+        )
+    }
 
     state.checkInScheduledNotice?.let { notice ->
         AlertDialog(
@@ -323,7 +350,13 @@ fun HomeScreen(
                 horizontalArrangement = if (message.fromUser) Arrangement.Start else Arrangement.End,
             ) {
                 Surface(
-                    modifier = Modifier.fillMaxWidth(0.84f),
+                    modifier = Modifier
+                        .fillMaxWidth(0.84f)
+                        .then(
+                            if (message.id != null) Modifier.pointerInput(message.id) {
+                                detectTapGestures(onLongPress = { pendingDeleteMessage = message })
+                            } else Modifier
+                        ),
                     shape = RoundedCornerShape(24.dp),
                     color = if (message.fromUser) CreamDeep else MaterialTheme.colorScheme.surface,
                     border = if (message.fromUser) null else BorderStroke(1.dp, WarmOutline),
