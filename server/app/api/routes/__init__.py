@@ -10,5 +10,6 @@ from .videos import router as videos_router
 from .support import router as support_router
 from .support_people import router as support_people_router
 from .check_ins import router as check_ins_router
+from .stress_alerts import router as stress_alerts_router
 
-__all__ = ["chat_router", "events_router", "multimodal_router", "memories_router", "onboarding_router", "reviews_router", "records_router", "data_management_router", "support_router", "support_people_router", "videos_router", "check_ins_router"]
+__all__ = ["chat_router", "events_router", "multimodal_router", "memories_router", "onboarding_router", "reviews_router", "records_router", "data_management_router", "support_router", "support_people_router", "videos_router", "check_ins_router", "stress_alerts_router"]

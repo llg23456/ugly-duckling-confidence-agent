@@ -25,7 +25,12 @@ def _aware(value: datetime | None) -> datetime | None:
 
 def _category(event: GrowthEvent) -> str | None:
     text = " ".join(filter(None, (event.fact, event.feeling))).strip()
-    if not text or event.sensitivity == "high" or any(word in text for word in ACUTE_WORDS):
+    if (
+        not text
+        or event.source_type in {"demo", "stress_scenario"}
+        or event.sensitivity == "high"
+        or any(word in text for word in ACUTE_WORDS)
+    ):
         return None
     if any(word in text for word in EXPLICIT_FOLLOW_UP):
         return "follow_up"

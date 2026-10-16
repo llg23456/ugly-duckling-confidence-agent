@@ -7,7 +7,7 @@ from app.db.repository import (
     get_or_create_conversation, model_history, recent_messages,
 )
 from app.db.session import get_db
-from app.db.models import GrowthEvent, Memory, Message, SupportSuggestion
+from app.db.models import GrowthEvent, Memory, Message, ProactiveCheckIn, StressAlert, SupportSuggestion
 from app.schemas import ChatRequest, ChatResponse
 from app.schemas.chat import ConversationMessagesResponse
 from app.services.chat_service import CHAT_PROMPT_VERSION, chat_with_fallback, suppress_memory_for_message
@@ -49,6 +49,7 @@ def chat(request: ChatRequest, background_tasks: BackgroundTasks, db: Session = 
         prompt_version=(
             "safety-rule-v1" if response.safety_triggered
             else "postgraduate-setback-rule-v1" if response.model == "postgraduate-setback-rule-v1"
+            else "postgraduate-start-rule-v1" if response.model == "postgraduate-start-rule-v1"
             else CHAT_PROMPT_VERSION
         ),
     )
@@ -83,11 +84,25 @@ def delete_message(
     if conversation is None or message is None or message.conversation_id != conversation.id:
         raise HTTPException(status_code=404, detail="消息不存在")
 
+    affected_event_ids = []
     for event in db.scalars(select(GrowthEvent).where(GrowthEvent.conversation_id == conversation.id)):
         if event.source_user_message_id == message_id:
+            affected_event_ids.append(event.id)
             event.source_user_message_id = None
         if message_id in (event.source_message_ids or []):
+            affected_event_ids.append(event.id)
             event.source_message_ids = [item for item in event.source_message_ids if item != message_id]
+    follow_up_ids = []
+    for alert in db.scalars(select(StressAlert).where(StressAlert.conversation_id == conversation.id)):
+        if set(alert.source_event_ids or []).intersection(affected_event_ids):
+            if alert.follow_up_check_in_id:
+                follow_up_ids.append(alert.follow_up_check_in_id)
+            db.delete(alert)
+    db.flush()
+    for check_in_id in follow_up_ids:
+        check_in = db.get(ProactiveCheckIn, check_in_id)
+        if check_in is not None:
+            db.delete(check_in)
     for memory in db.scalars(select(Memory).where(Memory.conversation_id == conversation.id)):
         if message_id in (memory.source_message_ids or []):
             memory.source_message_ids = [item for item in memory.source_message_ids if item != message_id]

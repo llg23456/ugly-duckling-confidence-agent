@@ -5,13 +5,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.models import DailySummary, GrowthEvent, Memory, ProactiveCheckIn, Review, UserRecord, VideoScript
+from app.db.models import DailySummary, GrowthEvent, Memory, ProactiveCheckIn, Review, StressAlert, UserRecord, VideoScript
 from app.db.repository import get_conversation, get_or_create_conversation
 from app.db.session import get_db
 from app.schemas.record import RecordItem, RecordListResponse, RecordSyncRequest
 from app.services.check_in_service import evaluate_check_in
 from app.services.event_service import process_record
 from app.services.multimodal_service import chat_with_image
+from app.services.stress_service import evaluate_stress_alert
 
 router = APIRouter(prefix="/records", tags=["records"])
 
@@ -83,6 +84,7 @@ def sync_records(request: RecordSyncRequest, background_tasks: BackgroundTasks, 
             _delete_record_and_derived(db, record, delete_record=False)
         db.flush()
         result.append(_item(db, record))
+    evaluate_stress_alert(db, conversation.id)
     evaluate_check_in(db, conversation.id)
     db.commit()
     database_url = get_settings().database_url
@@ -132,8 +134,19 @@ def _invalidate_event_derivatives(db: Session, conversation_id: int, event_id: i
     for script in db.scalars(select(VideoScript).where(VideoScript.conversation_id == conversation_id)).all():
         if event_id in (script.source_event_ids or []):
             db.delete(script)
+    follow_up_ids = []
+    for alert in db.scalars(select(StressAlert).where(StressAlert.conversation_id == conversation_id)).all():
+        if event_id in (alert.source_event_ids or []):
+            if alert.follow_up_check_in_id:
+                follow_up_ids.append(alert.follow_up_check_in_id)
+            db.delete(alert)
+    db.flush()
     for check_in in db.scalars(select(ProactiveCheckIn).where(ProactiveCheckIn.conversation_id == conversation_id)).all():
         if event_id in (check_in.source_event_ids or []):
+            db.delete(check_in)
+    for check_in_id in follow_up_ids:
+        check_in = db.get(ProactiveCheckIn, check_in_id)
+        if check_in is not None:
             db.delete(check_in)
 
 

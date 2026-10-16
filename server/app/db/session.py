@@ -70,6 +70,7 @@ SQLITE_ADDITIONS = {
     },
     "proactive_check_ins": {
         "notified_at": "DATETIME",
+        "available_after": "DATETIME",
     },
 }
 

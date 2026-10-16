@@ -43,6 +43,8 @@ import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.Danger
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
+import com.testconnection.confidence_agent.data.remote.StressAlertDetail
+import com.testconnection.confidence_agent.data.remote.StressApiClient
 import com.testconnection.confidence_agent.data.repository.DataManagementRepository
 import com.testconnection.confidence_agent.widget.WidgetUpdater
 import kotlinx.coroutines.launch
@@ -53,6 +55,7 @@ fun DataToolsScreen(
     onCreateExamWeekDemoData: () -> Unit,
     onCreateFourWeekDemoData: () -> Unit,
     onClearDemoData: () -> Unit,
+    onStressScenarioReady: (StressAlertDetail) -> Unit,
     onAllDataDeleted: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -61,8 +64,11 @@ fun DataToolsScreen(
     val scope = rememberCoroutineScope()
     val repository = remember { DataManagementRepository(context.applicationContext) }
     val deviceId = remember { DeviceIdStore(context.applicationContext).get() }
+    val stressApi = remember { StressApiClient() }
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
+    var preparingStress by remember { mutableStateOf(false) }
+    var stressNotice by remember { mutableStateOf<String?>(null) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     fun exportData(jsonOnly: Boolean) {
@@ -99,6 +105,22 @@ fun DataToolsScreen(
                     onAllDataDeleted()
                 }
                 .onFailure { notice = "删除未完成：${it.message ?: "请确认后端连接后重试"}" }
+            busy = false
+        }
+    }
+
+    fun prepareStressScenario() {
+        if (busy) return
+        busy = true
+        preparingStress = true
+        stressNotice = null
+        scope.launch {
+            runCatching { stressApi.prepareScenario(deviceId) }
+                .onSuccess { alert ->
+                    onStressScenarioReady(alert)
+                }
+                .onFailure { stressNotice = it.message ?: "暂时无法准备压力趋势，请确认后端连接后重试。" }
+            preparingStress = false
             busy = false
         }
     }
@@ -166,11 +188,32 @@ fun DataToolsScreen(
                 }
             }
         }
+        item {
+            WarmCard {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
+                    SectionHeading("压力趋势场景")
+                    Text(
+                        "快速准备连续多日的压力记录，检查提醒与支持流程。",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = InkMuted,
+                    )
+                    stressNotice?.let { Text(it, color = Danger) }
+                    if (preparingStress) CircularProgressIndicator(Modifier.size(24.dp), color = SageDark)
+                    Button(
+                        onClick = ::prepareStressScenario,
+                        enabled = !busy,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = AppButtonShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = SageDark),
+                    ) { Text("准备并查看") }
+                }
+            }
+        }
         if (BuildConfig.DEBUG) item {
             WarmCard {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                    SectionHeading("测试数据准备", "仅开发版本可用，演示记录会在成长回望中标明来源")
-                    Text("主故事固定为 2026年9月7日至13日，展示从怀疑自己到愿意行动、求助、调整和照顾生活。演示故事不计入你的真实成长阶段。",
+                    SectionHeading("成长故事准备", "仅开发版本可用，准备的记录会在成长回望中标明来源")
+                    Text("主故事固定为 2026年9月7日至13日，展示从怀疑自己到愿意行动、求助、调整和照顾生活。这段故事不计入你的真实成长阶段。",
                         style = MaterialTheme.typography.bodyLarge)
                     state.demoNotice?.let { Text(it, color = SageDark) }
                     if (state.loading) CircularProgressIndicator(Modifier.size(24.dp), color = SageDark)
@@ -180,20 +223,20 @@ fun DataToolsScreen(
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = AppButtonShape,
                         colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                    ) { Text("生成 9.7—9.13 主故事") }
+                    ) { Text("准备 9.7—9.13 主故事") }
                     OutlinedButton(
                         onClick = onCreateFourWeekDemoData,
                         enabled = !state.loading,
                         modifier = Modifier.fillMaxWidth(),
                         shape = AppButtonShape,
-                    ) { Text("生成最近四周扩展故事") }
+                    ) { Text("准备最近四周扩展故事") }
                     OutlinedButton(
                         onClick = onClearDemoData,
                         enabled = !state.loading,
                         modifier = Modifier.fillMaxWidth(),
                         shape = AppButtonShape,
-                    ) { Text("清除测试数据") }
-                    Text("清除只影响这批测试文字，不会删除你自己添加的照片、语音、聊天和记录。",
+                    ) { Text("清除准备记录") }
+                    Text("清除只影响这批准备文字，不会删除你自己添加的照片、语音、聊天和记录。",
                         style = MaterialTheme.typography.bodyMedium, color = InkMuted)
                 }
             }

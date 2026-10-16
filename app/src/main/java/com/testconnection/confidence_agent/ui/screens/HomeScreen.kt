@@ -8,7 +8,13 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -50,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -74,6 +81,7 @@ import com.testconnection.confidence_agent.ui.theme.Cream
 import com.testconnection.confidence_agent.ui.theme.CreamDeep
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
+import com.testconnection.confidence_agent.ui.theme.TerracottaPale
 import com.testconnection.confidence_agent.ui.theme.WarmOutline
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -88,6 +96,7 @@ fun HomeScreen(
     viewModel: HomeViewModel,
     userName: String,
     onOpenVoice: () -> Unit,
+    onOpenStressAlert: (Long) -> Unit = {},
     onOpenRecordSource: (Long) -> Unit = {},
     sourceMessageId: Long? = null,
     onSourceLocated: () -> Unit = {},
@@ -100,10 +109,22 @@ fun HomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var currentHour by remember { mutableStateOf(LocalTime.now().hour) }
+    var stressReportReady by remember(
+        state.stressIntroAlert?.id,
+        state.stressIntroAlert?.createdAt,
+    ) { mutableStateOf(false) }
     LaunchedEffect(Unit) {
+        viewModel.refreshStressAlert()
         while (true) {
             delay(60_000)
             currentHour = LocalTime.now().hour
+        }
+    }
+    LaunchedEffect(state.stressIntroAlert?.id, state.stressIntroAlert?.createdAt) {
+        if (state.stressIntroAlert != null) {
+            stressReportReady = false
+            delay(1_000)
+            stressReportReady = true
         }
     }
     val greeting = when (currentHour) {
@@ -260,6 +281,7 @@ fun HomeScreen(
         state.pendingMessage,
         state.proactiveCheckIn?.id,
         state.checkInAcknowledgement,
+        state.stressAlert?.id,
     ) {
         if (
             sourceMessageId == null && requestedSourceId == null &&
@@ -338,6 +360,39 @@ fun HomeScreen(
                     description = "正在认真倾听的小鸭",
                     modifier = Modifier.size(138.dp),
                 )
+            }
+        }
+
+        state.stressAlert?.let { alert ->
+            item(key = "stress-alert-${alert.id}") {
+                Surface(
+                    onClick = {
+                        viewModel.markStressReportViewed(alert)
+                        onOpenStressAlert(alert.id)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    color = TerracottaPale,
+                    border = BorderStroke(1.dp, WarmOutline),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.stress_report_alert_art),
+                            contentDescription = null,
+                            modifier = Modifier.size(78.dp),
+                            contentScale = ContentScale.Fit,
+                        )
+                        Text(
+                            "压力报告",
+                            style = MaterialTheme.typography.titleLarge,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text("›", style = MaterialTheme.typography.titleLarge, color = SageDark)
+                    }
+                }
             }
         }
 
@@ -683,6 +738,81 @@ fun HomeScreen(
                     }
                 }
                 imageLoadError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        }
+        state.stressIntroAlert?.let { alert ->
+            StressReportIntro(
+                reportReady = stressReportReady,
+                onOpenReport = {
+                    viewModel.markStressReportViewed(alert)
+                    onOpenStressAlert(alert.id)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun StressReportIntro(
+    reportReady: Boolean,
+    onOpenReport: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xE8FFF8F5))
+            .pointerInput(Unit) { detectTapGestures { } },
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            drawCircle(Color(0x22D9543F), radius = size.minDimension * 0.72f)
+            drawCircle(Color(0x2EEB7965), radius = size.minDimension * 0.48f)
+            drawCircle(Color(0x26F0AA9C), radius = size.minDimension * 0.30f)
+        }
+        AnimatedVisibility(
+            visible = !reportReady,
+            exit = fadeOut(animationSpec = tween(220)),
+        ) {
+            Image(
+                painter = painterResource(R.drawable.stress_report_alert_art),
+                contentDescription = "压力提醒",
+                modifier = Modifier.size(238.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
+        AnimatedVisibility(
+            visible = reportReady,
+            enter = fadeIn(animationSpec = tween(260)) + scaleIn(
+                initialScale = 0.86f,
+                animationSpec = tween(340),
+            ),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(30.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, Color(0x45D9543F)),
+                shadowElevation = 12.dp,
+                modifier = Modifier.padding(28.dp).fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.stress_report_alert_art),
+                        contentDescription = null,
+                        modifier = Modifier.size(128.dp),
+                        contentScale = ContentScale.Fit,
+                    )
+                    Text("压力很大", style = MaterialTheme.typography.headlineMedium)
+                    Button(
+                        onClick = onOpenReport,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = AppButtonShape,
+                        colors = ButtonDefaults.buttonColors(containerColor = SageDark),
+                    ) { Text("压力报告") }
+                }
             }
         }
     }

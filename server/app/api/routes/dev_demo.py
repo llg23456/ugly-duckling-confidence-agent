@@ -6,7 +6,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.db.models import DailySummary, GrowthEvent, ProactiveCheckIn, Review, UserRecord
+from app.db.models import DailySummary, GrowthEvent, ProactiveCheckIn, Review, StressAlert, UserRecord
 from app.db.repository import get_conversation, get_or_create_conversation
 from app.db.session import get_db
 from app.services.review_service import today_local
@@ -81,6 +81,20 @@ def _ensure_development() -> None:
 
 
 def _clear_demo_rows(db: Session, conversation_id: int) -> int:
+    scenario_alerts = list(db.scalars(select(StressAlert).where(
+        StressAlert.conversation_id == conversation_id,
+        StressAlert.is_scenario.is_(True),
+    )))
+    scenario_follow_up_ids = [item.follow_up_check_in_id for item in scenario_alerts if item.follow_up_check_in_id]
+    for alert in scenario_alerts:
+        db.delete(alert)
+    db.flush()
+    if scenario_follow_up_ids:
+        db.execute(delete(ProactiveCheckIn).where(ProactiveCheckIn.id.in_(scenario_follow_up_ids)))
+    db.execute(delete(GrowthEvent).where(
+        GrowthEvent.conversation_id == conversation_id,
+        GrowthEvent.source_type == "stress_scenario",
+    ))
     demo_records = db.scalars(select(UserRecord).where(
         UserRecord.conversation_id == conversation_id,
         UserRecord.client_record_id.like(f"{DEMO_PREFIX}%"),

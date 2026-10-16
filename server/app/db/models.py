@@ -225,5 +225,28 @@ class ProactiveCheckIn(Base):
     shown_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cooldown_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    available_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class StressAlert(Base):
+    __tablename__ = "stress_alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    level: Mapped[str] = mapped_column(String(16))
+    confirmed_level: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    status: Mapped[str] = mapped_column(String(24), default="active")
+    source_event_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    trend: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    factors: Mapped[list[str]] = mapped_column(JSON, default=list)
+    self_check: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    actions: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    is_scenario: Mapped[bool] = mapped_column(Boolean, default=False)
+    follow_up_check_in_id: Mapped[int | None] = mapped_column(
+        ForeignKey("proactive_check_ins.id"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

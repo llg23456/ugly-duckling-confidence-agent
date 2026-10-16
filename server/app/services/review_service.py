@@ -4,7 +4,7 @@ import json
 from fastapi import HTTPException
 from openai import OpenAI
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -60,7 +60,8 @@ def date_range(period: str, start: date | None, end: date | None) -> tuple[date,
 
 def events_in_range(db: Session, conversation_id: int, start: date, end: date) -> list[GrowthEvent]:
     events = db.scalars(select(GrowthEvent).where(
-        GrowthEvent.conversation_id == conversation_id
+        GrowthEvent.conversation_id == conversation_id,
+        or_(GrowthEvent.source_type.is_(None), GrowthEvent.source_type != "stress_scenario"),
     ).order_by(GrowthEvent.created_at, GrowthEvent.id)).all()
     return [item for item in events if start.isoformat() <= local_day(item.created_at) <= end.isoformat()]
 

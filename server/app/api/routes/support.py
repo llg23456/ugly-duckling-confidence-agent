@@ -9,7 +9,7 @@ from app.schemas.support import (
     SupportFeedbackItem, SupportFeedbackListResponse, SupportFeedbackRequest,
     SupportFeedbackResponse, SupportSuggestionRequest, SupportSuggestionResponse,
 )
-from app.services.support_service import build_suggestion, choose_person
+from app.services.support_service import build_suggestion, choose_person, next_study_support_kind
 from app.services.check_in_service import evaluate_check_in
 
 router = APIRouter(prefix="/support", tags=["support"])
@@ -23,8 +23,23 @@ def suggest_support(request: SupportSuggestionRequest, db: Session = Depends(get
         if not conversation or not source or source.conversation_id != conversation.id or source.role != "user":
             raise HTTPException(status_code=404, detail="来源消息不存在")
     people = list(db.scalars(select(SupportPerson).where(SupportPerson.conversation_id == conversation.id))) if conversation else []
-    person = choose_person(request, people)
-    result = build_suggestion(request, person)
+    contacted_kinds: set[str] = set()
+    if conversation:
+        contacted_kinds = set(db.scalars(
+            select(SupportSuggestion.supporter_type)
+            .join(SupportFeedback, SupportFeedback.suggestion_id == SupportSuggestion.id)
+            .where(
+                SupportSuggestion.conversation_id == conversation.id,
+                SupportFeedback.outcome.in_(("helped", "not_helped")),
+            )
+        ).all())
+    required_kind = next_study_support_kind(request.situation, contacted_kinds)
+    person = choose_person(request, people, required_kind=required_kind)
+    result = build_suggestion(request, person, required_kind=required_kind)
+    if required_kind == "teacher":
+        result.reason = "你已经和师兄或师姐交流过，下一步可以请老师帮你确认专业方向或复习重点。"
+    elif required_kind == "family":
+        result.reason = "你已经向老师请教过具体问题，下一步可以让家人了解你的压力和需要的陪伴。"
     if conversation:
         saved = SupportSuggestion(
             conversation_id=conversation.id, support_person_id=person.id if person else None,

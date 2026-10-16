@@ -62,6 +62,22 @@ def test_postgraduate_setback_fallback_returns_memory_and_support(client: TestCl
     assert "什么时候方便" in proposal["editable_message"]
 
 
+def test_postgraduate_start_fallback_gives_three_questions_without_full_plan(client: TestClient) -> None:
+    chat = client.post("/api/v1/chat", json={
+        "device_id": "postgraduate-start-demo",
+        "message": "我决定准备考研了，但现在有些紧张，也怀疑自己到底合不合适",
+    })
+    assert chat.status_code == 200
+    payload = chat.json()
+    assert payload["strategy"] == "small_step"
+    assert payload["mock"] is False
+    assert payload["model"] == "postgraduate-start-rule-v1"
+    assert "今天先写下最想弄清楚的三个问题" in payload["reply"]
+    assert all(word in payload["reply"] for word in ("专业课程", "复习资料", "备考节奏"))
+    assert "整套方案" in payload["reply"]
+    assert "演示" not in payload["reply"]
+
+
 def test_postgraduate_support_selects_senior_and_teacher_by_situation(client: TestClient) -> None:
     for name, kind in (("小林师姐", "senior"), ("学院王老师", "teacher"), ("妈妈", "family")):
         response = client.post("/api/v1/support-people", json={
@@ -76,6 +92,60 @@ def test_postgraduate_support_selects_senior_and_teacher_by_situation(client: Te
     assert "自己的理解" in teacher["small_step"]
     unnamed = client.post("/api/v1/support/suggest", json={"situation": "想了解目标院校"}).json()
     assert unnamed["supporter_id"] is None and unnamed["supporter_type"] == "senior"
+
+
+def test_study_support_progresses_from_senior_to_teacher_to_family(client: TestClient) -> None:
+    for name, kind in (("林师姐", "senior"), ("王老师", "teacher"), ("妈妈", "family")):
+        response = client.post("/api/v1/support-people", json={
+            "device_id": "support-progression", "name": name, "relationship": name,
+            "kind": kind, "scenarios": ["考研", "复习"],
+        })
+        assert response.status_code == 201
+
+    first = client.post("/api/v1/support/suggest", json={
+        "device_id": "support-progression", "situation": "考研复习卡住了",
+    }).json()
+    assert first["supporter_type"] == "senior" and first["supporter_name"] == "林师姐"
+    assert client.post("/api/v1/support/feedback", json={
+        "device_id": "support-progression", "suggestion_id": first["suggestion_id"],
+        "outcome": "helped", "support_received": "师姐和我聊了复习安排",
+    }).status_code == 200
+
+    second = client.post("/api/v1/support/suggest", json={
+        "device_id": "support-progression", "situation": "考研复习卡住了",
+    }).json()
+    assert second["supporter_type"] == "teacher" and second["supporter_name"] == "王老师"
+    assert "已经和师兄或师姐交流过" in second["reason"]
+    assert client.post("/api/v1/support/feedback", json={
+        "device_id": "support-progression", "suggestion_id": second["suggestion_id"],
+        "outcome": "not_helped", "own_effort": "我已经向老师说明了具体问题",
+    }).status_code == 200
+
+    third = client.post("/api/v1/support/suggest", json={
+        "device_id": "support-progression", "situation": "考研复习卡住了",
+    }).json()
+    assert third["supporter_type"] == "family" and third["supporter_name"] == "妈妈"
+    assert "已经向老师请教过" in third["reason"]
+    assert "听我讲一会儿" in third["editable_message"]
+
+
+def test_not_contacted_feedback_does_not_advance_study_support(client: TestClient) -> None:
+    for name, kind in (("林师姐", "senior"), ("王老师", "teacher")):
+        assert client.post("/api/v1/support-people", json={
+            "device_id": "support-no-contact", "name": name, "relationship": name, "kind": kind,
+        }).status_code == 201
+    first = client.post("/api/v1/support/suggest", json={
+        "device_id": "support-no-contact", "situation": "准备考研复习",
+    }).json()
+    assert first["supporter_type"] == "senior"
+    assert client.post("/api/v1/support/feedback", json={
+        "device_id": "support-no-contact", "suggestion_id": first["suggestion_id"],
+        "outcome": "not_contacted",
+    }).status_code == 200
+    repeated = client.post("/api/v1/support/suggest", json={
+        "device_id": "support-no-contact", "situation": "准备考研复习",
+    }).json()
+    assert repeated["supporter_type"] == "senior"
 
 
 def test_saved_support_circle_person_is_used_before_generic_fallback(client: TestClient) -> None:

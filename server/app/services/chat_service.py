@@ -72,6 +72,19 @@ def suppress_memory_for_message(message: str) -> bool:
     return any(term in compact for term in MEMORY_SUPPRESSION_TERMS)
 
 
+def is_postgraduate_start_anxiety(message: str) -> bool:
+    """识别“刚决定考研，但紧张并怀疑是否适合”的首次启动场景。"""
+    compact = re.sub(r"\s+", "", message)
+    has_context = any(term in compact for term in ("考研", "备考"))
+    has_start = any(term in compact for term in (
+        "决定准备", "决定考研", "准备考研", "开始备考", "打算考研",
+    ))
+    has_uncertainty = any(term in compact for term in (
+        "紧张", "怀疑", "合不合适", "适不适合", "能不能坚持", "不确定", "担心",
+    ))
+    return has_context and has_start and has_uncertainty
+
+
 def _intent_for(request: ChatRequest) -> str:
     message = request.message.strip()
     if suppress_memory_for_message(message):
@@ -233,6 +246,21 @@ def _postgraduate_setback_response(evidence: list[MemoryEvidence]) -> ChatRespon
     )
 
 
+def _postgraduate_start_response() -> ChatResponse:
+    return ChatResponse(
+        reply=(
+            "刚决定考研时，期待、紧张和怀疑一起出现很正常。你不需要现在就判断自己适不适合，"
+            "也不用马上制定整套方案。\n\n"
+            "今天先写下最想弄清楚的三个问题：专业课程、复习资料和备考节奏。"
+            "把模糊的担心变成具体问题，就是很好的第一步。"
+        ),
+        strategy="small_step",
+        evidence=[],
+        mock=False,
+        model="postgraduate-start-rule-v1",
+    )
+
+
 def _live_chat(
     request: ChatRequest,
     settings: Settings,
@@ -281,6 +309,9 @@ def chat_with_fallback(
 
     if is_postgraduate_setback(request.message):
         return _postgraduate_setback_response(evidence or [])
+
+    if is_postgraduate_start_anxiety(request.message):
+        return _postgraduate_start_response()
 
     active_settings = settings or get_settings()
     if not active_settings.enable_live_ai:

@@ -11,6 +11,8 @@ import com.testconnection.confidence_agent.data.remote.ProactiveCheckIn
 import com.testconnection.confidence_agent.data.remote.SupportApiClient
 import com.testconnection.confidence_agent.data.remote.SupportSuggestion
 import com.testconnection.confidence_agent.data.remote.ReviewApiClient
+import com.testconnection.confidence_agent.data.remote.StressAlertDetail
+import com.testconnection.confidence_agent.data.remote.StressApiClient
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
 import com.testconnection.confidence_agent.widget.WidgetUpdater
 import java.io.File
@@ -47,6 +49,9 @@ data class HomeUiState(
     val checkInLoading: Boolean = false,
     val checkInAcknowledgement: String? = null,
     val checkInScheduledNotice: String? = null,
+    val stressAlert: StressAlertDetail? = null,
+    val stressIntroAlert: StressAlertDetail? = null,
+    val stressLoading: Boolean = false,
 )
 
 data class PendingChatImage(
@@ -60,9 +65,17 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val supportApi = SupportApiClient()
     private val reviewCache = ReviewCacheStore(application)
     private val reviewApi = ReviewApiClient()
+    private val stressApi = StressApiClient()
     private val deviceId = DeviceIdStore(application).get()
+    private val stressPresentationPrefs = application.getSharedPreferences("stress_alert_presentation", 0)
     private val _uiState = MutableStateFlow(HomeUiState())
     private var checkInNoticeJob: Job? = null
+    private var stressRefreshJob: Job? = null
+    private var lastPresentedStressToken: String? =
+        stressPresentationPrefs.getString("last_presented_token", null)
+    private var lastViewedStressToken: String? =
+        stressPresentationPrefs.getString("last_viewed_token", null)
+            ?: stressPresentationPrefs.getString("last_presented_token", null)
     private var allMessages: List<ChatMessage> = emptyList()
     private var showingArchivedSource = false
     private var visibleDay = LocalDate.now()
@@ -84,6 +97,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             runCatching { reviewApi.pendingDaily(deviceId) }
             loadPendingCheckIn()
+            refreshStressAlert()
         }
         viewModelScope.launch {
             while (true) {
@@ -155,6 +169,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     handleCheckInScheduling(response.checkInScheduled)
+                    pollStressAlert()
                     if (response.strategy == "seek_support") {
                         requestSupport(prompt, response.userMessageId)
                     }
@@ -193,6 +208,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 handleCheckInScheduling(response.checkInScheduled)
+                pollStressAlert()
                 if (response.strategy == "seek_support") {
                     requestSupport(transcript, response.userMessageId)
                 }
@@ -267,6 +283,67 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             runCatching { repository.syncHistory() }
             loadPendingCheckIn()
+            refreshStressAlert()
+        }
+    }
+
+    fun acceptStressAlert(alert: StressAlertDetail?) {
+        publishStressAlert(alert)
+    }
+
+    fun markStressReportViewed(alert: StressAlertDetail) {
+        val token = "${alert.id}:${alert.createdAt}"
+        lastViewedStressToken = token
+        lastPresentedStressToken = token
+        stressPresentationPrefs.edit()
+            .putString("last_viewed_token", token)
+            .putString("last_presented_token", token)
+            .apply()
+        _uiState.update {
+            it.copy(stressAlert = null, stressIntroAlert = null)
+        }
+    }
+
+    fun refreshStressAlert() {
+        if (_uiState.value.stressLoading) return
+        _uiState.update { it.copy(stressLoading = true) }
+        viewModelScope.launch {
+            runCatching { stressApi.active(deviceId) }
+                .onSuccess(::publishStressAlert)
+                .onFailure {
+                    // 压力趋势是辅助信息；后端离线时保留现有状态，不影响聊天和缓存。
+                    _uiState.update { it.copy(stressLoading = false) }
+                }
+        }
+    }
+
+    private fun pollStressAlert() {
+        stressRefreshJob?.cancel()
+        stressRefreshJob = viewModelScope.launch {
+            for (delayMs in listOf(1_500L, 6_000L, 15_000L, 25_000L)) {
+                delay(delayMs)
+                val alert = runCatching { stressApi.active(deviceId) }.getOrNull()
+                if (alert != null) {
+                    publishStressAlert(alert)
+                    break
+                }
+            }
+        }
+    }
+
+    private fun publishStressAlert(alert: StressAlertDetail?) {
+        val token = alert?.let { "${it.id}:${it.createdAt}" }
+        val wasViewed = token != null && token == lastViewedStressToken
+        val shouldPresent = token != null && !wasViewed && token != lastPresentedStressToken
+        if (shouldPresent) lastPresentedStressToken = token
+        _uiState.update {
+            it.copy(
+                stressAlert = alert?.takeUnless { wasViewed },
+                stressIntroAlert = if (shouldPresent) alert else it.stressIntroAlert?.takeIf { current ->
+                    !wasViewed && alert != null && current.id == alert.id
+                },
+                stressLoading = false,
+            )
         }
     }
 
@@ -379,7 +456,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun submitSupportFeedback(outcome: String, ownEffort: String?, supportReceived: String?) {
-        val suggestionId = _uiState.value.supportSuggestion?.id ?: return
+        val suggestion = _uiState.value.supportSuggestion ?: return
+        val suggestionId = suggestion.id ?: return
         if (_uiState.value.supportFeedbackLoading) return
         _uiState.update { it.copy(supportFeedbackLoading = true, error = null) }
         viewModelScope.launch {
@@ -390,6 +468,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication()) }
                     runCatching { repository.newCheckInNotice() }.getOrNull()?.let {
                         _uiState.update { state -> state.copy(checkInScheduledNotice = scheduledNoticeText()) }
+                    }
+                    if (outcome == "helped" || outcome == "not_helped") {
+                        requestSupport(suggestion.situation, suggestion.sourceMessageId)
                     }
                 }
                 .onFailure { _uiState.update { it.copy(supportFeedbackLoading = false, error = "反馈暂时没有保存，请重试。") } }

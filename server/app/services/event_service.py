@@ -15,6 +15,7 @@ from app.db.models import DailySummary, GrowthEvent, Memory, MemoryDeletion, Mes
 from app.db.session import engine_for_url
 from app.services.check_in_service import evaluate_check_in
 from app.services.memory_service import local_day, set_memory_embedding
+from app.services.stress_service import evaluate_stress_alert
 
 
 logger = logging.getLogger(__name__)
@@ -636,6 +637,7 @@ def process_turn(database_url: str, conversation_id: int, user_message_id: int, 
                     summary.content += "\n" + event.fact
                     summary.source_event_ids = [*(summary.source_event_ids or []), event.id]
                     summary.updated_at = user_message.created_at
+            evaluate_stress_alert(db, conversation_id)
             evaluate_check_in(db, conversation_id)
             db.commit()
     except Exception:
@@ -688,6 +690,7 @@ def process_record(database_url: str, conversation_id: int, record_id: int) -> N
             existing_memory = db.scalar(select(Memory).where(Memory.event_id == event.id))
             if existing_memory is not None and not existing_memory.is_user_edited:
                 db.delete(existing_memory)
+            evaluate_stress_alert(db, conversation_id)
             evaluate_check_in(db, conversation_id)
             db.commit()
     except Exception:

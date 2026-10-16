@@ -9,7 +9,7 @@ CheckInChoice = Literal["talk", "improved", "not_now"]
 
 class CheckInItem(BaseModel):
     id: int
-    reason: Literal["stuck", "anxious", "low", "follow_up"]
+    reason: Literal["stuck", "anxious", "low", "follow_up", "stress_follow_up"]
     prompt: str
     source_event_ids: list[int] = Field(default_factory=list)
     created_at: datetime

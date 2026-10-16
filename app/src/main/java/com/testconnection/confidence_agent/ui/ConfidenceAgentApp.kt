@@ -53,6 +53,7 @@ import com.testconnection.confidence_agent.ui.screens.MemoryCenterScreen
 import com.testconnection.confidence_agent.ui.screens.SupportCircleScreen
 import com.testconnection.confidence_agent.ui.screens.OnboardingScreen
 import com.testconnection.confidence_agent.ui.screens.DataToolsScreen
+import com.testconnection.confidence_agent.ui.screens.StressAlertScreen
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
@@ -84,7 +85,10 @@ fun ConfidenceAgentApp(
     var showVideoStudio by rememberSaveable { mutableStateOf(false) }
     var showWeeklyReport by rememberSaveable { mutableStateOf(false) }
     var showDataTools by rememberSaveable { mutableStateOf(false) }
+    var showStressAlert by rememberSaveable { mutableStateOf(false) }
+    var stressAlertId by rememberSaveable { mutableStateOf<Long?>(null) }
     var supportFromMemory by rememberSaveable { mutableStateOf(false) }
+    var supportFromStress by rememberSaveable { mutableStateOf(false) }
     var onboardingFromMemory by rememberSaveable { mutableStateOf(false) }
     var recordParent by rememberSaveable { mutableStateOf<AppDestination?>(null) }
     var recordFromMemory by rememberSaveable { mutableStateOf(false) }
@@ -184,9 +188,28 @@ fun ConfidenceAgentApp(
     if (showSupportCircle) {
         SupportCircleScreen(onBack = {
             showSupportCircle = false
-            showMemoryCenter = supportFromMemory
+            showMemoryCenter = supportFromMemory && !supportFromStress
+            showStressAlert = supportFromStress
             supportFromMemory = false
+            supportFromStress = false
         })
+        return
+    }
+
+    if (showStressAlert && stressAlertId != null) {
+        StressAlertScreen(
+            alertId = requireNotNull(stressAlertId),
+            onBack = {
+                showStressAlert = false
+                homeViewModel.refreshStressAlert()
+            },
+            onOpenSupportCircle = {
+                supportFromStress = true
+                showStressAlert = false
+                showSupportCircle = true
+            },
+            onAlertChanged = homeViewModel::acceptStressAlert,
+        )
         return
     }
 
@@ -235,6 +258,11 @@ fun ConfidenceAgentApp(
             },
             onCreateFourWeekDemoData = growthViewModel::createDemoData,
             onClearDemoData = growthViewModel::clearDemoData,
+            onStressScenarioReady = { alert ->
+                homeViewModel.acceptStressAlert(alert)
+                showDataTools = false
+                selectedDestination = AppDestination.HOME
+            },
             onAllDataDeleted = {
                 onboardingStore.reset()
                 userProfile = null
@@ -374,6 +402,10 @@ fun ConfidenceAgentApp(
                     viewModel = homeViewModel,
                     userName = displayName,
                     onOpenVoice = { showVoiceCall = true },
+                    onOpenStressAlert = { alertId ->
+                        stressAlertId = alertId
+                        showStressAlert = true
+                    },
                     onOpenRecordSource = { recordId ->
                         growthViewModel.recordForEdit(recordId) { record ->
                             if (record != null) {

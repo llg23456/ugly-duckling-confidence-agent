@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db.models import GrowthEvent
@@ -67,7 +67,8 @@ def generate_pending_daily(request: PendingDailyRequest, db: Session = Depends(g
     if conversation is None:
         return PendingDailyResponse()
     dates = sorted({local_day(item.created_at) for item in db.scalars(select(GrowthEvent).where(
-        GrowthEvent.conversation_id == conversation.id
+        GrowthEvent.conversation_id == conversation.id,
+        or_(GrowthEvent.source_type.is_(None), GrowthEvent.source_type != "stress_scenario"),
     )) if local_day(item.created_at) < today_local().isoformat()}, reverse=True)
     return PendingDailyResponse(reviews=[review_for(
         db, request.device_id, "day", date.fromisoformat(day), date.fromisoformat(day), persist=True,

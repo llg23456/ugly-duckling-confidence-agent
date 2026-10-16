@@ -24,6 +24,8 @@ data class SupportSuggestion(
     val editableMessage: String,
     val smallStep: String,
     val lighterOption: String,
+    val situation: String,
+    val sourceMessageId: Long?,
 )
 
 data class GrowthEvent(
@@ -111,6 +113,7 @@ class SupportApiClient(private val baseUrl: String? = null) {
             json.optLong("suggestion_id").takeIf { it > 0 }, json.getString("supporter_name"),
             json.getString("reason"), json.getString("editable_message"),
             json.getString("small_step"), json.getString("lighter_option"),
+            situation, sourceMessageId,
         )
     }
 

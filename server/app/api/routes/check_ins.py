@@ -1,10 +1,10 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.db.models import GrowthEvent, ProactiveCheckIn
+from app.db.models import GrowthEvent, ProactiveCheckIn, StressAlert
 from app.db.repository import get_conversation
 from app.db.session import get_db
 from app.schemas.check_in import (
@@ -33,14 +33,16 @@ def pending_check_in(
     conversation = get_conversation(db, device_id)
     if conversation is None:
         return PendingCheckInResponse()
+    now = datetime.now(UTC)
     check_in = db.scalar(select(ProactiveCheckIn).where(
         ProactiveCheckIn.conversation_id == conversation.id,
         ProactiveCheckIn.status == "pending",
+        or_(ProactiveCheckIn.available_after.is_(None), ProactiveCheckIn.available_after <= now),
     ).order_by(ProactiveCheckIn.id.desc()))
     if check_in is None:
         return PendingCheckInResponse()
     if check_in.shown_at is None:
-        check_in.shown_at = datetime.now(UTC)
+        check_in.shown_at = now
         check_in.notified_at = check_in.notified_at or check_in.shown_at
         check_in.updated_at = check_in.shown_at
         db.commit()
@@ -62,15 +64,17 @@ def newly_created_check_in_notice(
     conversation = get_conversation(db, device_id)
     if conversation is None:
         return PendingCheckInResponse()
+    now = datetime.now(UTC)
     check_in = db.scalar(select(ProactiveCheckIn).where(
         ProactiveCheckIn.conversation_id == conversation.id,
         ProactiveCheckIn.status == "pending",
         ProactiveCheckIn.notified_at.is_(None),
         ProactiveCheckIn.shown_at.is_(None),
+        or_(ProactiveCheckIn.available_after.is_(None), ProactiveCheckIn.available_after <= now),
     ).order_by(ProactiveCheckIn.id.desc()))
     if check_in is None:
         return PendingCheckInResponse()
-    check_in.notified_at = datetime.now(UTC)
+    check_in.notified_at = now
     check_in.updated_at = check_in.notified_at
     db.commit()
     return PendingCheckInResponse(check_in=CheckInItem(
@@ -104,6 +108,18 @@ def respond_to_check_in(
         acknowledgement = "听到你比之前好一点，小鸭替你松了一口气。今天不用继续展开也可以。"
     else:
         acknowledgement = "好，这次先不说。小鸭会尊重你的节奏，最近几天不会再追问。"
+    if check_in.reason == "stress_follow_up":
+        alert = db.scalar(select(StressAlert).where(
+            StressAlert.follow_up_check_in_id == check_in.id,
+            StressAlert.conversation_id == check_in.conversation_id,
+        ))
+        if alert is not None:
+            alert.status = {"talk": "confirmed", "improved": "resolved", "not_now": "dismissed"}[request.choice]
+            alert.actions = [*(alert.actions or []), {
+                "type": f"follow_up_{request.choice}",
+                "at": now.isoformat(),
+            }]
+            alert.updated_at = now
     db.commit()
     return CheckInResponseResult(
         id=check_in.id,

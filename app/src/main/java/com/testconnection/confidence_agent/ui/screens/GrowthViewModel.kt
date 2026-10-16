@@ -177,7 +177,7 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
                     reviewCache.markDirty()
                     forceRefresh()
                 }
-                .onFailure { error -> _state.update { it.copy(loading = false, error = "演示数据生成失败：${error.message}") } }
+                .onFailure { error -> _state.update { it.copy(loading = false, error = "故事记录准备失败：${error.message}") } }
         }
     }
 
@@ -212,7 +212,7 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
                     reviewCache.markDirty()
                     forceRefresh()
                 }
-                .onFailure { error -> _state.update { it.copy(loading = false, error = "演示数据清除失败：${error.message}") } }
+                .onFailure { error -> _state.update { it.copy(loading = false, error = "准备记录清除失败：${error.message}") } }
         }
     }
 

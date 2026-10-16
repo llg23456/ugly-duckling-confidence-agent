@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.schemas import EventExtractionRequest, EventExtractionResponse
@@ -61,7 +61,10 @@ def list_events(device_id: str = Query(min_length=1, max_length=128), db: Sessio
     conversation = get_conversation(db, device_id)
     if not conversation:
         return EventListResponse(events=[])
-    events = db.scalars(select(GrowthEvent).where(GrowthEvent.conversation_id == conversation.id).order_by(GrowthEvent.id.desc())).all()
+    events = db.scalars(select(GrowthEvent).where(
+        GrowthEvent.conversation_id == conversation.id,
+        or_(GrowthEvent.source_type.is_(None), GrowthEvent.source_type != "stress_scenario"),
+    ).order_by(GrowthEvent.id.desc())).all()
     return EventListResponse(events=[EventItem(
         id=event.id, fact=event.fact, feeling=event.feeling, attempt=event.attempt,
         own_effort=event.own_effort, support_received=event.support_received, people=event.people or [],

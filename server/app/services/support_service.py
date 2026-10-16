@@ -13,6 +13,17 @@ STUDY_SETBACK_WORDS = ("卡住", "做不出来", "错了很多", "没进展", "�
 STUDY_SELF_DOUBT_WORDS = ("不适合", "不行", "做不到", "是不是不", "怀疑自己")
 
 
+def next_study_support_kind(situation: str, contacted_kinds: set[str]) -> str | None:
+    """按已发生的现实联系，将考研求助从师兄师姐递进到老师和家长。"""
+    if not any(word in situation for word in STUDY_CONTEXT_WORDS):
+        return None
+    if "teacher" in contacted_kinds:
+        return "family"
+    if "senior" in contacted_kinds:
+        return "teacher"
+    return None
+
+
 def is_postgraduate_setback(message: str) -> bool:
     compact = "".join(message.split())
     return (
@@ -50,9 +61,14 @@ def needs_support(message: str, history: list[dict[str, str]] | None = None) -> 
 def choose_person(
     request: SupportSuggestionRequest,
     people: list[SupportPerson],
+    required_kind: str | None = None,
 ) -> SupportPerson | None:
     if not people:
         return None
+    if required_kind is not None:
+        people = [person for person in people if person.kind == required_kind]
+        if not people:
+            return None
     situation = request.situation.lower()
     def rank(person: SupportPerson) -> tuple[int, int, int, int]:
         preferred = int(person.kind in request.preferred_supporters)
@@ -64,8 +80,14 @@ def choose_person(
     return max(people, key=rank)
 
 
-def build_suggestion(request: SupportSuggestionRequest, person: SupportPerson | None) -> SupportSuggestionResponse:
-    kind = person.kind if person and person.kind else (request.preferred_supporters[0] if request.preferred_supporters else suggested_kind(request.situation))
+def build_suggestion(
+    request: SupportSuggestionRequest,
+    person: SupportPerson | None,
+    required_kind: str | None = None,
+) -> SupportSuggestionResponse:
+    kind = person.kind if person and person.kind else (
+        required_kind or (request.preferred_supporters[0] if request.preferred_supporters else suggested_kind(request.situation))
+    )
     default_names = {
         "teacher": "一位你信任的老师", "senior": "一位目标院校的师兄或师姐", "classmate": "一位你信任的同学",
         "friend": "一位你信任的朋友", "family": "一位你信任的家人",
@@ -78,6 +100,9 @@ def build_suggestion(request: SupportSuggestionRequest, person: SupportPerson | 
     elif kind == "teacher" and any(word in request.situation for word in ("考研", "专业", "概念", "方向")):
         small_step = "先写下自己的理解和一个没弄清楚的地方。"
         editable = f"{name}，我准备考研时有一个专业方向或知识问题，已经整理了自己的理解。你方便时能帮我确认一下吗？"
+    elif kind == "family" and any(word in request.situation for word in STUDY_CONTEXT_WORDS):
+        small_step = "先写下现在最压着你的感受，以及希望家人怎样陪你。"
+        editable = f"{name}，我最近准备考研时压力有些大。我不需要你马上替我解决问题，只想和你说说，也希望你能听我讲一会儿。"
     elif "答辩" in request.situation or "汇报" in request.situation:
         small_step = "先自己练 30 秒开场，停下来看看哪一句最卡。"
         editable = f"{name}，我准备汇报时有点卡住。你方便听我练 5 分钟开场吗？"

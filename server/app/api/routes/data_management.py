@@ -15,6 +15,7 @@ from app.db.models import (
     Message,
     ProactiveCheckIn,
     Review,
+    StressAlert,
     SupportFeedback,
     SupportPerson,
     SupportSuggestion,
@@ -51,12 +52,14 @@ def export_data(
         "daily_summaries": [], "reviews": [], "support_people": [],
         "support_suggestions": [], "support_feedback": [], "video_scripts": [],
         "proactive_check_ins": [],
+        "stress_alerts": [], "stress_alert_evidence": [],
     }
     if conversation is None:
         return {"exported_at": datetime.now(UTC).isoformat(), "device_id": device_id, "data": empty}
     messages = _rows(db, Message, conversation.id)
     message_content = {item["id"]: item["content"] for item in messages}
     growth_events = _rows(db, GrowthEvent, conversation.id)
+    event_by_id = {item["id"]: item for item in growth_events}
     assessments = [{
         "source_user_message_id": event.get("source_user_message_id"),
         "source_content": message_content.get(event.get("source_user_message_id")),
@@ -78,6 +81,15 @@ def export_data(
         "model": event.get("model"),
         "prompt_version": event.get("prompt_version"),
     } for event in growth_events]
+    stress_alerts = _rows(db, StressAlert, conversation.id)
+    stress_alert_evidence = [{
+        "alert_id": alert["id"],
+        "source_events": [
+            event_by_id[event_id]
+            for event_id in alert.get("source_event_ids") or []
+            if event_id in event_by_id
+        ],
+    } for alert in stress_alerts]
     data = {
         "messages": messages,
         "records": _rows(db, UserRecord, conversation.id),
@@ -91,6 +103,8 @@ def export_data(
         "support_feedback": _rows(db, SupportFeedback, conversation.id),
         "video_scripts": _rows(db, VideoScript, conversation.id),
         "proactive_check_ins": _rows(db, ProactiveCheckIn, conversation.id),
+        "stress_alerts": stress_alerts,
+        "stress_alert_evidence": stress_alert_evidence,
     }
     return {"exported_at": datetime.now(UTC).isoformat(), "device_id": device_id, "data": data}
 
@@ -111,6 +125,7 @@ def delete_all_data(
         DailySummary,
         Review,
         VideoScript,
+        StressAlert,
         ProactiveCheckIn,
         GrowthEvent,
         SupportFeedback,
