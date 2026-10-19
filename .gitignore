@@ -50,6 +50,24 @@ server/tts-test.*
 *.aab
 *.log
 
+# Local Codex/chart generation workspaces
+/.codex_build/
+/.codex_tmp/
+/.chart-data-*/
+
+# Local presentation, submission and generated documentation artifacts
+# Files already tracked under docs/ remain tracked; this only blocks new files.
+/docs/
+/今晚实施计划_画像记录与小组件.md
+/图标素材替换说明.md
+*.ppt
+*.pptx
+*.pps
+*.ppsx
+*.doc
+*.docx
+*.pdf
+
 # OS/editor leftovers
 .DS_Store
 Thumbs.db
