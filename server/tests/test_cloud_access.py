@@ -169,3 +169,72 @@ def test_legacy_review_get_consumes_quota(cloud):
     assert client.post('/api/v1/chat',headers=header,json={'device_id':'owner','message':'今天好'}).status_code == 200
     assert client.get('/api/v1/reviews/week?device_id=owner',headers=header).status_code == 429
     assert client.get('/api/v1/conversations/owner/messages',headers=header).status_code == 200
+
+
+def test_batch_csv_validity_and_single_use(cloud, capsys, monkeypatch):
+    import csv
+    import io
+    from datetime import datetime
+    from app import cloud_invites
+
+    _, _, session, _, activate = cloud
+    existing = activate('existing-tester')
+    with session() as db:
+        engine = db.get_bind()
+    monkeypatch.setattr(cloud_invites, 'engine_for_url', lambda _: engine)
+    before = int(time.time())
+    cloud_invites.main(['--label-prefix', 'trial', '--count', '20'])
+    rows = list(csv.DictReader(io.StringIO(capsys.readouterr().out)))
+    assert len(rows) == len({row['invite_code'] for row in rows}) == 20
+    assert rows[0]['label'] == 'trial-001' and rows[-1]['label'] == 'trial-020'
+    assert all(row['recipient'] == row['note'] == '' for row in rows)
+    expires = int(datetime.fromisoformat(rows[0]['redeem_before']).timestamp())
+    until = int(datetime.fromisoformat(rows[0]['access_until']).timestamp())
+    assert before + 7 * 86400 <= expires <= int(time.time()) + 7 * 86400
+    assert until - expires == 23 * 86400
+    assert rows[0]['redeem_before'].endswith('+08:00')
+    with session() as db:
+        invite = db.get(access.CloudInvite, access.digest(rows[0]['invite_code']))
+        assert invite.digest != rows[0]['invite_code']
+        assert invite.device_id is None
+    # A code is still usable after the previous 24-hour deadline, then consumed once.
+    monkeypatch.setattr(access.time, 'time', lambda: before + 2 * 86400)
+    with session() as db:
+        _, authorized_until = access.redeem(db, rows[0]['invite_code'], 'batch-user')
+        assert authorized_until == until
+        with pytest.raises(access.HTTPException) as used:
+            access.redeem(db, rows[0]['invite_code'], 'another-user')
+        assert used.value.status_code == 401
+    monkeypatch.setattr(access.time, 'time', lambda: before + 8 * 86400)
+    with session() as db:
+        with pytest.raises(access.HTTPException) as expired:
+            access.redeem(db, rows[1]['invite_code'], 'too-late')
+        assert expired.value.status_code == 401
+    assert cloud[0].get('/api/v1/cloud-auth/me', headers=existing).status_code == 200
+
+
+@pytest.mark.parametrize('args', [
+    ['--count', '0'], ['--count', '201'], ['--invite-days', '0'],
+    ['--invite-days', '31'], ['--access-days', '91'],
+    ['--invite-days', '7', '--access-days', '6'], ['--label-prefix', 'x' * 97],
+])
+def test_invalid_batch_arguments_do_not_open_database(args, monkeypatch):
+    from app import cloud_invites
+    def unexpected_database(_):
+        pytest.fail('Invalid arguments must be rejected before opening the database')
+    monkeypatch.setattr(cloud_invites, 'engine_for_url', unexpected_database)
+    with pytest.raises(SystemExit) as invalid:
+        cloud_invites.main(['--label-prefix', 'invalid', *args])
+    assert invalid.value.code == 2
+
+
+def test_batch_transaction_rolls_back_on_duplicate_codes(cloud, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+    from app import cloud_invites
+    _, _, session, _, _ = cloud
+    monkeypatch.setattr(cloud_invites.secrets, 'token_hex', lambda _: 'a' * 20)
+    with session() as db:
+        with pytest.raises(IntegrityError):
+            cloud_invites.issue_batch(db, 'atomic-batch', 2)
+        db.rollback()
+        assert db.scalar(select(access.CloudInvite).where(access.CloudInvite.label.like('atomic-batch-%'))) is None

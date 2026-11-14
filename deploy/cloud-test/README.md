@@ -1,6 +1,6 @@
 # 受邀云测环境
 
-2026-11-14 已完成公网 HTTPS 和 Android 真机独立联网验收。入口为 `https://api.yaligo-growth.top`，香港 ECS `47.83.165.140`，当前后端发布为 `20261114-hk04`。云测版首次输入一次邀请码，后续可直接联网使用，无需 WireGuard、USB、电脑后端或 SSH 隧道。
+2026-11-14 已完成公网 HTTPS 和 Android 真机独立联网验收。入口为 `https://api.yaligo-growth.top`，香港 ECS `47.83.165.140`，该轮验收后端发布为 `20261114-hk04`。云测版首次输入一次邀请码，后续可直接联网使用，无需 WireGuard、USB、电脑后端或 SSH 隧道。
 
 证据分别见 [域名及证书](domain-verification.json)、[公网认证接口](access-verification.json) 和 [真机验收](phone-verification.json)。后端测试 80 项、Android JVM 测试 18 项通过。此前新身份记忆提取未落库，以及并发多模态请求约 19–22 秒的问题仍待专项排查；本次单次公网聊天约 1.91 秒，不能据此认定并发性能问题已解决。
 
@@ -10,7 +10,42 @@
 
 Android Studio 的普通 `Run app`、无参数 `assembleDebug` 与打包脚本已统一为云测入口；不再需要 `-PcloudTest` 或 `-PapiBaseUrl`，也不再提供本地版构建。请确认 IDE 打开的是本分支工作区，Sync 后选择 `app` / `debug` 即可。
 
-在香港服务器 Workbench 或 SSH 终端给每名新试用者单独生成邀请码：
+### 电脑端批量邀请（推荐）
+
+Windows 电脑双击本目录下的 `批量生成邀请码.cmd`，输入数量后回车；直接回车默认生成 20 个。无需打开 Workbench。电脑需有 Windows OpenSSH、部署用 SSH 私钥及已核验的主机记录；当前电脑已配置。新电脑需单独配置其管理员密钥，不要把本机私钥随 APK 或脚本分发。
+
+也可以在项目根目录使用 PowerShell：
+
+```powershell
+.\deploy\cloud-test\generate-invites.ps1 -Count 20
+# 示例：50 个，14 天内兑换，授权到期为生成后的第 45 天
+.\deploy\cloud-test\generate-invites.ps1 -Count 50 -InviteDays 14 -AccessDays 45
+```
+
+默认 **7 天内兑换、授权到期为生成后的第 30 天**，两者都从生成时间计算；例如第 7 天兑换，约剩 23 天授权。数量范围 1–200，兑换期限 1–30 天，授权期限 1–90 天，兑换期限不能长于授权期限。每个邀请码只可兑换一次，仅用于新设备首次授权。
+
+清单自动保存到项目的 `artifacts/cloud-test/invites/`（已被 Git 忽略），文件名含时间和批次标识；用 Excel 打开即可。字段为 `label`（编号）、`invite_code`（邀请码）、`redeem_before`（兑换截止）、`access_until`（授权到期）、`recipient`（领取人）、`note`（备注）。日期带 `+08:00`，为北京时间。电脑清单仅授予当前 Windows 用户访问权限；完整清单属于管理资料，每次只向一人发送一个邀请码。
+
+服务器在 `/root/cloud-invites/` 保留 root 专用清单。若下载中断，按脚本输出的服务器路径用 SCP 重新下载，避免重复运行而生成另一批。服务器数据库只保存摘要，无法从数据库恢复邀请码明文；明文仅保留在这两份管理清单。
+
+批量工具不调用 AI、不占用模型额度。它通过 SSH 在当前容器内执行运维目录的独立脚本，不需要重新部署应用。服务器首次安装或替换工具（仅组织者）可以从项目根目录执行以下命令；应沿用部署时的 `StrictHostKeyChecking=yes`、`UserKnownHostsFile` 和 `IdentityFile` SSH 选项：
+
+```powershell
+$sshOptions = @('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes',
+  '-o',"UserKnownHostsFile=$env:USERPROFILE\.ssh\ugly_duckling_cloudtest_known_hosts",
+  '-o','IdentitiesOnly=yes','-i',"$env:USERPROFILE\.ssh\ugly_duckling_cloudtest")
+ssh @sshOptions root@47.83.165.140 'install -d -m 700 /opt/ugly-duckling-cloudtest/tools'
+scp @sshOptions .\server\app\cloud_invites.py root@47.83.165.140:/opt/ugly-duckling-cloudtest/tools/cloud_invites.py.next
+ssh @sshOptions root@47.83.165.140 'chmod 600 /opt/ugly-duckling-cloudtest/tools/cloud_invites.py.next && mv /opt/ugly-duckling-cloudtest/tools/cloud_invites.py.next /opt/ugly-duckling-cloudtest/tools/cloud_invites.py'
+```
+
+脚本可通过 `-IdentityFile`、`-KnownHostsFile` 和 `-OutputDirectory` 指定本机路径。它严格验证服务器主机密钥，不自动接受未知密钥。保留的 `.cmd` 入口会在结束后暂停，便于查看结果。
+
+批量工具已完成 89 项后端测试、Windows PowerShell 实际下载和公网一次性兑换验证，结果见 [批量邀请验证](invite-tool-verification.json)。独立安装工具时保留了服务器当时的应用发布及现有授权。
+
+### 单人邀请和授权恢复
+
+也可以在香港服务器 Workbench 或 SSH 终端给每名新试用者单独生成邀请码：
 
 ```bash
 cd /opt/ugly-duckling-cloudtest/current
