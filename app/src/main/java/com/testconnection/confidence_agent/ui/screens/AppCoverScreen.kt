@@ -29,7 +29,7 @@ fun AppCoverScreen() {
     Box(modifier = Modifier.fillMaxSize().background(Cream)) {
         Image(
             painter = painterResource(R.drawable.app_cover_v1),
-            contentDescription = "小丑鸭勇敢迈出一步",
+            contentDescription = "鸭力Go勇敢迈出一步",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
         )
@@ -40,7 +40,7 @@ fun AppCoverScreen() {
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "小丑鸭",
+                    text = "鸭力Go",
                     style = MaterialTheme.typography.displaySmall.copy(fontSize = 42.sp),
                     color = Ink,
                 )

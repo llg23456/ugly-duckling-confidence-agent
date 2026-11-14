@@ -132,3 +132,112 @@ def test_clear_scenario_removes_events_alert_and_follow_up(client: TestClient) -
     assert not [item for item in data["growth_events"] if item["source_type"] == "stress_scenario"]
     assert data["stress_alerts"] == []
     assert data["proactive_check_ins"] == []
+
+
+def test_refresh_without_real_signals_does_not_create_sample_data(client: TestClient) -> None:
+    response = client.post("/api/v1/stress-alerts/refresh", json={"device_id": "new-user"})
+    assert response.status_code == 200
+    assert response.json() == {"alert": None}
+    exported = client.get("/api/v1/data/export?device_id=new-user").json()["data"]
+    assert exported["growth_events"] == []
+    assert exported["stress_alerts"] == []
+
+    _record(client, "single-real", "one", "今天任务很多，有些紧张。", 1)
+    response = client.post("/api/v1/stress-alerts/refresh", json={"device_id": "single-real"})
+    assert response.json() == {"alert": None}
+    exported = client.get("/api/v1/data/export?device_id=single-real").json()["data"]
+    assert len(exported["growth_events"]) == 1
+    assert exported["stress_alerts"] == []
+
+
+def test_trend_always_returns_seven_days_without_inventing_data(client: TestClient) -> None:
+    response = client.post("/api/v1/stress-alerts/trend", json={"device_id": "no-data"})
+    assert response.status_code == 200
+    report = response.json()
+    assert report["level"] == "unknown"
+    assert len(report["trend"]) == 7
+    assert all(point["level"] == "unknown" for point in report["trend"])
+    assert report["observed_days"] == report["record_count"] == report["message_count"] == 0
+    assert report["alert"] is None
+    assert client.get("/api/v1/data/export?device_id=no-data").json()["data"]["growth_events"] == []
+
+
+def test_trend_includes_steady_and_single_signal_days_without_alert(client: TestClient) -> None:
+    _record(client, "daily-trend", "calm", "今天和朋友在公园散步，感觉很放松。", 2)
+    _record(client, "daily-trend", "watch", "今天复习有点紧张。", 1)
+    report = client.post("/api/v1/stress-alerts/trend", json={"device_id": "daily-trend"}).json()
+    assert report["alert"] is None
+    assert report["observed_days"] == report["record_count"] == 2
+    assert report["trend"][-3]["level"] == "steady"
+    assert report["trend"][-2]["level"] == "watch"
+    assert report["trend"][-1]["level"] == "unknown"
+    assert len(report["sources"]) == 2
+    client.delete("/api/v1/records/client/watch", params={"device_id": "daily-trend"})
+    report = client.post("/api/v1/stress-alerts/trend", json={"device_id": "daily-trend"}).json()
+    assert report["level"] == "steady"
+    assert report["trend"][-2]["level"] == "unknown"
+
+
+def test_trend_reads_user_chat_and_excludes_demo_other_users_and_future_records(client: TestClient) -> None:
+    device_id = "raw-trend"
+    client.post("/api/v1/dev/demo-data", json={"device_id": device_id})
+    client.post("/api/v1/stress-alerts/prepare-scenario", json={"device_id": device_id})
+    client.post("/api/v1/chat", json={"device_id": device_id, "message": "今天休息得很好。"})
+    _record(client, "someone-else", "private", "最近压力很大。", 1)
+    _record(client, device_id, "future", "明天压力很大。", -1)
+    _record(client, device_id, "old", "以前压力很大。", 8)
+    report = client.post("/api/v1/stress-alerts/trend", json={"device_id": device_id}).json()
+    assert report["level"] == "steady"
+    assert report["record_count"] == 0
+    assert report["message_count"] == report["observed_days"] == 1
+    assert report["alert"] is None
+    assert [row["excerpt"] for row in report["sources"]] == ["今天休息得很好。"]
+
+
+def test_trend_empty_media_is_counted_without_assuming_steady(client: TestClient) -> None:
+    _record(client, "empty-media", "blank", "", 1)
+    report = client.post("/api/v1/stress-alerts/trend", json={"device_id": "empty-media"}).json()
+    assert report["record_count"] == 1
+    assert report["observed_days"] == 0
+    assert report["trend"][-2]["level"] == "unknown"
+
+
+def test_refresh_excludes_prepared_stories_and_old_scenarios(client: TestClient) -> None:
+    device_id = "prepared-only"
+    assert client.post("/api/v1/dev/demo-data", json={"device_id": device_id}).status_code == 200
+    assert client.post("/api/v1/stress-alerts/prepare-scenario", json={"device_id": device_id}).status_code == 200
+    assert client.get(f"/api/v1/stress-alerts/active?device_id={device_id}").json() == {"alert": None}
+    assert client.post("/api/v1/stress-alerts/refresh", json={"device_id": device_id}).json() == {"alert": None}
+
+
+def test_refresh_uses_only_owned_real_records_and_is_repeatable(client: TestClient) -> None:
+    device_id = "real-experience"
+    client.post("/api/v1/stress-alerts/prepare-scenario", json={"device_id": device_id})
+    first_id = _record(client, device_id, "real-one", "最近复习压力很大，晚上睡不好。", 3)
+    second_id = _record(client, device_id, "real-two", "今天很焦虑，无法集中注意力。", 1)
+    _record(client, "other-user", "private", "我非常紧张。", 2)
+    before = client.get(f"/api/v1/data/export?device_id={device_id}").json()["data"]
+
+    first = client.post("/api/v1/stress-alerts/refresh", json={"device_id": device_id})
+    second = client.post("/api/v1/stress-alerts/refresh", json={"device_id": device_id})
+    assert first.status_code == second.status_code == 200
+    alert = second.json()["alert"]
+    assert alert["id"] == first.json()["alert"]["id"]
+    assert alert["level"] == "high"
+    assert {row["source_record_id"] for row in alert["evidence"]} == {first_id, second_id}
+    assert len(alert["trend"]) == 7
+    assert sum(row["signal_count"] for row in alert["trend"]) == 2
+    after = client.get(f"/api/v1/data/export?device_id={device_id}").json()["data"]
+    assert after["growth_events"] == before["growth_events"]
+    assert after["records"] == before["records"]
+    active = client.get(f"/api/v1/stress-alerts/active?device_id={device_id}").json()["alert"]
+    assert active["id"] == alert["id"]
+
+    client.post(f"/api/v1/stress-alerts/{alert['id']}/follow-up", json={"device_id": device_id})
+    early = client.post(f"/api/v1/stress-alerts/{alert['id']}/follow-up/ready", json={"device_id": device_id})
+    assert early.status_code == 409
+    detail = client.get(f"/api/v1/stress-alerts/{alert['id']}", params={"device_id": device_id}).json()
+    assert detail["follow_up"]["ready"] is False
+
+    client.delete("/api/v1/records/client/real-one", params={"device_id": device_id})
+    assert client.post("/api/v1/stress-alerts/refresh", json={"device_id": device_id}).json() == {"alert": None}

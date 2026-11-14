@@ -27,7 +27,7 @@ class DataManagementRepository(private val context: Context) {
         val manifest = buildManifest(deviceId, mediaIncluded = true)
         val directory = File(appContext.cacheDir, "exports").apply { mkdirs() }
         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-        val output = File(directory, "小丑鸭数据-$stamp.zip")
+        val output = File(directory, "鸭力Go数据-$stamp.zip")
         ZipOutputStream(output.outputStream().buffered()).use { zip ->
             zip.putNextEntry(ZipEntry("data.json"))
             zip.write(manifest.toString(2).toByteArray(Charsets.UTF_8))
@@ -47,7 +47,7 @@ class DataManagementRepository(private val context: Context) {
         val manifest = buildManifest(deviceId, mediaIncluded = false)
         val directory = File(appContext.cacheDir, "exports").apply { mkdirs() }
         val stamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
-        File(directory, "小丑鸭数据-$stamp.json").also {
+        File(directory, "鸭力Go数据-$stamp.json").also {
             it.writeText(manifest.toString(2), Charsets.UTF_8)
         }
     }

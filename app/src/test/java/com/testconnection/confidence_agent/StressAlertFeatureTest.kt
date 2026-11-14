@@ -1,6 +1,7 @@
 package com.testconnection.confidence_agent
 
 import com.testconnection.confidence_agent.data.remote.parseStressAlertMap
+import com.testconnection.confidence_agent.data.remote.parseStressTrendMap
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -8,6 +9,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StressAlertFeatureTest {
+    @Test
+    fun parsesTrendWithoutAnAlertAndKeepsMissingDaysDistinct() {
+        val report = parseStressTrendMap(mapOf(
+            "level" to "steady", "record_count" to 1, "message_count" to 0, "observed_days" to 1,
+            "alert" to null,
+            "sources" to listOf(mapOf("date" to "2026-11-03", "source_type" to "record", "excerpt" to "今天很放松", "level" to "steady")),
+            "trend" to listOf(
+                mapOf("date" to "2026-11-03", "level" to "steady", "signal_count" to 0, "record_count" to 1, "message_count" to 0),
+                mapOf("date" to "2026-11-04", "level" to "unknown", "signal_count" to 0, "record_count" to 0, "message_count" to 0),
+            ),
+        ))
+        assertNull(report.alert)
+        assertEquals("steady", report.level)
+        assertEquals(1, report.observedDays)
+        assertEquals(1, report.trend.first().recordCount)
+        assertEquals("unknown", report.trend.last().level)
+        assertEquals("今天很放松", report.sources.single().excerpt)
+    }
     private fun payload(followUp: Map<String, Any?>? = null) = mapOf<String, Any?>(
         "id" to 12L,
         "level" to "high",

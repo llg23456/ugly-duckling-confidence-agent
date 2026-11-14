@@ -777,7 +777,7 @@ private fun CommunityPostDetailScreen(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
                 Text(post.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text("${relativeTime(post.createdAt)} · 来自小丑鸭社区", style = MaterialTheme.typography.bodyMedium, color = InkMuted)
+                Text("${relativeTime(post.createdAt)} · 来自鸭力Go社区", style = MaterialTheme.typography.bodyMedium, color = InkMuted)
                 if (post.videoPath != null) {
                     CommunityVideoPlayer(post.videoPath, Modifier.fillMaxWidth().height(300.dp))
                     Text("点按视频开始或暂停，也可以使用播放器控件拖动进度。", style = MaterialTheme.typography.bodySmall, color = InkMuted)
@@ -911,7 +911,7 @@ private fun shareCommunityPost(context: android.content.Context, post: Community
     val video = post.videoPath?.let(::File)?.takeIf(File::isFile)
     val share = Intent(Intent.ACTION_SEND).apply {
         type = if (video != null) "video/*" else "text/plain"
-        putExtra(Intent.EXTRA_TEXT, "${post.title}\n${post.content}\n——来自小丑鸭社区")
+        putExtra(Intent.EXTRA_TEXT, "${post.title}\n${post.content}\n——来自鸭力Go社区")
         if (video != null) {
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", video)
             putExtra(Intent.EXTRA_STREAM, uri)

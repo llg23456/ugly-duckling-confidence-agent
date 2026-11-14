@@ -45,7 +45,10 @@ import com.testconnection.confidence_agent.ui.theme.Danger
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
 import com.testconnection.confidence_agent.data.remote.StressAlertDetail
 import com.testconnection.confidence_agent.data.remote.StressApiClient
+import com.testconnection.confidence_agent.data.remote.StressTrendReport
+import com.testconnection.confidence_agent.data.remote.ReviewApiClient
 import com.testconnection.confidence_agent.data.repository.DataManagementRepository
+import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
 import com.testconnection.confidence_agent.widget.WidgetUpdater
 import kotlinx.coroutines.launch
 
@@ -55,7 +58,7 @@ fun DataToolsScreen(
     onCreateExamWeekDemoData: () -> Unit,
     onCreateFourWeekDemoData: () -> Unit,
     onClearDemoData: () -> Unit,
-    onStressScenarioReady: (StressAlertDetail) -> Unit,
+    onStressReportReady: (StressAlertDetail) -> Unit,
     onAllDataDeleted: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -65,10 +68,13 @@ fun DataToolsScreen(
     val repository = remember { DataManagementRepository(context.applicationContext) }
     val deviceId = remember { DeviceIdStore(context.applicationContext).get() }
     val stressApi = remember { StressApiClient() }
+    val reviewApi = remember { ReviewApiClient() }
+    val localRecords = remember { LocalRecordRepository(context.applicationContext) }
     var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
     var preparingStress by remember { mutableStateOf(false) }
     var stressNotice by remember { mutableStateOf<String?>(null) }
+    var stressReport by remember { mutableStateOf<StressTrendReport?>(null) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     fun exportData(jsonOnly: Boolean) {
@@ -109,17 +115,22 @@ fun DataToolsScreen(
         }
     }
 
-    fun prepareStressScenario() {
+    fun viewStressTrend() {
         if (busy) return
         busy = true
         preparingStress = true
         stressNotice = null
         scope.launch {
-            runCatching { stressApi.prepareScenario(deviceId) }
-                .onSuccess { alert ->
-                    onStressScenarioReady(alert)
+            runCatching {
+                localRecords.pendingDeletions().forEach { id ->
+                    reviewApi.deleteRecord(deviceId, id)
+                    localRecords.confirmDeletion(id)
                 }
-                .onFailure { stressNotice = it.message ?: "暂时无法准备压力趋势，请确认后端连接后重试。" }
+                reviewApi.syncRecords(deviceId, localRecords.load())
+                stressApi.trend(deviceId)
+            }
+                .onSuccess { stressReport = it }
+                .onFailure { stressNotice = "暂时无法更新压力趋势，请确认后端连接后重试。" }
             preparingStress = false
             busy = false
         }
@@ -191,21 +202,56 @@ fun DataToolsScreen(
         item {
             WarmCard {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(11.dp)) {
-                    SectionHeading("压力趋势场景")
+                    SectionHeading("我的压力趋势")
                     Text(
-                        "快速准备连续多日的压力记录，检查提醒与支持流程。",
+                        "查看近7天真实聊天与生活记录中的压力变化。无论是否触发提醒，都可以查看。",
                         style = MaterialTheme.typography.bodyLarge,
                         color = InkMuted,
                     )
-                    stressNotice?.let { Text(it, color = Danger) }
+                    stressNotice?.let { Text(it, color = InkMuted) }
                     if (preparingStress) CircularProgressIndicator(Modifier.size(24.dp), color = SageDark)
                     Button(
-                        onClick = ::prepareStressScenario,
+                        onClick = ::viewStressTrend,
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = AppButtonShape,
                         colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                    ) { Text("准备并查看") }
+                    ) { Text("查看我的压力趋势") }
+                    stressReport?.let { report ->
+                        Text(when (report.level) {
+                            "high" -> "近7天出现较明显的压力线索"
+                            "watch" -> "近7天出现一些压力线索"
+                            "steady" -> "已有记录中未见明显压力线索"
+                            else -> "近7天暂无可分析的文字记录"
+                        }, style = MaterialTheme.typography.titleMedium, color = SageDark)
+                        Text("${report.recordCount} 条生活记录 · ${report.messageCount} 条用户对话 · ${report.observedDays} 天可分析",
+                            style = MaterialTheme.typography.bodyMedium, color = InkMuted)
+                        StressTrendWithAxes(report.trend)
+                        Text("平稳表示文字中未见明显压力线索；灰色点和“暂无”表示缺少可分析数据，不会按平稳计算。演示记录不参与分析。",
+                            style = MaterialTheme.typography.bodySmall, color = InkMuted)
+                        report.trend.forEach { day ->
+                            val label = when (day.level) {
+                                "high" -> "压力较高"
+                                "watch" -> "需要留意"
+                                "steady" -> "平稳"
+                                else -> "暂无数据"
+                            }
+                            Text("${day.date.takeLast(5)} · $label · ${day.recordCount} 条记录 / ${day.messageCount} 条对话",
+                                style = MaterialTheme.typography.bodyMedium)
+                        }
+                        if (report.sources.isNotEmpty()) {
+                            SectionHeading("最近的记录依据")
+                            report.sources.take(5).forEach { source ->
+                                Text("${source.date.takeLast(5)} · ${if (source.sourceType == "chat") "聊天" else "记录"}：${source.excerpt}",
+                                    style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                        report.alert?.let { alert ->
+                            OutlinedButton(onClick = { onStressReportReady(alert) }, modifier = Modifier.fillMaxWidth(), shape = AppButtonShape) {
+                                Text("查看压力提醒与支持建议")
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -704,7 +704,7 @@ fun VideoStudioScreen(
                     Text("点击视频可全屏播放", color = SageDark)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            onClick = { saveVideo.launch("小丑鸭成长小片-${System.currentTimeMillis()}.mp4") },
+                            onClick = { saveVideo.launch("鸭力Go成长小片-${System.currentTimeMillis()}.mp4") },
                             modifier = Modifier.weight(1f),
                         ) { Text("保存副本") }
                         OutlinedButton(onClick = { shareVideo(file) }, modifier = Modifier.weight(1f)) { Text("系统分享") }

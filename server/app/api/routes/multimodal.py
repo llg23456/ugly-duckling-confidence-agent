@@ -13,6 +13,7 @@ from app.services.check_in_service import schedule_explicit_follow_up
 from app.services.event_service import process_turn
 from app.services.memory_service import recall
 from app.services.chat_service import CHAT_PROMPT_VERSION, suppress_memory_for_message
+from app.services.support_service import explicit_conversation_support
 
 
 router = APIRouter(prefix="/multimodal", tags=["multimodal"])
@@ -64,6 +65,8 @@ async def image_chat(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"图片理解失败：{type(exc).__name__}") from exc
     conversation = conversation or get_or_create_conversation(db, device_id)
+    if not result.safety_triggered and explicit_conversation_support(db, conversation.id, prompt):
+        result.strategy = "seek_support"
     user_message, assistant_message = append_exchange(
         db, conversation,
         user_content=prompt.strip() or "[图片]",
@@ -111,6 +114,8 @@ async def audio_chat(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"语音理解失败：{type(exc).__name__}") from exc
     conversation = conversation or get_or_create_conversation(db, device_id)
+    if not result.safety_triggered and explicit_conversation_support(db, conversation.id, result.user_text):
+        result.strategy = "seek_support"
     user_message, assistant_message = append_exchange(
         db, conversation,
         user_content=result.user_text,
