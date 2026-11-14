@@ -12,30 +12,20 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.testconnection.confidence_agent"
+        applicationId = "com.testconnection.confidence_agent.cloudtest"
         minSdk = 26
         targetSdk = 36
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0-cloudtest"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        val apiBaseUrl = providers.gradleProperty("apiBaseUrl")
-            .orElse("http://10.124.233.33").get()
-        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
-        buildConfigField("boolean", "CLOUD_TEST", (providers.gradleProperty("cloudTest").orNull == "true").toString())
+        // Android Studio Run and command-line builds use the same invited cloud app.
+        buildConfigField("String", "API_BASE_URL", "\"https://api.yaligo-growth.top\"")
+        buildConfigField("boolean", "CLOUD_TEST", "true")
     }
 
     buildTypes {
 
-        debug {
-            if (providers.gradleProperty("cloudTest").orNull == "true") {
-                applicationIdSuffix = ".cloudtest"
-                versionNameSuffix = "-cloudtest"
-                resValue("string", "app_name", "小丑鸭·云测")
-            } else if (providers.gradleProperty("isolatedP0Test").orNull == "true") {
-                applicationIdSuffix = ".p0test"
-            }
-        }
         release {
             isMinifyEnabled = false
             proguardFiles(
