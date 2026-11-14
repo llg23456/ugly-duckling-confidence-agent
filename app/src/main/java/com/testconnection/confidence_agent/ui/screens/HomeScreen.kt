@@ -60,11 +60,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -107,6 +109,8 @@ fun HomeScreen(
     var evidenceExpanded by remember(state.lastEvidence) { mutableStateOf(false) }
     var pendingDeleteMessage by remember { mutableStateOf<ChatMessage?>(null) }
     val context = LocalContext.current
+    val density = LocalDensity.current
+    var composerHeight by remember { mutableStateOf(88.dp) }
     val scope = rememberCoroutineScope()
     var currentHour by remember { mutableStateOf(LocalTime.now().hour) }
     var stressReportReady by remember(
@@ -314,7 +318,7 @@ fun HomeScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             state = listState,
-            contentPadding = PaddingValues(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 104.dp),
+            contentPadding = PaddingValues(start = 20.dp, top = 18.dp, end = 20.dp, bottom = composerHeight + 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
         item {
@@ -662,7 +666,8 @@ fun HomeScreen(
 
         }
         Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                .onSizeChanged { composerHeight = with(density) { it.height.toDp() } },
             color = Cream,
         ) {
             Column(
@@ -690,23 +695,25 @@ fun HomeScreen(
                 }
                 Row(
                     modifier = Modifier.fillMaxWidth().background(CreamDeep, RoundedCornerShape(28.dp)).padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Bottom,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_record_photo),
                         contentDescription = "拍照或选择图片",
                         modifier = Modifier
-                            .size(28.dp)
+                            .size(42.dp)
                             .noRippleClickable(enabled = !state.sending) { showImageSourceDialog = true }
-                            .padding(2.dp),
+                            .padding(7.dp),
                     )
                     BasicTextField(
                         value = state.draft,
                         onValueChange = viewModel::updateDraft,
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1f).padding(vertical = 8.dp),
                         enabled = !state.sending,
-                        singleLine = true,
+                        singleLine = false,
+                        minLines = 1,
+                        maxLines = 5,
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             color = MaterialTheme.colorScheme.onSurface,
                         ),
