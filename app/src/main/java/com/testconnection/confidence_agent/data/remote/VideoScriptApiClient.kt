@@ -51,7 +51,7 @@ class VideoScriptApiClient(private val baseUrl: String? = null) {
     private val resolvedBaseUrl: String get() = baseUrl ?: ServerEndpoint.current()
 
     private fun request(path: String, method: String, body: JSONObject): String {
-        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1$path").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1$path").openAuthorizedConnection()).apply {
             requestMethod = method
             connectTimeout = 10_000
             readTimeout = 45_000
@@ -61,7 +61,7 @@ class VideoScriptApiClient(private val baseUrl: String? = null) {
         }
         try {
             connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             val content = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (status !in 200..299) {
@@ -128,7 +128,7 @@ class VideoScriptApiClient(private val baseUrl: String? = null) {
                 if (narrationName != null) uploads += Triple(narrationName, "application/octet-stream", requireNotNull(asset.narration))
                 if (originalName != null) uploads += Triple(originalName, "application/octet-stream", requireNotNull(asset.originalVoice))
             }
-            val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/videos/render/$scriptId").openConnection() as HttpURLConnection).apply {
+            val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/videos/render/$scriptId").openAuthorizedConnection()).apply {
                 requestMethod = "POST"
                 connectTimeout = 10_000
                 readTimeout = 150_000
@@ -157,7 +157,7 @@ class VideoScriptApiClient(private val baseUrl: String? = null) {
                     }
                     output.writeBytes("--$boundary--\r\n")
                 }
-                val status = connection.responseCode
+                val status = connection.checkedResponseCode()
                 val content = (if (status in 200..299) connection.inputStream else connection.errorStream)
                     ?.use { it.readBytes() } ?: ByteArray(0)
                 if (status !in 200..299) {

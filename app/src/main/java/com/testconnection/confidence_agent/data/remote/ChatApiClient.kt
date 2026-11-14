@@ -79,14 +79,14 @@ class ChatApiClient(
     suspend fun loadMessages(deviceId: String): List<ServerChatMessage> = withContext(Dispatchers.IO) {
         val encodedId = Uri.encode(deviceId)
         val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/conversations/$encodedId/messages")
-            .openConnection() as HttpURLConnection).apply {
+            .openAuthorizedConnection()).apply {
             requestMethod = "GET"
             connectTimeout = 10_000
             readTimeout = 40_000
             setRequestProperty("Accept", "application/json")
         }
         try {
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             if (status !in 200..299) throw IllegalStateException("会话服务返回 $status")
             val array = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
                 .getJSONArray("messages")
@@ -112,14 +112,14 @@ class ChatApiClient(
     suspend fun deleteMessage(deviceId: String, messageId: Long): Unit = withContext(Dispatchers.IO) {
         val encodedId = Uri.encode(deviceId)
         val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/conversations/$encodedId/messages/$messageId")
-            .openConnection() as HttpURLConnection).apply {
+            .openAuthorizedConnection()).apply {
             requestMethod = "DELETE"
             connectTimeout = 10_000
             readTimeout = 40_000
             setRequestProperty("Accept", "application/json")
         }
         try {
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             if (status !in 200..299) {
                 val responseText = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
                 val detail = runCatching { JSONObject(responseText).optString("detail") }.getOrNull()
@@ -131,7 +131,7 @@ class ChatApiClient(
     }
 
     suspend fun sendMessage(deviceId: String, message: String): ChatApiReply = withContext(Dispatchers.IO) {
-        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/chat").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/chat").openAuthorizedConnection()).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 40_000
@@ -148,7 +148,7 @@ class ChatApiClient(
                 .toString()
             connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(requestBody) }
 
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             val responseText = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)
                 ?.use { it.readText() }
@@ -197,7 +197,7 @@ class ChatApiClient(
     )
 
     suspend fun synthesizeSpeech(text: String, voice: String): ByteArray = withContext(Dispatchers.IO) {
-        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/multimodal/speech").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/multimodal/speech").openAuthorizedConnection()).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 70_000
@@ -208,7 +208,7 @@ class ChatApiClient(
         try {
             val requestBody = JSONObject().put("text", text).put("voice", voice).toString()
             connection.outputStream.use { it.write(requestBody.toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             if (status !in 200..299) {
                 val responseText = connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
                 val detail = runCatching { JSONObject(responseText).optString("detail") }.getOrNull()
@@ -232,7 +232,7 @@ class ChatApiClient(
     }
 
     suspend fun analyzeOnboarding(transcript: String, profile: UserProfile): OnboardingReply = withContext(Dispatchers.IO) {
-        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/onboarding/analyze").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/onboarding/analyze").openAuthorizedConnection()).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 60_000
@@ -246,7 +246,7 @@ class ChatApiClient(
                 .put("existing_profile", profile.toJson())
                 .toString()
             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             val responseText = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (status !in 200..299) throw IllegalStateException("画像服务返回 $status")
@@ -267,7 +267,7 @@ class ChatApiClient(
     }
 
     suspend fun refreshProfile(deviceId: String, profile: UserProfile): OnboardingReply = withContext(Dispatchers.IO) {
-        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/onboarding/refresh").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1/onboarding/refresh").openAuthorizedConnection()).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 70_000
@@ -281,7 +281,7 @@ class ChatApiClient(
                 .put("existing_profile", profile.toJson())
                 .toString()
             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             val responseText = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (status !in 200..299) {
@@ -334,7 +334,7 @@ class ChatApiClient(
         fileBytes: ByteArray,
     ): String = withContext(Dispatchers.IO) {
         val boundary = "DuckBoundary${UUID.randomUUID()}"
-        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}$path").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}$path").openAuthorizedConnection()).apply {
             requestMethod = "POST"
             connectTimeout = 10_000
             readTimeout = 90_000
@@ -360,7 +360,7 @@ class ChatApiClient(
                 output.flush()
             }
 
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             val responseText = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)
                 ?.use { it.readText() }

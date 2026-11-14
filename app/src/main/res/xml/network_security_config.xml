@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 开发测试阶段允许连接任意局域网 HTTP 后端，正式发布前应改回 HTTPS 或域名白名单。 -->
-    <base-config cleartextTrafficPermitted="true" />
+    <!-- All app builds use the invited HTTPS cloud service. -->
+    <base-config cleartextTrafficPermitted="false" />
 </network-security-config>

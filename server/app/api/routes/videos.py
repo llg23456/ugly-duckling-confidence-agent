@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.models import GrowthEvent, VideoScript
 from app.db.repository import get_conversation
 from app.db.session import get_db
+from app.core.cloud_access import limit_video_render
 from app.schemas.video import (
     VideoKeywordSuggestionRequest, VideoKeywordSuggestionResponse,
     VideoScriptRequest, VideoScriptResponse, VideoScriptUpdate,
@@ -114,7 +115,7 @@ def update_script(script_id: int, request: VideoScriptUpdate, db: Session = Depe
     return _response(script)
 
 
-@router.post("/render/{script_id}", response_class=Response)
+@router.post("/render/{script_id}", response_class=Response, dependencies=[Depends(limit_video_render)])
 def render_video(
     script_id: int,
     device_id: str = Form(min_length=1, max_length=128),

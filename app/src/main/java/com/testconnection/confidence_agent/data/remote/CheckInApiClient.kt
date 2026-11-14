@@ -77,7 +77,7 @@ class CheckInApiClient(private val baseUrl: String? = null) {
         }
 
     private fun open(path: String, method: String): HttpURLConnection =
-        (URL("${resolvedBaseUrl.trimEnd('/')}$path").openConnection() as HttpURLConnection).apply {
+        (URL("${resolvedBaseUrl.trimEnd('/')}$path").openAuthorizedConnection()).apply {
             requestMethod = method
             connectTimeout = 10_000
             readTimeout = 40_000
@@ -85,7 +85,7 @@ class CheckInApiClient(private val baseUrl: String? = null) {
         }
 
     private fun readJson(connection: HttpURLConnection, serviceName: String): JSONObject {
-        val status = connection.responseCode
+        val status = connection.checkedResponseCode()
         val body = (if (status in 200..299) connection.inputStream else connection.errorStream)
             ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
         if (status !in 200..299) {

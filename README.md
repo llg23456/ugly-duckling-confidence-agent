@@ -1,5 +1,9 @@
 # 鸭力Go
 
+2026-11-14 本地进度同步：`codex/real-stress-trend` 已合入香港云测分支的 `5e1b04b` 及后续入口修复 `5164fe0`，保留首次见面标签选择、首页输入框最多五行自动换行、真实压力趋势及支持对象选择等本地改进。云测认证、HTTPS 地址与独立包名沿用云测分支，显示名称统一为“鸭力Go·云测”。本次重新验证后端 89 项、Android JVM 19 项通过，APK 构建和真机测试代码编译通过；本次未进行真机验收或服务器部署，新增压力趋势接口等后端改动需要另行部署后供云测使用。
+
+香港后端已完成 `api.yaligo-growth.top` 的可信 HTTPS、受邀设备认证与 Android 真机独立联网验收。云测版输入一次邀请码后可直接使用，无需 WireGuard 或电脑隧道；安装及邀请码管理见 [云测说明](deploy/cloud-test/README.md)，证据见 [公网接口验收](deploy/cloud-test/access-verification.json) 和 [真机验收](deploy/cloud-test/phone-verification.json)。后端 80 项、Android JVM 18 项测试通过。新身份记忆提取和并发响应耗时仍待专项排查，历史记录见 [香港模型冒烟](deploy/cloud-test/hongkong-verification.json)。
+
 一款面向缺乏自信用户的温情 AI 成长陪伴 Android 应用。当前版本已打通多模态会话、分层记忆、支持圈与求助反馈、日周月回望、压力趋势提醒、本机演示社区、成长小片、桌面组件和可信数据导出主链路。
 
 ## 当前完成内容
@@ -59,14 +63,16 @@
 
 ## Android 运行
 
-1. 使用 Android Studio 打开本目录。
-2. 等待 Gradle Sync 完成。
-3. 通过 Android Studio 的设备列表安装运行，或把调试 APK 安装到手机。
-4. 手机与运行后端的电脑连接同一个 Wi-Fi；首次安装已带当前测试地址，网络变化后可在 App 内重新检测。
+1. 使用 Android Studio 打开本目录（当前集成分支为 `codex/real-stress-trend`，已合入香港云测分支），等待 Gradle Sync 完成。
+2. 选择 `app` 运行配置和 `debug` 构建类型，点击 Run。
+3. 默认安装“鸭力Go·云测”，包名为 `com.testconnection.confidence_agent.cloudtest`，后端固定为 `https://api.yaligo-growth.top`；Debug 与 Release 均使用相同云测身份，不再构建本地版。
+4. 首次使用输入独立邀请码，之后直接联网使用。升级已有云测应用会保留授权及数据；旧普通版数据不自动迁入。无需启动电脑后端或与电脑连接同一 Wi-Fi。
+
+无需额外传入 Gradle 参数。旧的 `cloudTest`、`apiBaseUrl`、`isolatedP0Test` 参数已不再参与 Android 构建；Kotlin 2 Kapt 配置已写入项目属性，Android Studio 与命令行保持一致。
 
 建议使用绿色三角形 **Run app**，不要长期使用 Debug 运行。若真机在 Android Studio 打开时出现触摸卡住，可在 `Settings → Tools → Device Mirroring` 关闭自动设备镜像，并确认 Debug 面板没有停在断点。
 
-## 后端启动、检查与关闭
+## 本地后端开发（不是 Android 运行前提）
 
 以下命令均在 PowerShell 中执行。
 
@@ -113,43 +119,11 @@ where.exe ffprobe
 FFMPEG_PATH=C:\ffmpeg\bin\ffmpeg.exe
 ```
 
-### 3. 通过同一 Wi-Fi 连接手机与后端
+### 3. 本地后端与 Android 云测入口
 
-推荐先启动后端，然后在 App 中进入：
+本地后端仅用于接口开发和自动化测试，可通过 `http://127.0.0.1:8000/health` 检查。Android 已统一使用云端 HTTPS，应用不再提供局域网扫描或手动修改服务地址的入口；本地 `8000` 端口及电脑 IP 不影响手机使用。
 
-```text
-我的 → 帮助与求助资源 → 一键检测当前 Wi-Fi
-```
-
-App 会扫描手机当前 Wi-Fi 网段的 `8000` 端口，只有 `/health` 返回鸭力Go服务标识时才保存，并立即让聊天、回望、记忆、支持圈、视频脚本和桌面组件使用新地址。检测不到时，可以在同一弹窗手动输入地址并点击“检测并保存输入地址”。
-
-需要手动确认电脑地址时，执行：
-
-```powershell
-ipconfig
-```
-
-找到正在使用的 **无线局域网适配器 WLAN**，记录其中的 IPv4 地址，例如：
-
-```text
-10.113.21.33
-```
-
-不要使用 VMware、WSL、蓝牙或已断开网卡的地址。运行时地址会保存在手机本地，不需要每次修改 Gradle 或重新安装。只有制作新的默认安装包时，才需要在 `gradle.properties` 设置：
-
-```properties
-apiBaseUrl=http://10.124.233.33:8000
-```
-
-将示例 IP 换成电脑当前的 WLAN IPv4。项目在开发测试阶段已经允许访问任意 HTTP 地址，因此不需要再修改 `network_security_config.xml`。
-
-最后在手机浏览器中访问：
-
-```text
-http://10.113.21.33:8000/health
-```
-
-能看到 `status: ok` 后，App 才具备通过 Wi-Fi 访问后端的网络条件。若手机浏览器打不开，请检查 Windows 防火墙、手机和电脑是否确实连接同一 Wi-Fi，以及当前网络是否启用了设备隔离。电脑重新联网后 IPv4 可能变化，届时在 App 内重新执行一键检测即可。
+如需将后端改动提供给手机测试，应按 [云测部署说明](deploy/cloud-test/README.md) 更新香港后端，再使用 Android Studio Run。不要把生产 Key 或设备令牌写入 Android 构建参数。
 
 ### 4. 安全关闭占用 8000 的后端
 

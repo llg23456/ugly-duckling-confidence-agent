@@ -1,0 +1,2 @@
+# Deployment shell scripts run in Linux containers and on Ubuntu hosts.
+*.sh text eol=lf

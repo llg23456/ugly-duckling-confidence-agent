@@ -1,0 +1,47 @@
+{
+  "verified_at": "2026-11-14T10:56:42.453830+00:00",
+  "active_release": "20261114-hk04",
+  "device_model": "Redmi M2104K10AC",
+  "android_version": "13",
+  "device_id_sha256": "7ba3fbb9116bcaa359f0592f130840859db6ec7f2b0ee3e2dbbe5f06a6a16932",
+  "apk": "artifacts/cloud-test/20261114/ugly-duckling-cloudtest.apk",
+  "apk_sha256": "cb543e73cef4ba7989331046725343c4ad2db0429b7597386fc4d98ab88b8bcb",
+  "installed_apk_sha256_matches": true,
+  "api_base_url": "https://api.yaligo-growth.top",
+  "package_name": "com.testconnection.confidence_agent.cloudtest",
+  "encrypted_credential_fields": [
+    "encrypted",
+    "iv"
+  ],
+  "plaintext_token_field_present": false,
+  "adb_reverse_rules": "none before disconnect",
+  "process_exit_verified_pid_absent": true,
+  "no_invite_required_after_relaunch_user_confirmed": true,
+  "chat_and_record_retained_user_confirmed": true,
+  "usb_disconnected_verified_adb_device_absent": true,
+  "independent_message_verified_in_cloud": true,
+  "independent_user_message_id": 31,
+  "independent_assistant_message_id": 32,
+  "independent_reply_mock": false,
+  "independent_reply_model": "qwen3.8-omni-flash",
+  "cloud_record_count": 1,
+  "post_upgrade_authenticated_read_passed": true,
+  "post_upgrade_cross_device_403": true,
+  "post_upgrade_revocation_401": true,
+  "backend_tests": {
+    "passed": 80,
+    "warnings": 1,
+    "seconds": 26.22
+  },
+  "android_jvm_tests": {
+    "passed": 18,
+    "failed": 0
+  },
+  "initial_activation_io_error": "Earlier prompt not reproduced; persisted authorization decrypted successfully on launch. Root cause not established.",
+  "not_covered": [
+    "cellular/second-network switch",
+    "phone camera/audio/video playback in this acceptance",
+    "multi-device concurrent load",
+    "new identity memory extraction"
+  ]
+}

@@ -154,6 +154,10 @@ fun ProfileScreen(
             ) {
                 Text("遇到紧急危险时，请优先联系身边可信任的人或当地紧急援助。小鸭不会替你自动发送消息。")
                 HorizontalDivider()
+                if (com.testconnection.confidence_agent.BuildConfig.CLOUD_TEST) {
+                    Text("受邀云测", style = MaterialTheme.typography.titleMedium)
+                    Text("已连接项目云端服务，可直接使用手机网络。遇到连接或授权问题时，请联系测试组织者。")
+                } else {
                 Text("后端连接 · 测试工具", style = MaterialTheme.typography.titleMedium)
                 Text("手机和电脑连接同一 Wi-Fi，或电脑连接当前手机热点时，可以自动找到并保存后端地址。")
                 OutlinedTextField(
@@ -185,6 +189,7 @@ fun ProfileScreen(
                     )
                 }
                 Text(serverStatus, style = MaterialTheme.typography.bodyMedium, color = InkMuted)
+                }
             }
         },
         confirmButton = {
