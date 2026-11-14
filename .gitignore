@@ -53,6 +53,7 @@ server/tts-test.*
 # Local Codex/chart generation workspaces
 /.codex_build/
 /.codex_tmp/
+/artifacts/cloud-test/
 /.chart-data-*/
 
 # Local presentation, submission and generated documentation artifacts

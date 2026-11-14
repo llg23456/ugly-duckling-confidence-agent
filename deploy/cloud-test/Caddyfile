@@ -1,0 +1,34 @@
+# Enable only after the authenticated backend passes the cloud access checks.
+api.yaligo-growth.top {
+	header {
+		Cache-Control "no-store"
+		X-Content-Type-Options "nosniff"
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle /api/v1/cloud-auth/activate {
+		request_body {
+			max_size 4KB
+		}
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle /api/v1/videos/render/* {
+		request_body {
+			max_size 128MB
+		}
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle /api/v1/* {
+		request_body {
+			max_size 16MB
+		}
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle / {
+		respond "小丑鸭受邀云测服务已就绪，请通过云测版应用使用。" 200
+	}
+	handle {
+		respond "Not found" 404
+	}
+}

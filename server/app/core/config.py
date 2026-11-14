@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     app_env: str = "development"
     api_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./confidence_agent.db"
+    cloud_auth_required: bool = False
+    cloud_daily_requests: int = 60
+    cloud_global_daily_requests: int = 300
 
     enable_live_ai: bool = False
     dashscope_api_key: str = ""

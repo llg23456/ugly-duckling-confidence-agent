@@ -1,5 +1,7 @@
 # 小丑鸭 Confidence Agent
 
+香港后端已完成 `api.yaligo-growth.top` 的可信 HTTPS、受邀设备认证与 Android 真机独立联网验收。云测版输入一次邀请码后可直接使用，无需 WireGuard 或电脑隧道；安装及邀请码管理见 [云测说明](deploy/cloud-test/README.md)，证据见 [公网接口验收](deploy/cloud-test/access-verification.json) 和 [真机验收](deploy/cloud-test/phone-verification.json)。后端 80 项、Android JVM 18 项测试通过。新身份记忆提取和并发响应耗时仍待专项排查，历史记录见 [香港模型冒烟](deploy/cloud-test/hongkong-verification.json)。
+
 一款面向缺乏自信用户的温情 AI 成长陪伴 Android 应用。当前版本已打通多模态会话、分层记忆、支持圈与求助反馈、日周月回望、压力趋势提醒、本机演示社区、成长小片、桌面组件和可信数据导出主链路。
 
 ## 当前完成内容

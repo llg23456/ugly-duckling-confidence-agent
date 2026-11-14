@@ -1,0 +1,17 @@
+# Staged entry: never proxy business routes before device authentication is ready.
+api.yaligo-growth.top {
+	header {
+		Cache-Control "no-store"
+		X-Content-Type-Options "nosniff"
+	}
+	handle /health {
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle / {
+		respond "小丑鸭云测入口正在配置，请等待受邀测试安装包。" 200
+	}
+	handle {
+		header Retry-After "3600"
+		respond "Cloud test access is being configured." 503
+	}
+}

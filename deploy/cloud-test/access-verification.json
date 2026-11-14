@@ -1,0 +1,24 @@
+{
+  "device_id": "cloud-access-20261114T103822Z",
+  "verified_at": "2026-11-14T10:38:25.103522+00:00",
+  "single_live_chat_seconds": 1.91,
+  "activation": true,
+  "one_use_invite": true,
+  "unauthorized_401": true,
+  "cross_device_403": true,
+  "real_chat": true,
+  "message_roundtrip": true,
+  "revoked_token_401": true,
+  "public_docs_disabled": true,
+  "backend_tests_passed": 80,
+  "android_jvm_tests_passed": 18,
+  "public_smoke_release": "20261114-hk03",
+  "active_release": "20261114-hk04",
+  "post_upgrade_checks": {
+    "verified_at": "2026-11-14T10:56:42.453830+00:00",
+    "authenticated_read": true,
+    "cross_device_403": true,
+    "revocation_401": true,
+    "live_ai_health": true
+  }
+}

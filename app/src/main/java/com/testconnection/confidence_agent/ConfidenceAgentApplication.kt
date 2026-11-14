@@ -7,5 +7,6 @@ class ConfidenceAgentApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         ServerEndpoint.initialize(this)
+        com.testconnection.confidence_agent.data.remote.CloudAccess.initialize(this)
     }
 }

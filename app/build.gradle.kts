@@ -22,12 +22,17 @@ android {
         val apiBaseUrl = providers.gradleProperty("apiBaseUrl")
             .orElse("http://10.124.233.33").get()
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+        buildConfigField("boolean", "CLOUD_TEST", (providers.gradleProperty("cloudTest").orNull == "true").toString())
     }
 
     buildTypes {
 
         debug {
-            if (providers.gradleProperty("isolatedP0Test").orNull == "true") {
+            if (providers.gradleProperty("cloudTest").orNull == "true") {
+                applicationIdSuffix = ".cloudtest"
+                versionNameSuffix = "-cloudtest"
+                resValue("string", "app_name", "小丑鸭·云测")
+            } else if (providers.gradleProperty("isolatedP0Test").orNull == "true") {
                 applicationIdSuffix = ".p0test"
             }
         }
