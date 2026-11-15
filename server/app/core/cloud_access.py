@@ -146,7 +146,7 @@ async def require_cloud_access(request: Request, db: Session = Depends(get_db)) 
     request.state.cloud_device_id = credential.device_id
     # The legacy review GET can generate an AI review; it must consume quota too.
     may_generate_review = relative_path in {"/reviews/day", "/reviews/week", "/reviews/month"}
-    if request.method not in {"GET", "HEAD", "OPTIONS"} or may_generate_review:
+    if (request.method not in {"GET", "HEAD", "OPTIONS"} or may_generate_review) and not relative_path.startswith("/community/"):
         day = time.strftime("%Y-%m-%d", time.gmtime())
         for key, limit in [(f"{day}:{credential.device_id}", settings.cloud_daily_requests),
                            (f"{day}:*", settings.cloud_global_daily_requests)]:

@@ -26,6 +26,7 @@ from app.db.models import (
 from app.db.repository import get_conversation
 from app.db.models import DailyCheckIn, DailyStressSnapshot, WellbeingPreference, WellbeingSignal, TrustedContact, NotificationOutbox
 from app.db.session import get_db
+from app.services.community_service import export_community, erase_community, serialized
 
 router = APIRouter(prefix="/data", tags=["data"])
 
@@ -50,6 +51,7 @@ def export_data(
     conversation = get_conversation(db, device_id)
     feedback = list(db.scalars(select(ExperienceFeedback).where(ExperienceFeedback.device_id == device_id)))
     empty = {
+        "community": export_community(db, device_id),
         "experience_feedback": [jsonable_encoder({c.key: getattr(row, c.key) for c in sqlalchemy_inspect(ExperienceFeedback).columns if c.key != "payload_hash"}) for row in feedback],
         "messages": [], "records": [], "growth_events": [], "memories": [],
         "memory_assessments": [],
@@ -97,6 +99,7 @@ def export_data(
         ],
     } for alert in stress_alerts]
     data = {
+        "community": empty["community"],
         "experience_feedback": empty["experience_feedback"],
         "messages": messages,
         "records": _rows(db, UserRecord, conversation.id),
@@ -123,10 +126,12 @@ def export_data(
 
 
 @router.delete("", status_code=204)
+@serialized
 def delete_all_data(
     device_id: str = Query(min_length=1, max_length=128),
     db: Session = Depends(get_db),
 ) -> None:
+    erase_community(db, device_id)
     db.execute(delete(ExperienceFeedback).where(ExperienceFeedback.device_id == device_id))
     conversation = get_conversation(db, device_id)
     if conversation is None:

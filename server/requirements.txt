@@ -9,3 +9,5 @@ python-multipart>=0.0.12,<1
 pytest>=8.3,<9
 
 openpyxl==3.1.5
+
+Pillow==12.3.0

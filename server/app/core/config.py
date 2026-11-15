@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     notification_mode: str = "disabled"  # disabled | mock (development only)
     wellbeing_model_timeout: float = 15.0
     counseling_url: str = ""  # A verified institution's HTTPS booking page, configured by the operator.
+    community_media_dir: str = "./.local-data/community-media"
+    community_media_limit_bytes: int = 2 * 1024 * 1024 * 1024
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

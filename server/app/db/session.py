@@ -116,6 +116,7 @@ def upgrade_existing_sqlite(engine) -> None:
 @lru_cache
 def engine_for_url(database_url: str):
     from app.core import cloud_access  # Register additive cloud access tables before create_all.
+    from app.db import community  # Register additive community tables.
 
     engine = create_engine(
         database_url,

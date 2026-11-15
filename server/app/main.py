@@ -9,6 +9,8 @@ from app.core.config import get_settings
 from app.core.cloud_access import require_cloud_access
 from app.api.routes.cloud_auth import router as cloud_auth_router
 from app.api.routes.experience_feedback import router as experience_feedback_router
+from app.api.routes.community import router as community_router
+from app.api.routes.community_admin import router as community_admin_router
 
 settings = get_settings()
 
@@ -47,6 +49,7 @@ def health() -> dict[str, str | bool]:
 
 
 protected_api = APIRouter(dependencies=[Depends(require_cloud_access)])
+protected_api.include_router(community_router)
 protected_api.include_router(experience_feedback_router)
 protected_api.include_router(chat_router)
 protected_api.include_router(events_router)
@@ -66,3 +69,14 @@ protected_api.include_router(wellbeing_router)
 protected_api.include_router(device_sms_router)
 app.include_router(protected_api, prefix=settings.api_prefix)
 app.include_router(cloud_auth_router, prefix=settings.api_prefix)
+app.include_router(community_admin_router)
+
+
+@app.middleware("http")
+async def community_cache_policy(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(("/community-admin", settings.api_prefix + "/community/")):
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+    return response
