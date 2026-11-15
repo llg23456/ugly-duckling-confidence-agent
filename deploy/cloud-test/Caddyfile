@@ -19,6 +19,15 @@ api.yaligo-growth.top {
 		}
 		reverse_proxy 127.0.0.1:8000
 	}
+	handle /api/v1/community/media {
+		request_body {
+			max_size 6MB
+		}
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle /community-admin* {
+		respond "Not found" 404
+	}
 	handle /api/v1/* {
 		request_body {
 			max_size 16MB

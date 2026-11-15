@@ -14,6 +14,7 @@ services:
       CLOUD_AUTH_REQUIRED: "true"
       NOTIFICATION_MODE: disabled
       WELLBEING_MODEL_TIMEOUT: "15"
+      COMMUNITY_MEDIA_DIR: /community-media
       DATABASE_URL: sqlite:////data/confidence_agent.db
       FFMPEG_PATH: /usr/bin/ffmpeg
       TZ: Asia/Shanghai
@@ -22,6 +23,7 @@ services:
     volumes:
       - /opt/ugly-duckling-cloudtest/data:/data
       - /opt/ugly-duckling-cloudtest/backups:/backups
+      - /opt/ugly-duckling-cloudtest/community-media:/community-media
     mem_limit: 2560m
     cpus: 1.5
     pids_limit: 256
