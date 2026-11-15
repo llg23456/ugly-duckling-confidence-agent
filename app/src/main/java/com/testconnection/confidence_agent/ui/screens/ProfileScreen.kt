@@ -79,6 +79,7 @@ fun ProfileScreen(
     onOpenMemoryCenter: () -> Unit,
     onOpenSupportCircle: () -> Unit,
     onOpenDataTools: () -> Unit,
+    onOpenFeedback: () -> Unit,
     onServerEndpointChanged: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -378,7 +379,7 @@ fun ProfileScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限" || entry.title == "数据导出" || entry.title == "帮助与求助资源") {
+                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限" || entry.title == "数据导出" || entry.title == "评价与建议" || entry.title == "帮助与求助资源") {
                                     when (entry.title) {
                                         "记忆中心" -> onOpenMemoryCenter()
                                         "支持圈" -> onOpenSupportCircle()
@@ -391,6 +392,7 @@ fun ProfileScreen(
                                             showWidgetPrivacy = true
                                         }
                                         "数据导出" -> onOpenDataTools()
+                                        "评价与建议" -> onOpenFeedback()
                                         "帮助与求助资源" -> {
                                             serverAddress = ServerEndpoint.current()
                                             serverStatus = "当前使用：${ServerEndpoint.current()}"

@@ -27,6 +27,18 @@ PPT、设计原稿、比赛材料和历史方案放在外层 `../docs/`，不属
 
 ## 服务器使用与接口检查
 
+### 用户评价问卷与 Excel 导出
+
+App 入口为“我的 → 评价与建议”，支持分步填写、草稿保留和失败重试，包含困难时刻的主观帮助及负面体验选项。提交保存填写时的身份快照、应用版本和服务器时间；同一次提交重试不会重复入库，用户导出及删除全部数据包含自己的问卷。
+
+后端通过受云测认证保护的 `POST /api/v1/experience-feedback` 收集问卷。仅有源码推送不会更新服务器，队友部署本轮源码后再验收新旧功能的兼容性。
+
+运维人员可双击 `deploy/cloud-test/导出评价问卷.cmd`，或执行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File deploy/cloud-test/export-feedback.ps1`，通过 SSH 下载最新 Excel 到 `artifacts/feedback/`。包含填写明细、每设备最新一份、选项统计、文字建议和题目口径；身份按填写时快照保留，时间同时提供北京时间与 UTC。默认隐藏设备编号，需要私下核对时加 `-IncludeDeviceIds`。使用该工具需要已有服务器 SSH 运维配置。
+
+服务器也可在当前发布目录执行 `docker compose -f deploy/cloud-test/compose.yaml exec -T api python -m app.feedback_export --output /backups/feedback/experience-feedback.xlsx`。问卷原文和身份仅用于授权范围内的反馈整理，模拟演示数据不纳入真实用户统计。
+
+### 云测日常检查
+
 服务器结构、SSH 连接、邀请管理、Git 提交和后端发布步骤见 [云测运维说明](deploy/cloud-test/README.md)。
 
 当前分工：本机修改并验证后推送源码，队友负责部署服务器；本机无需配置 SSH。手机固定使用云端，后端改动在队友发布后才会对手机生效。

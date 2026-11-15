@@ -504,6 +504,10 @@ fun ConfidenceAgentApp(
                     onOpenSupportCircle = { showSupportCircle = true },
                     onOpenDataTools = { showDataTools = true },
                     onOpenFeedback = { showExperienceFeedback = true },
+                    onServerEndpointChanged = {
+                        homeViewModel.refreshHistory()
+                        if (selectedDestination == AppDestination.GROWTH) growthViewModel.forceRefresh()
+                    },
                 )
             }
         }
