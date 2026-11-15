@@ -9,7 +9,7 @@ from app.schemas.support import (
     SupportFeedbackItem, SupportFeedbackListResponse, SupportFeedbackRequest,
     SupportFeedbackResponse, SupportSuggestionRequest, SupportSuggestionResponse,
 )
-from app.services.support_service import build_suggestion, choose_person, next_study_support_kind
+from app.services.support_service import build_suggestion, choose_person, explicit_support_person, next_study_support_kind
 from app.services.check_in_service import evaluate_check_in
 
 router = APIRouter(prefix="/support", tags=["support"])
@@ -33,10 +33,13 @@ def suggest_support(request: SupportSuggestionRequest, db: Session = Depends(get
                 SupportFeedback.outcome.in_(("helped", "not_helped")),
             )
         ).all())
-    required_kind = next_study_support_kind(request.situation, contacted_kinds)
+    explicit = explicit_support_person(request.situation, people)
+    required_kind = None if explicit else next_study_support_kind(request.situation, contacted_kinds)
     person = choose_person(request, people, required_kind=required_kind)
     result = build_suggestion(request, person, required_kind=required_kind)
-    if required_kind == "teacher":
+    if explicit:
+        result.reason = f"你这次明确想联系{explicit.name}，先按你的选择，问问对方是否方便。"
+    elif required_kind == "teacher":
         result.reason = "你已经和师兄或师姐交流过，下一步可以请老师帮你确认专业方向或复习重点。"
     elif required_kind == "family":
         result.reason = "你已经向老师请教过具体问题，下一步可以让家人了解你的压力和需要的陪伴。"

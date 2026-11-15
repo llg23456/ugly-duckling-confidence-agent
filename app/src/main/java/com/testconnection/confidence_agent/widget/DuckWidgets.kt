@@ -13,16 +13,16 @@ import androidx.glance.GlanceModifier
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.LocalContext
-import androidx.glance.ButtonDefaults
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
 import androidx.glance.appwidget.action.actionStartActivity
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.updateAll
-import androidx.glance.appwidget.components.FilledButton
+import androidx.glance.appwidget.cornerRadius
 import androidx.glance.background
 import androidx.glance.layout.Column
+import androidx.glance.layout.Alignment
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
@@ -98,7 +98,7 @@ class TodayGrowthWidget : GlanceAppWidget() {
         provideContent {
             val appContext = LocalContext.current
             Row(
-                modifier = GlanceModifier.fillMaxSize().background(cream).padding(16.dp)
+                modifier = GlanceModifier.fillMaxSize().background(cream).cornerRadius(24.dp).padding(16.dp)
                     .clickable(actionStartActivity(destinationIntent(appContext, AppDestination.GROWTH))),
             ) {
                 Column(modifier = GlanceModifier.defaultWeight()) {
@@ -132,7 +132,7 @@ class MonthlyFootprintWidget : GlanceAppWidget() {
         provideContent {
             val appContext = LocalContext.current
             Column(
-                modifier = GlanceModifier.fillMaxSize().background(cream).padding(16.dp)
+                modifier = GlanceModifier.fillMaxSize().background(cream).cornerRadius(24.dp).padding(16.dp)
                     .clickable(actionStartActivity(destinationIntent(appContext, AppDestination.GROWTH))),
             ) {
                 Title(if (snapshot.monthSelected) "我想留下的一笔" else "本月的小小足迹")
@@ -164,7 +164,7 @@ class QuickRecordWidget : GlanceAppWidget() {
 @Composable
 private fun QuickRecordContent() {
     val context = LocalContext.current
-    Column(modifier = GlanceModifier.fillMaxSize().background(cream).padding(horizontal = 18.dp, vertical = 20.dp)) {
+    Column(modifier = GlanceModifier.fillMaxSize().background(cream).cornerRadius(24.dp).padding(horizontal = 18.dp, vertical = 20.dp)) {
         Row(modifier = GlanceModifier.fillMaxWidth()) {
             Column(modifier = GlanceModifier.defaultWeight()) {
                 Title("今天想留下一点什么？")
@@ -183,17 +183,16 @@ private fun QuickRecordContent() {
 
 @Composable
 private fun QuickAction(text: String, iconRes: Int, background: ColorProvider, modifier: GlanceModifier, action: androidx.glance.action.Action) {
-    FilledButton(
-        text = text,
-        onClick = action,
-        icon = ImageProvider(iconRes),
-        modifier = modifier.padding(horizontal = 6.dp).height(46.dp),
-        colors = ButtonDefaults.buttonColors(
-            backgroundColor = background,
-            contentColor = ink,
-        ),
-        maxLines = 1,
-    )
+    Column(
+        modifier = modifier.padding(horizontal = 4.dp).height(60.dp)
+            .background(background).cornerRadius(18.dp).clickable(action).padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Image(ImageProvider(iconRes), contentDescription = null, modifier = GlanceModifier.size(22.dp))
+        Spacer(GlanceModifier.height(3.dp))
+        Text(text, style = TextStyle(color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold), maxLines = 1)
+    }
 }
 
 class QuickRecordWidgetReceiver : GlanceAppWidgetReceiver() {

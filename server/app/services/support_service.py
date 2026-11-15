@@ -1,3 +1,8 @@
+import re
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from app.db.models import SupportPerson
 from app.schemas.support import SupportSuggestionRequest, SupportSuggestionResponse
 
@@ -11,6 +16,50 @@ EMOTIONAL_HELP_CUES = ("怎么办", "陪陪我", "陪我", "找谁", "找个人"
 STUDY_CONTEXT_WORDS = ("考研", "备考", "复习")
 STUDY_SETBACK_WORDS = ("卡住", "做不出来", "错了很多", "没进展", "复习不下去")
 STUDY_SELF_DOUBT_WORDS = ("不适合", "不行", "做不到", "是不是不", "怀疑自己")
+
+
+def _contact_mentions(situation: str, person: SupportPerson) -> list[tuple[int, int, bool]]:
+    aliases = {person.name.strip(), person.relationship.strip()}
+    aliases.discard("")
+    mentions = []
+    for alias in aliases:
+        if situation.strip(" \n，。！？,!?‘’“”\"") == alias:
+            mentions.append((0, len(alias), False))
+        pattern = r"(找|联系|问问|问|向|跟|和|请教|求助于|让)(?:一下|支持圈里的|支持圈中的|我的|那位)?\s*[‘“\"「]?" + re.escape(alias)
+        for match in re.finditer(pattern, situation):
+            prefix = re.split(r"[，。！？；,!?;\n]", situation[:match.start()])[-1]
+            rejected = bool(re.search(r"(?:不想|不要|不愿|不打算|别|不方便|不考虑|不准备|不再|不|没法|不能|无法)(?:再|去|直接)?$", prefix))
+            historical = bool(re.search(r"(?:已经|曾经|以前|之前|刚才|昨天|上次|刚刚|刚)(?:也|还|就|去)?$", prefix))
+            suffix = situation[match.end():]
+            historical = historical or suffix.startswith(("说过", "聊过", "问过", "沟通过"))
+            if match.group(1) in {"向", "跟", "和", "让"} and not rejected:
+                if not re.search(r"想|要|准备|打算|希望|能否|可以|能不能", prefix) and not suffix.startswith(("帮我", "陪我")):
+                    continue
+            if rejected or not historical:
+                mentions.append((match.start(), len(alias), rejected))
+    return mentions
+
+
+def explicit_support_person(situation: str, people: list[SupportPerson]) -> SupportPerson | None:
+    """Honor a current contact request, rather than a bare name in background text."""
+    matches = []
+    for person in people:
+        mentions = _contact_mentions(situation, person)
+        if mentions:
+            position, length, rejected = max(mentions, key=lambda item: (item[0], item[1]))
+            if not rejected:
+                matches.append((position, length, person))
+    if not matches:
+        return None
+    # The last explicit choice wins; prefer a full name over its shorter overlapping alias.
+    position, length, person = max(matches, key=lambda item: (item[0], item[1]))
+    tied = {candidate.id for pos, size, candidate in matches if pos == position and size == length}
+    return person if len(tied) == 1 else None
+
+
+def explicit_conversation_support(db: Session, conversation_id: int, situation: str) -> SupportPerson | None:
+    people = list(db.scalars(select(SupportPerson).where(SupportPerson.conversation_id == conversation_id)))
+    return explicit_support_person(situation, people)
 
 
 def next_study_support_kind(situation: str, contacted_kinds: set[str]) -> str | None:
@@ -63,6 +112,12 @@ def choose_person(
     people: list[SupportPerson],
     required_kind: str | None = None,
 ) -> SupportPerson | None:
+    if not people:
+        return None
+    explicit = explicit_support_person(request.situation, people)
+    if explicit is not None:
+        return explicit
+    people = [person for person in people if not any(rejected for _, _, rejected in _contact_mentions(request.situation, person))]
     if not people:
         return None
     if required_kind is not None:

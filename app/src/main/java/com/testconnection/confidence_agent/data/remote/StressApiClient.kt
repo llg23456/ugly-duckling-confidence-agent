@@ -13,6 +13,37 @@ data class StressTrendPoint(
     val date: String,
     val level: String,
     val signalCount: Int,
+    val recordCount: Int = 0,
+    val messageCount: Int = 0,
+)
+
+data class StressTrendSource(val date: String, val sourceType: String, val excerpt: String, val level: String)
+
+data class StressTrendReport(
+    val level: String,
+    val trend: List<StressTrendPoint>,
+    val sources: List<StressTrendSource>,
+    val recordCount: Int,
+    val messageCount: Int,
+    val observedDays: Int,
+    val alert: StressAlertDetail?,
+)
+
+internal fun parseStressTrendMap(json: Map<String, Any?>): StressTrendReport = StressTrendReport(
+    level = json.string("level"),
+    trend = json.list("trend").map { raw ->
+        val point = raw.asStringMap()
+        StressTrendPoint(point.string("date"), point.string("level"), point.number("signal_count").toInt(),
+            point.number("record_count").toInt(), point.number("message_count").toInt())
+    },
+    sources = json.list("sources").map { raw ->
+        val source = raw.asStringMap()
+        StressTrendSource(source.string("date"), source.string("source_type"), source.string("excerpt"), source.string("level"))
+    },
+    recordCount = json.number("record_count").toInt(),
+    messageCount = json.number("message_count").toInt(),
+    observedDays = json.number("observed_days").toInt(),
+    alert = (json["alert"] as? Map<*, *>)?.let { parseStressAlertMap(it.asStringMap()) },
 )
 
 data class StressEvidence(
@@ -150,10 +181,18 @@ class StressApiClient(private val baseUrl: String? = null) {
         parseStressAlert(request("/api/v1/stress-alerts/$alertId?device_id=${Uri.encode(deviceId)}", "GET"))
     }
 
-    suspend fun prepareScenario(deviceId: String): StressAlertDetail = post(
-        "/api/v1/stress-alerts/prepare-scenario",
-        JSONObject().put("device_id", deviceId),
-    )
+    suspend fun refresh(deviceId: String): StressAlertDetail? = withContext(Dispatchers.IO) {
+        val json = request(
+            "/api/v1/stress-alerts/refresh", "POST", JSONObject().put("device_id", deviceId),
+        )
+        json.optJSONObject("alert")?.let(::parseStressAlert)
+    }
+
+    suspend fun trend(deviceId: String): StressTrendReport = withContext(Dispatchers.IO) {
+        parseStressTrendMap(request(
+            "/api/v1/stress-alerts/trend", "POST", JSONObject().put("device_id", deviceId),
+        ).toValueMap())
+    }
 
     suspend fun submitSelfCheck(
         deviceId: String,
@@ -167,11 +206,6 @@ class StressApiClient(private val baseUrl: String? = null) {
 
     suspend fun scheduleFollowUp(deviceId: String, alertId: Long): StressAlertDetail = post(
         "/api/v1/stress-alerts/$alertId/follow-up",
-        JSONObject().put("device_id", deviceId),
-    )
-
-    suspend fun makeFollowUpReady(deviceId: String, alertId: Long): StressAlertDetail = post(
-        "/api/v1/stress-alerts/$alertId/follow-up/ready",
         JSONObject().put("device_id", deviceId),
     )
 

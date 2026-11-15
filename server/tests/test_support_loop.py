@@ -4,7 +4,50 @@ from sqlalchemy.orm import Session
 
 from app.db.models import SupportPerson
 from app.db.session import engine_for_url
-from app.services.support_service import needs_support, suggested_kind
+from app.services.support_service import choose_person, explicit_support_person, needs_support, suggested_kind
+from app.schemas.support import SupportSuggestionRequest
+
+
+def test_explicit_choice_beats_preferences_and_ignores_history_and_negation() -> None:
+    people = [
+        SupportPerson(id=1, name="小林", relationship="同学", kind="classmate", scenarios=["考研"]),
+        SupportPerson(id=2, name="小雨", relationship="朋友", kind="friend", scenarios=[]),
+        SupportPerson(id=3, name="王老师", relationship="导师", kind="teacher", scenarios=["考研"]),
+    ]
+    request = SupportSuggestionRequest(situation="考研卡住了，我想找小雨聊聊", preferred_supporters=["classmate"])
+    assert choose_person(request, people, required_kind="teacher").id == 2
+    assert explicit_support_person("我之前联系小雨，但现在想找王老师", people).id == 3
+    assert explicit_support_person("我不想找王老师，还是想找小雨", people).id == 2
+    assert explicit_support_person("我之前找小雨聊过", people) is None
+    assert explicit_support_person("我不想找小雨", people) is None
+    assert explicit_support_person("小雨", people).id == 2
+    assert explicit_support_person("我想找小雨，但现在不想找小雨", people) is None
+    assert choose_person(SupportSuggestionRequest(situation="不想找小林，找谁帮忙都行"), people).id != 1
+
+
+def test_named_person_is_preserved_after_study_progression_and_in_saved_feedback(client: TestClient) -> None:
+    device = "named-choice"
+    contacts = []
+    for name, kind in (("林师姐", "senior"), ("小雨", "friend"), ("王老师", "teacher")):
+        contacts.append(client.post("/api/v1/support-people", json={
+            "device_id": device, "name": name, "relationship": name, "kind": kind, "scenarios": ["考研"],
+        }).json())
+    prior = client.post("/api/v1/support/suggest", json={"device_id": device, "situation": "考研复习卡住了"}).json()
+    client.post("/api/v1/support/feedback", json={"device_id": device, "suggestion_id": prior["suggestion_id"], "outcome": "helped"})
+    situation = "考研复习有压力，我想找小雨聊聊"
+    chat = client.post("/api/v1/chat", json={"device_id": device, "message": situation}).json()
+    assert chat["strategy"] == "seek_support"
+    result = client.post("/api/v1/support/suggest", json={
+        "device_id": device, "situation": situation, "source_message_id": chat["user_message_id"], "preferred_supporters": ["teacher"],
+    }).json()
+    assert result["supporter_id"] == contacts[1]["id"]
+    assert result["supporter_name"] == "小雨"
+    assert "明确想联系小雨" in result["reason"]
+    assert result["editable_message"].startswith("小雨")
+    feedback = client.post("/api/v1/support/feedback", json={"device_id": device, "suggestion_id": result["suggestion_id"], "outcome": "helped"}).json()
+    assert feedback["feedback"]["supporter_name"] == "小雨"
+    foreign = client.post("/api/v1/support/suggest", json={"device_id": "foreign", "situation": situation}).json()
+    assert foreign["supporter_id"] is None
 
 
 def test_support_strategy_uses_request_and_repeated_blockage() -> None:

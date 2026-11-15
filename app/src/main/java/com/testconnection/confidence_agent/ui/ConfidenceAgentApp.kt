@@ -103,6 +103,7 @@ fun ConfidenceAgentApp(
     var requestedRecordDateEpochDay by rememberSaveable { mutableStateOf<Long?>(null) }
     var requestedEditRecord by remember { mutableStateOf<com.testconnection.confidence_agent.data.model.RecordDraft?>(null) }
     var cameraLaunchToken by remember { mutableIntStateOf(0) }
+    var cameraLaunchPending by remember { mutableStateOf(false) }
     val voicePreferencesStore = androidx.compose.runtime.remember {
         VoicePreferencesStore(context.applicationContext)
     }
@@ -137,7 +138,6 @@ fun ConfidenceAgentApp(
             showMemoryCenter = true
         }
         OnboardingScreen(
-            voicePreferences = voicePreferences,
             initialProfile = userProfile ?: com.testconnection.confidence_agent.data.model.UserProfile(),
             onComplete = {
                 userProfile = it
@@ -154,6 +154,29 @@ fun ConfidenceAgentApp(
             },
         )
         return
+    }
+
+    // Widget shortcuts must also work while an existing task is showing a child page.
+    LaunchedEffect(externalDestination) {
+        externalDestination?.let {
+            showMemoryCenter = false
+            showSupportCircle = false
+            showWeeklyReport = false
+            showVideoStudio = false
+            showDataTools = false
+            showVoiceCall = false
+            supportFromMemory = false
+            selectedDestination = it.destination
+            recordParent = null
+            recordFromMemory = false
+            communityDetailOpen = false
+            requestedRecordMode = it.recordMode
+            requestedRecordDateEpochDay = null
+            requestedEditRecord = null
+            if (it.openCamera) cameraLaunchToken += 1
+            cameraLaunchPending = it.openCamera
+            onExternalDestinationConsumed()
+        }
     }
 
     if (showMemoryCenter) {
@@ -263,10 +286,10 @@ fun ConfidenceAgentApp(
             },
             onCreateFourWeekDemoData = growthViewModel::createDemoData,
             onClearDemoData = growthViewModel::clearDemoData,
-            onStressScenarioReady = { alert ->
-                homeViewModel.acceptStressAlert(alert)
-                showDataTools = false
-                selectedDestination = AppDestination.HOME
+            onStressReportReady = { alert ->
+                homeViewModel.markStressReportViewed(alert)
+                stressAlertId = alert.id
+                showStressAlert = true
             },
             onAllDataDeleted = {
                 onboardingStore.reset()
@@ -278,20 +301,6 @@ fun ConfidenceAgentApp(
             onBack = { showDataTools = false },
         )
         return
-    }
-
-    LaunchedEffect(externalDestination) {
-        externalDestination?.let {
-            selectedDestination = it.destination
-            recordParent = null
-            recordFromMemory = false
-            communityDetailOpen = false
-            requestedRecordMode = it.recordMode
-            requestedRecordDateEpochDay = null
-            requestedEditRecord = null
-            if (it.openCamera) cameraLaunchToken += 1
-            onExternalDestinationConsumed()
-        }
     }
 
     if (showVoiceCall) {
@@ -461,7 +470,8 @@ fun ConfidenceAgentApp(
                 AppDestination.RECORD -> RecordScreen(
                     contentPadding = padding,
                     requestedMode = requestedRecordMode,
-                    cameraLaunchToken = cameraLaunchToken,
+                    cameraLaunchToken = if (cameraLaunchPending) cameraLaunchToken else 0,
+                    onRequestConsumed = { cameraLaunchPending = false },
                     requestedDateEpochDay = requestedRecordDateEpochDay,
                     requestedEditRecord = requestedEditRecord,
                 )

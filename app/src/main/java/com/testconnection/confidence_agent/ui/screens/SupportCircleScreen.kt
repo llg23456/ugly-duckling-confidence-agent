@@ -204,7 +204,7 @@ fun SupportCircleScreen(onBack: () -> Unit) {
                     }
                 }
             } else {
-                items(people, key = { it.id }) { person ->
+                items(people, key = { "support-person-${it.id}" }) { person ->
                     SupportPersonCard(person, onEdit = { openEditor(person) }, onRemove = { deleting = person })
                 }
             }
@@ -225,7 +225,7 @@ fun SupportCircleScreen(onBack: () -> Unit) {
                     Spacer(Modifier.height(4.dp))
                     SectionTitle("求助后的回声", "不只记录结果，也记住你主动迈出的那一步")
                 }
-                items(feedback, key = { it.id }) { item -> SupportFeedbackCard(item) }
+                items(feedback, key = { "support-feedback-${it.id}" }) { item -> SupportFeedbackCard(item) }
             }
         }
     }

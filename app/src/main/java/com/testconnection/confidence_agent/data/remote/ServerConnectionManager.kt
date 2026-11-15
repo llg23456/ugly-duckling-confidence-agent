@@ -45,7 +45,7 @@ object ServerConnectionManager {
             if (connection.responseCode !in 200..299) error("健康检查返回 ${connection.responseCode}")
             val json = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
             if (json.optString("status") != "ok" || json.optString("service") != "confidence-agent-api") {
-                error("该地址不是小丑鸭后端")
+                error("该地址不是鸭力Go后端")
             }
             ServerHealth(
                 baseUrl = baseUrl,
@@ -84,7 +84,7 @@ object ServerConnectionManager {
         localSubnets.forEach { subnet ->
             scanSubnet(subnet)?.let { return it }
         }
-        error("当前局域网内没有找到小丑鸭后端。请确认电脑已启动服务，并允许防火墙访问 $DEFAULT_SERVER_PORT 端口")
+        error("当前局域网内没有找到鸭力Go后端。请确认电脑已启动服务，并允许防火墙访问 $DEFAULT_SERVER_PORT 端口")
     }
 
     private suspend fun scanSubnet(subnet: LocalSubnet): ServerHealth? {

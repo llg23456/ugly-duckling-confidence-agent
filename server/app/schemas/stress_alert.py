@@ -9,8 +9,10 @@ StressLevel = Literal["watch", "high"]
 
 class StressTrendPoint(BaseModel):
     date: str
-    level: Literal["steady", "watch", "high"]
+    level: Literal["unknown", "steady", "watch", "high"]
     signal_count: int = 0
+    record_count: int = 0
+    message_count: int = 0
 
 
 class StressEvidenceItem(BaseModel):
@@ -55,6 +57,24 @@ class StressAlertDetail(BaseModel):
 
 
 class ActiveStressAlertResponse(BaseModel):
+    alert: StressAlertDetail | None = None
+
+
+class StressTrendSource(BaseModel):
+    date: str
+    source_type: Literal["record", "chat"]
+    source_id: int
+    excerpt: str
+    level: Literal["steady", "watch", "high"]
+
+
+class StressTrendReport(BaseModel):
+    level: Literal["unknown", "steady", "watch", "high"]
+    trend: list[StressTrendPoint]
+    sources: list[StressTrendSource]
+    record_count: int
+    message_count: int
+    observed_days: int
     alert: StressAlertDetail | None = None
 
 

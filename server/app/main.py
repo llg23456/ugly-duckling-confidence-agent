@@ -12,7 +12,7 @@ settings = get_settings()
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
-    description="小丑鸭 Android 客户端 API。配置百炼 Key 后启用真实对话，否则回退到 Mock。",
+    description="鸭力Go Android 客户端 API。配置百炼 Key 后启用真实对话，否则回退到 Mock。",
 )
 
 if settings.app_env == "development":

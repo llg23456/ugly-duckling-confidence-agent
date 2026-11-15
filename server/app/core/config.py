@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "小丑鸭 API"
+    app_name: str = "鸭力Go API"
     app_env: str = "development"
     api_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./confidence_agent.db"

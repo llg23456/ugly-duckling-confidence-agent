@@ -1,12 +1,18 @@
 # 受邀云测环境
 
-2026-11-14 已完成公网 HTTPS 和 Android 真机独立联网验收。入口为 `https://api.yaligo-growth.top`，香港 ECS `47.83.165.140`，该轮验收后端发布为 `20261114-hk04`。云测版首次输入一次邀请码，后续可直接联网使用，无需 WireGuard、USB、电脑后端或 SSH 隧道。
+2026-11-14 已完成公网 HTTPS 和 Android 真机独立联网验收。入口为 `https://api.yaligo-growth.top`，香港 ECS `47.83.165.140`，当前后端发布为 `20261114-hk05-3e7e5d1`。云测版首次输入一次邀请码，后续可直接联网使用，无需 WireGuard、USB、电脑后端或 SSH 隧道。
 
-证据分别见 [域名及证书](domain-verification.json)、[公网认证接口](access-verification.json) 和 [真机验收](phone-verification.json)。后端测试 80 项、Android JVM 测试 18 项通过。此前新身份记忆提取未落库，以及并发多模态请求约 19–22 秒的问题仍待专项排查；本次单次公网聊天约 1.91 秒，不能据此认定并发性能问题已解决。
+2026-11-14 23:38（Asia/Shanghai）已将本地合并提交 `3e7e5d1` 的后端部署到香港，发布前完成 SQLite 一致性备份，新镜像隔离运行后端测试 89 项通过。公网 HTTPS 压力趋势验收 11 项通过：无数据返回七天“暂无”、正常记录显示平稳、未触发提醒仍返回压力趋势、较强连续压力触发提醒、删除来源更新趋势、聊天纳入统计、删除全部归零，以及 401/403 认证隔离。测试身份的数据和凭据已清理/撤销，后台任务结束后再次确认无残留。详见 [本轮验收结果](stress-trend-verification.json)。本轮未重新进行手机界面验收。
+
+本轮业务源提交为 `3e7e5d1`，镜像和备份 SHA-256 见验收结果。旧发布 `20261114-hk04` 和发布前备份保留。当前根 `.env` 仅固定 `APP_VERSION=20261114-hk05-3e7e5d1`，`deploy/cloud-test/.env` 继续链接服务器独立保存的 `config/runtime.env`；模型 Key 和现有用户数据库沿用。日常运维仍从 `current` 目录运行 Compose。
+
+可复查的公网验收脚本为 [stress-trend-smoke.py](stress-trend-smoke.py)。在服务器当前发布目录运行 `docker compose -f deploy/cloud-test/compose.yaml exec -T api python - < deploy/cloud-test/stress-trend-smoke.py`；脚本会生成独立测试身份、调用真实记录和聊天接口，并在结束时删除该身份的数据和撤销凭据，可能产生少量模型调用费用。不要用于导入个人数据。
+
+此前云测验收证据分别见 [域名及证书](domain-verification.json)、[公网认证接口](access-verification.json) 和 [真机验收](phone-verification.json)。后端测试 80 项、Android JVM 测试 18 项通过。此前新身份记忆提取未落库，以及并发多模态请求约 19–22 秒的问题仍待专项排查；本次单次公网聊天约 1.91 秒，不能据此认定并发性能问题已解决。
 
 ## 安装与邀请
 
-本地交付文件：`artifacts/cloud-test/20261114/ugly-duckling-cloudtest.apk`。包名 `com.testconnection.confidence_agent.cloudtest`，名称“小丑鸭·云测”，与原应用独立保存数据。该文件是受邀测试用 Debug APK，不是应用商店正式发布包。可运行 `build-apk.ps1` 重新构建并运行 Android JVM 测试；默认 SDK 为 `D:\Android\Sdk`。
+本地交付文件：`artifacts/cloud-test/20261114/ugly-duckling-cloudtest.apk`。包名 `com.testconnection.confidence_agent.cloudtest`，名称“鸭力Go·云测”，与原应用独立保存数据。该文件是受邀测试用 Debug APK，不是应用商店正式发布包。可运行 `build-apk.ps1` 重新构建并运行 Android JVM 测试；默认 SDK 为 `D:\Android\Sdk`。
 
 Android Studio 的普通 `Run app`、无参数 `assembleDebug` 与打包脚本已统一为云测入口；不再需要 `-PcloudTest` 或 `-PapiBaseUrl`，也不再提供本地版构建。请确认 IDE 打开的是本分支工作区，Sync 后选择 `app` / `debug` 即可。
 

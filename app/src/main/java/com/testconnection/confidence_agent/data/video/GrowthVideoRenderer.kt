@@ -60,7 +60,7 @@ class GrowthVideoRenderer(private val context: Context) {
 
         ink.typeface = Typeface.create("sans-serif", Typeface.BOLD)
         ink.textSize = 46f
-        canvas.drawText("小丑鸭 · 成长小片", 52f, 105f, ink)
+        canvas.drawText("鸭力Go · 成长小片", 52f, 105f, ink)
 
         sage.typeface = Typeface.create("sans-serif", Typeface.BOLD)
         sage.textSize = 27f

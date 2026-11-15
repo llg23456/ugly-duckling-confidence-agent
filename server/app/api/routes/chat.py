@@ -14,7 +14,7 @@ from app.services.chat_service import CHAT_PROMPT_VERSION, chat_with_fallback, s
 from app.services.check_in_service import schedule_explicit_follow_up
 from app.services.event_service import process_turn
 from app.services.memory_service import postgraduate_setback_evidence, recall
-from app.services.support_service import is_postgraduate_setback
+from app.services.support_service import explicit_conversation_support, is_postgraduate_setback
 
 router = APIRouter(tags=["chat"])
 
@@ -38,6 +38,8 @@ def chat(request: ChatRequest, background_tasks: BackgroundTasks, db: Session = 
             ]][:4]
     response = chat_with_fallback(request, history=history, evidence=evidence)
     conversation = conversation or get_or_create_conversation(db, request.device_id)
+    if not response.safety_triggered and explicit_conversation_support(db, conversation.id, request.message):
+        response.strategy = "seek_support"
     user_message, assistant_message = append_exchange(
         db, conversation,
         user_content=request.message,

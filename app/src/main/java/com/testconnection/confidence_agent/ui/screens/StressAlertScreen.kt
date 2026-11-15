@@ -328,8 +328,7 @@ fun StressAlertScreen(
                                     error = null
                                     scope.launch {
                                         runCatching {
-                                            val updated = if (followUp.ready) current
-                                            else api.makeFollowUpReady(deviceId, current.id)
+                                            val updated = api.detail(deviceId, current.id)
                                             update(updated)
                                             updated.followUp?.takeIf { it.ready }?.let { readyFollowUp ->
                                                 ProactiveCheckIn(
@@ -340,7 +339,10 @@ fun StressAlertScreen(
                                                     createdAt = updated.createdAt,
                                                 )
                                             }
-                                        }.onSuccess { followUpCheckIn = it }
+                                        }.onSuccess {
+                                            followUpCheckIn = it
+                                            if (it == null) followUpAcknowledgement = "回访还未到期，明天再来看看。"
+                                        }
                                             .onFailure { error = it.message ?: "回访还没有到时间。" }
                                         loading = false
                                     }
@@ -348,7 +350,7 @@ fun StressAlertScreen(
                                 enabled = !loading,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = AppButtonShape,
-                            ) { Text("查看后续回访") }
+                            ) { Text(if (followUp.ready) "查看后续回访" else "检查回访是否到期") }
                         }
                         followUpCheckIn?.let { checkIn ->
                             Surface(color = SagePale, shape = RoundedCornerShape(16.dp)) {
@@ -546,7 +548,7 @@ private fun GaugeLegendItem(color: Color, label: String) {
 }
 
 @Composable
-private fun StressTrendWithAxes(points: List<StressTrendPoint>) {
+internal fun StressTrendWithAxes(points: List<StressTrendPoint>) {
     Row(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.width(38.dp).height(142.dp).padding(top = 2.dp, bottom = 11.dp),
@@ -573,12 +575,12 @@ private fun TrendDateLabels(points: List<StressTrendPoint>, modifier: Modifier =
         Row(Modifier.fillMaxWidth()) {
             points.forEach { point ->
                 Text(
-                    point.date.takeLast(5),
+                    point.date.takeLast(5) + if (point.level == "unknown") "\n暂无" else "",
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
                     color = InkMuted,
                     textAlign = TextAlign.Center,
-                    maxLines = 1,
+                    maxLines = 2,
                 )
             }
         }
@@ -656,14 +658,21 @@ private fun StressTrendChart(points: List<StressTrendPoint>, modifier: Modifier 
             )
         }
         val path = Path().apply {
-            moveTo(offsets.first().x, offsets.first().y)
-            offsets.drop(1).forEach { lineTo(it.x, it.y) }
+            var connected = false
+            offsets.forEachIndexed { index, offset ->
+                if (points[index].level == "unknown") connected = false
+                else {
+                    if (connected) lineTo(offset.x, offset.y) else moveTo(offset.x, offset.y)
+                    connected = true
+                }
+            }
         }
         drawPath(path, SageDark, style = Stroke(3.dp.toPx(), cap = StrokeCap.Round))
         offsets.forEachIndexed { index, offset ->
             val color = when (points[index].level) {
                 "high" -> Terracotta
                 "watch" -> Color(0xFFD7A84B)
+                "unknown" -> InkMuted
                 else -> Sage
             }
             drawCircle(color, 5.dp.toPx(), offset)

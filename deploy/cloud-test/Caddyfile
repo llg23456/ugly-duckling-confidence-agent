@@ -26,7 +26,7 @@ api.yaligo-growth.top {
 		reverse_proxy 127.0.0.1:8000
 	}
 	handle / {
-		respond "小丑鸭受邀云测服务已就绪，请通过云测版应用使用。" 200
+		respond "鸭力Go受邀云测服务已就绪，请通过云测版应用使用。" 200
 	}
 	handle {
 		respond "Not found" 404

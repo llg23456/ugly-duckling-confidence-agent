@@ -35,7 +35,7 @@ fun CloudAccessScreen() {
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        Text("小丑鸭 · 受邀云测", style = MaterialTheme.typography.headlineMedium)
+        Text("鸭力Go · 受邀云测", style = MaterialTheme.typography.headlineMedium)
         Text("输入组织者提供的邀请码，开始本次测试。授权保存在本设备，之后打开即可继续使用。")
         OutlinedTextField(value = code, onValueChange = { code = it.take(64); error = null },
             label = { Text("邀请码") }, singleLine = true, enabled = !busy,

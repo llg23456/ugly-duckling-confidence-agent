@@ -11,6 +11,8 @@ from app.schemas.stress_alert import (
     StressFollowUpItem,
     StressSupportItem,
     StressTrendPoint,
+    StressTrendReport,
+    StressTrendSource,
 )
 from app.schemas.support import SupportSuggestionRequest
 from app.services.memory_service import local_day
@@ -39,6 +41,63 @@ FUNCTION_WORDS = (
     "睡不着", "睡不好", "失眠", "难以入睡", "注意力", "集中注意", "无法集中", "专注不了",
     "吃不下", "没胃口", "影响学习", "学不进去", "影响工作", "影响生活", "日常节奏",
 )
+TREND_LEVEL_ORDER = {"unknown": -1, "steady": 0, "watch": 1, "high": 2}
+
+
+def user_stress_trend(db: Session, conversation_id: int | None, now: datetime | None = None) -> StressTrendReport:
+    """Read original user input, including days without a growth event or alert."""
+    now = now or datetime.now(UTC)
+    today = _today(now)
+    start = today - timedelta(days=6)
+    since = datetime.combine(start, datetime.min.time(), LOCAL_TIMEZONE)
+    daily = {(start + timedelta(days=i)).isoformat(): {
+        "date": (start + timedelta(days=i)).isoformat(), "level": "unknown",
+        "signal_count": 0, "record_count": 0, "message_count": 0,
+    } for i in range(7) }
+    sources = []
+    if conversation_id is not None:
+        records = db.scalars(select(UserRecord).where(
+            UserRecord.conversation_id == conversation_id,
+            UserRecord.status == "saved",
+            ~UserRecord.client_record_id.startswith("demo-growth-"),
+            UserRecord.created_at >= since.astimezone(UTC), UserRecord.created_at <= now,
+        )).all()
+        messages = db.scalars(select(Message).where(
+            Message.conversation_id == conversation_id, Message.role == "user",
+            Message.created_at >= since.astimezone(UTC), Message.created_at <= now,
+        )).all()
+        rows = [(row, "record", " ".join(filter(None, (row.text, row.photo_comment)))) for row in records]
+        rows += [(row, "chat", row.content) for row in messages]
+        for row, kind, text in rows:
+            day = local_day(row.created_at)
+            if day not in daily:
+                continue
+            point = daily[day]
+            point["record_count" if kind == "record" else "message_count"] += 1
+            # Empty media and acute safety content do not imply a steady emotional state.
+            if not text or not text.strip() or any(word in text for word in ACUTE_WORDS):
+                continue
+            level = _text_level(text) or "steady"
+            if TREND_LEVEL_ORDER[level] > TREND_LEVEL_ORDER[point["level"]]:
+                point["level"] = level
+            if level != "steady":
+                point["signal_count"] += 1
+            sources.append(StressTrendSource(date=day, source_type=kind, source_id=row.id, excerpt=text[:160], level=level))
+    points = [StressTrendPoint(**point) for point in daily.values()]
+    level = max((point.level for point in points), key=TREND_LEVEL_ORDER.__getitem__)
+    return StressTrendReport(
+        level=level, trend=points, sources=sorted(sources, key=lambda item: (item.date, item.source_id), reverse=True),
+        record_count=sum(p.record_count for p in points), message_count=sum(p.message_count for p in points),
+        observed_days=sum(p.level != "unknown" for p in points),
+    )
+
+
+def _text_level(text: str) -> str | None:
+    if any(word in text for word in RECOVERY_WORDS + FUTURE_ONLY_WORDS):
+        return None
+    if any(word in text for word in HIGH_WORDS + FUNCTION_WORDS):
+        return "high"
+    return "watch" if any(word in text for word in WATCH_WORDS) else None
 
 
 def _aware(value: datetime) -> datetime:
@@ -89,11 +148,7 @@ def _event_level(event: GrowthEvent, now: datetime, *, scenario: bool) -> str | 
     text = _event_text(event)
     if not text or any(word in text for word in ACUTE_WORDS):
         return None
-    if any(word in text for word in RECOVERY_WORDS + FUTURE_ONLY_WORDS):
-        return None
-    if any(word in text for word in HIGH_WORDS) or any(word in text for word in FUNCTION_WORDS):
-        return "high"
-    return "watch" if any(word in text for word in WATCH_WORDS) else None
+    return _text_level(text)
 
 
 def analyze_recent_events(

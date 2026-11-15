@@ -12,8 +12,10 @@ from app.schemas.stress_alert import (
     StressAlertDetail,
     StressDeviceRequest,
     StressSelfCheckRequest,
+    StressTrendReport,
 )
 from app.services.stress_service import ACTIVE_STATUSES, adjusted_level, alert_detail, evaluate_stress_alert
+from app.services.stress_service import user_stress_trend
 
 
 router = APIRouter(prefix="/stress-alerts", tags=["stress-alerts"])
@@ -55,9 +57,34 @@ def active_alert(
         return ActiveStressAlertResponse()
     alert = db.scalar(select(StressAlert).where(
         StressAlert.conversation_id == conversation.id,
+        StressAlert.is_scenario.is_(False),
         StressAlert.status.in_(ACTIVE_STATUSES),
     ).order_by(StressAlert.updated_at.desc(), StressAlert.id.desc()))
     return ActiveStressAlertResponse(alert=alert_detail(db, alert) if alert else None)
+
+
+@router.post("/refresh", response_model=ActiveStressAlertResponse)
+def refresh_alert(request: StressDeviceRequest, db: Session = Depends(get_db)) -> ActiveStressAlertResponse:
+    """Re-evaluate the user's own recent events without creating any sample records."""
+    conversation = get_conversation(db, request.device_id)
+    if conversation is None:
+        return ActiveStressAlertResponse()
+    now = datetime.now(UTC)
+    alert = evaluate_stress_alert(db, conversation.id, now)
+    db.commit()
+    return ActiveStressAlertResponse(alert=alert_detail(db, alert, now) if alert else None)
+
+
+@router.post("/trend", response_model=StressTrendReport)
+def trend_report(request: StressDeviceRequest, db: Session = Depends(get_db)) -> StressTrendReport:
+    conversation = get_conversation(db, request.device_id)
+    now = datetime.now(UTC)
+    report = user_stress_trend(db, conversation.id if conversation else None, now)
+    if conversation:
+        alert = evaluate_stress_alert(db, conversation.id, now)
+        db.commit()
+        report.alert = alert_detail(db, alert, now) if alert else None
+    return report
 
 
 @router.get("/{alert_id}", response_model=StressAlertDetail)
