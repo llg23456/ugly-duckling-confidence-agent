@@ -39,6 +39,20 @@ class DataManagementRepository(private val context: Context) {
             addDirectory(zip, File(appContext.filesDir, CommunityPostStore.MEDIA_DIRECTORY), "media/community")
             addDirectory(zip, File(appContext.filesDir, CommunityPostStore.PROFILE_DIRECTORY), "media/community_profile")
             addDirectory(zip, File(appContext.filesDir, CommunityPostStore.CUSTOM_DIRECTORY), "media/community_custom")
+            addDirectory(zip, File(appContext.filesDir, "${CloudCommunityStore.DIRECTORY}/drafts"), "media/cloud_community_drafts")
+            val cloud = manifest.optJSONObject("cloud_community")
+            val communityApi = com.testconnection.confidence_agent.data.remote.CommunityApiClient(deviceId)
+            cloud?.optJSONArray("posts").objects().filter { it.optString("status") == "published" }
+                .flatMap { it.optJSONArray("media_ids").strings() }.distinct().forEach { id ->
+                    // A failed download is recorded explicitly instead of silently producing an incomplete export.
+                    val image = runCatching { communityApi.media(id) }
+                    if (image.isSuccess) {
+                        zip.putNextEntry(ZipEntry("media/cloud_community/$id.jpg")); zip.write(image.getOrThrow()); zip.closeEntry()
+                    } else {
+                        zip.putNextEntry(ZipEntry("media/cloud_community/$id-unavailable.txt"))
+                        zip.write((image.exceptionOrNull()?.message ?: "图片暂不可用").toByteArray(Charsets.UTF_8)); zip.closeEntry()
+                    }
+                }
         }
         output
     }
@@ -161,6 +175,8 @@ class DataManagementRepository(private val context: Context) {
             .put("experience_feedback", data.optJSONArray("experience_feedback") ?: JSONArray())
             .put("saved_records", savedRecords)
             .put("community_posts", localCommunityPosts)
+            .put("cloud_community", data.optJSONObject("community") ?: JSONObject())
+            .put("cloud_community_draft", CloudCommunityStore(appContext).draft().json())
             .put("community_profile", communityPosts.exportProfileJson())
             .put("community_customizations", communityPosts.exportCustomizationsJson())
             .put("memory_and_growth", JSONObject()
@@ -224,6 +240,7 @@ class DataManagementRepository(private val context: Context) {
         ChatDatabase.get(appContext).messages().clear()
         records.clearAll()
         communityPosts.clearAll()
+        CloudCommunityStore(appContext).clearAll()
         ReviewCacheStore(appContext).clear()
         listOf("chat_images", "generated_videos").forEach { name ->
             File(appContext.filesDir, name).deleteRecursively()

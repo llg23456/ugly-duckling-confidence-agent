@@ -1,124 +1,55 @@
 package com.testconnection.confidence_agent.ui.screens
 
-import android.Manifest
+import android.content.ClipData
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
-import android.media.MediaMetadataRetriever
 import android.net.Uri
-import android.text.format.DateUtils
-import android.widget.MediaController
-import android.widget.VideoView
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.DrawableRes
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
-import com.testconnection.confidence_agent.R
-import com.testconnection.confidence_agent.data.model.CommunityDraft
-import com.testconnection.confidence_agent.data.model.CommunityPost
 import com.testconnection.confidence_agent.data.model.CommunityRecordImport
-import com.testconnection.confidence_agent.data.model.RecordDraft
-import com.testconnection.confidence_agent.data.model.RecordMode
-import com.testconnection.confidence_agent.data.repository.CommunityPostStore
-import com.testconnection.confidence_agent.data.repository.LocalRecordRepository
-import com.testconnection.confidence_agent.ui.components.AppButtonShape
-import com.testconnection.confidence_agent.ui.components.DuckArt
-import com.testconnection.confidence_agent.ui.theme.Cream
-import com.testconnection.confidence_agent.ui.theme.InkMuted
-import com.testconnection.confidence_agent.ui.theme.SageDark
-import com.testconnection.confidence_agent.ui.theme.SagePale
-import com.testconnection.confidence_agent.ui.theme.TerracottaPale
-import com.testconnection.confidence_agent.ui.theme.WarmOutline
-import com.testconnection.confidence_agent.ui.theme.WarmWhite
+import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
+import com.testconnection.confidence_agent.data.remote.CommunityApiClient
+import com.testconnection.confidence_agent.data.remote.CommunityHttpException
+import com.testconnection.confidence_agent.data.repository.*
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
-private data class CommunityFeedEntry(
-    val post: CommunityPost,
-    @DrawableRes val illustration: Int? = null,
-)
+private val communityTopics = listOf("成长分享", "学习交流", "生活片段", "想说的话", "今日记录")
+private val communityAvatars = listOf("🐣", "🦆", "🌱", "🌻", "🌙", "☁️")
+private data class ReportTarget(val kind: String, val id: String, val author: String, val mine: Boolean)
 
-private enum class CommunityMediaKind { AVATAR, POST_IMAGE }
-
-private data class CommunityMediaTarget(
-    val postId: String,
-    val kind: CommunityMediaKind,
-    val usesOwnProfileAvatar: Boolean = false,
-)
-
-private const val OWN_PROFILE_TARGET = "community-profile"
-
+/** Shared, invited cloud community. The old local store is read only through the explicit import list. */
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun CommunityScreen(
     contentPadding: PaddingValues,
     userName: String,
@@ -126,1035 +57,428 @@ fun CommunityScreen(
     initialVideoPath: String? = null,
     onInitialVideoConsumed: () -> Unit = {},
 ) {
-    val base = MaterialTheme.typography
-    MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme,
-        shapes = MaterialTheme.shapes,
-        typography = base.copy(
-            displaySmall = base.displaySmall.copy(fontFamily = FontFamily.Serif),
-            headlineMedium = base.headlineMedium.copy(fontFamily = FontFamily.Serif),
-            headlineSmall = base.headlineSmall.copy(fontFamily = FontFamily.Serif),
-            titleLarge = base.titleLarge.copy(fontFamily = FontFamily.Serif),
-            titleMedium = base.titleMedium.copy(fontFamily = FontFamily.Serif),
-            bodyLarge = base.bodyLarge.copy(fontFamily = FontFamily.Serif),
-            bodyMedium = base.bodyMedium.copy(fontFamily = FontFamily.Serif),
-            bodySmall = base.bodySmall.copy(fontFamily = FontFamily.Serif),
-            labelLarge = base.labelLarge.copy(fontFamily = FontFamily.Serif),
-            labelMedium = base.labelMedium.copy(fontFamily = FontFamily.Serif),
-            labelSmall = base.labelSmall.copy(fontFamily = FontFamily.Serif),
-        ),
-    ) {
-        CommunityScreenContent(
-            contentPadding,
-            userName,
-            onDetailVisibilityChanged,
-            initialVideoPath,
-            onInitialVideoConsumed,
-        )
-    }
-}
-
-@Composable
-private fun CommunityScreenContent(
-    contentPadding: PaddingValues,
-    userName: String,
-    onDetailVisibilityChanged: (Boolean) -> Unit,
-    initialVideoPath: String?,
-    onInitialVideoConsumed: () -> Unit,
-) {
     val context = LocalContext.current
-    val store = remember { CommunityPostStore(context) }
-    var ownPosts by remember { mutableStateOf(store.loadOwnPosts()) }
-    var avatarPath by remember { mutableStateOf(store.avatarPath()) }
+    val api = remember { CommunityApiClient(DeviceIdStore(context).get()) }
+    val store = remember { CloudCommunityStore(context) }
+    val localStore = remember { CommunityPostStore(context) }
+    val scope = rememberCoroutineScope()
+    var page by remember { mutableStateOf("feed") }
+    var posts by remember { mutableStateOf(store.cache()) }
+    var nextCursor by remember { mutableStateOf<String?>(null) }
+    var myOnly by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
-    var showComposer by remember { mutableStateOf(false) }
-    var pendingComposerDraft by remember { mutableStateOf<CommunityDraft?>(null) }
-    var selectedPost by remember { mutableStateOf<CommunityFeedEntry?>(null) }
-    var pendingDelete by remember { mutableStateOf<CommunityPost?>(null) }
-    var sourceDialogTarget by remember { mutableStateOf<CommunityMediaTarget?>(null) }
-    var activeMediaTarget by remember { mutableStateOf<CommunityMediaTarget?>(null) }
-    var pendingMediaUri by remember { mutableStateOf<Uri?>(null) }
-    var pendingMediaFile by remember { mutableStateOf<File?>(null) }
-    var mediaNotice by remember { mutableStateOf<String?>(null) }
-    var likeVersion by remember { mutableIntStateOf(0) }
-    var mediaVersion by remember { mutableIntStateOf(0) }
-    val demoEntries = remember { demoCommunityPosts() }
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(initialVideoPath) {
-        val path = initialVideoPath?.takeIf { File(it).isFile } ?: return@LaunchedEffect
-        pendingComposerDraft = CommunityDraft(
-            title = "我的成长小片",
-            sourceVideoPath = path,
-            topic = "成长小片",
-        )
-        showComposer = true
-        onInitialVideoConsumed()
-    }
-
-    fun acceptMedia(uri: Uri, deleteAfterRead: Boolean = false) {
-        val target = activeMediaTarget ?: return
-        scope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    when {
-                        target.kind == CommunityMediaKind.AVATAR && target.usesOwnProfileAvatar -> store.importAvatar(uri)
-                        target.kind == CommunityMediaKind.AVATAR -> store.importCustomAvatar(target.postId, uri)
-                        else -> store.importCustomPostImage(target.postId, uri)
-                    }
-                }
-            }.onSuccess { path ->
-                if (target.usesOwnProfileAvatar) avatarPath = path
-                mediaVersion++
-                mediaNotice = null
-            }.onFailure { mediaNotice = it.message ?: "图片读取失败，请重新选择。" }
-            if (deleteAfterRead) pendingMediaFile?.delete()
-            pendingMediaFile = null
-            pendingMediaUri = null
-            activeMediaTarget = null
-        }
-    }
-
-    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) acceptMedia(uri) else activeMediaTarget = null
-    }
-    val takeMediaPhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        val uri = pendingMediaUri
-        if (success && uri != null) acceptMedia(uri, deleteAfterRead = true)
-        else {
-            pendingMediaFile?.delete()
-            pendingMediaFile = null
-            pendingMediaUri = null
-            activeMediaTarget = null
-        }
-    }
-    fun launchMediaCamera() {
-        val target = activeMediaTarget ?: return
-        val directory = File(context.cacheDir, "camera").apply { mkdirs() }
-        val prefix = if (target.kind == CommunityMediaKind.AVATAR) "community-avatar-" else "community-post-"
-        val file = File.createTempFile(prefix, ".jpg", directory)
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
-        pendingMediaFile = file
-        pendingMediaUri = uri
-        takeMediaPhoto.launch(uri)
-    }
-    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) launchMediaCamera() else mediaNotice = "需要相机权限才能拍照，也可以从相册选择。"
-    }
-    fun requestMediaCamera() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
-            launchMediaCamera()
-        } else {
-            cameraPermission.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    sourceDialogTarget?.let { target ->
-        AlertDialog(
-            onDismissRequest = { sourceDialogTarget = null },
-            title = { Text(if (target.kind == CommunityMediaKind.AVATAR) "更换头像" else "更换帖子配图") },
-            text = { Text("修改只保存在本机。你可以拍一张新照片，或从相册选择。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    activeMediaTarget = target
-                    sourceDialogTarget = null
-                    requestMediaCamera()
-                }) { Text("拍照", color = SageDark) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    activeMediaTarget = target
-                    sourceDialogTarget = null
-                    mediaPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                }) { Text("从相册选择", color = SageDark) }
-            },
-        )
-    }
-
-    pendingDelete?.let { post ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text("删除这条分享？") },
-            text = { Text("只会删除社区中的副本，不会影响原始生活记录。") },
-            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
-            confirmButton = {
-                TextButton(onClick = {
-                    store.delete(post.id)
-                    ownPosts = store.loadOwnPosts()
-                    if (selectedPost?.post?.id == post.id) {
-                        selectedPost = null
-                        onDetailVisibilityChanged(false)
-                    }
-                    pendingDelete = null
-                }) { Text("删除") }
-            },
-        )
-    }
-
-    selectedPost?.let { entry ->
-        @Suppress("UNUSED_VARIABLE") val currentMediaVersion = mediaVersion
-        CommunityPostDetailScreen(
-            contentPadding = contentPadding,
-            entry = entry,
-            avatarPath = if (entry.post.isMine) avatarPath else store.customAvatarPath(entry.post.id),
-            customImagePath = store.customPostImagePath(entry.post.id),
-            liked = store.isLiked(entry.post.id),
-            mediaNotice = mediaNotice,
-            onBack = {
-                selectedPost = null
-                onDetailVisibilityChanged(false)
-            },
-            onAvatarClick = {
-                sourceDialogTarget = CommunityMediaTarget(entry.post.id, CommunityMediaKind.AVATAR, entry.post.isMine)
-            },
-            onImageClick = { sourceDialogTarget = CommunityMediaTarget(entry.post.id, CommunityMediaKind.POST_IMAGE) },
-            onLike = { store.toggleLike(entry.post.id); likeVersion++ },
-            onShare = { shareCommunityPost(context, entry.post) },
-            onDelete = if (entry.post.isMine) ({ pendingDelete = entry.post }) else null,
-        )
-        return
-    }
-
-    if (showComposer) {
-        CommunityComposerScreen(
-            contentPadding = contentPadding,
-            userName = userName,
-            store = store,
-            avatarPath = avatarPath,
-            initialDraft = pendingComposerDraft,
-            onAvatarClick = {
-                sourceDialogTarget = CommunityMediaTarget(OWN_PROFILE_TARGET, CommunityMediaKind.AVATAR, true)
-            },
-            onBack = { pendingComposerDraft = null; showComposer = false },
-            onPublished = {
-                ownPosts = store.loadOwnPosts()
-                pendingComposerDraft = null
-                showComposer = false
-            },
-        )
-        return
-    }
-    val normalizedQuery = query.trim()
-    @Suppress("UNUSED_VARIABLE") val currentLikeVersion = likeVersion
-    @Suppress("UNUSED_VARIABLE") val currentMediaVersion = mediaVersion
-    val feed = (ownPosts.map { CommunityFeedEntry(it) } + demoEntries).filter { entry ->
-        normalizedQuery.isBlank() || listOf(entry.post.authorName, entry.post.title, entry.post.content, entry.post.topic.orEmpty())
-            .any { it.contains(normalizedQuery, ignoreCase = true) }
-    }
-
-    Box(
-        Modifier.fillMaxSize()
-            .padding(
-                top = contentPadding.calculateTopPadding(),
-                bottom = contentPadding.calculateBottomPadding(),
-            )
-            .background(Cream),
-    ) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 92.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            item { CommunityHeader() }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.weight(1f).height(50.dp),
-                        singleLine = true,
-                        leadingIcon = { Text("⌕", fontSize = 23.sp, lineHeight = 24.sp, color = InkMuted) },
-                        placeholder = { Text("搜一搜社区内容", fontSize = 15.sp, lineHeight = 18.sp) },
-                        shape = RoundedCornerShape(16.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            unfocusedBorderColor = Color.Transparent,
-                            focusedBorderColor = SageDark,
-                            unfocusedContainerColor = WarmWhite,
-                            focusedContainerColor = WarmWhite,
-                        ),
-                    )
-                    Button(
-                        onClick = { pendingComposerDraft = null; showComposer = true },
-                        modifier = Modifier.widthIn(min = 70.dp).height(42.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                        elevation = ButtonDefaults.buttonElevation(0.dp),
-                    ) { Text("发布") }
-                }
-            }
-            if (feed.isEmpty()) {
-                item {
-                    CommunityFlatCard {
-                        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("没有找到相关分享", style = MaterialTheme.typography.titleLarge)
-                            Text("换个关键词试试，或者写下你的第一条分享。", color = InkMuted)
-                        }
-                    }
-                }
-            } else {
-                items(feed, key = { it.post.id }) { entry ->
-                    CommunityPostCard(
-                        entry = entry,
-                        avatarPath = if (entry.post.isMine) avatarPath else store.customAvatarPath(entry.post.id),
-                        customImagePath = store.customPostImagePath(entry.post.id),
-                        liked = store.isLiked(entry.post.id),
-                        onOpen = {
-                            selectedPost = entry
-                            onDetailVisibilityChanged(true)
-                        },
-                        onAvatarClick = {
-                            sourceDialogTarget = CommunityMediaTarget(entry.post.id, CommunityMediaKind.AVATAR, entry.post.isMine)
-                        },
-                        onImageClick = { sourceDialogTarget = CommunityMediaTarget(entry.post.id, CommunityMediaKind.POST_IMAGE) },
-                        onLike = { store.toggleLike(entry.post.id); likeVersion++ },
-                        onComments = {
-                            selectedPost = entry
-                            onDetailVisibilityChanged(true)
-                        },
-                        onShare = { shareCommunityPost(context, entry.post) },
-                    )
-                }
-            }
-        }
-        FloatingActionButton(
-            onClick = { pendingComposerDraft = null; showComposer = true },
-            modifier = Modifier.align(Alignment.BottomCenter)
-                .padding(bottom = 16.dp),
-            shape = CircleShape,
-            containerColor = MaterialTheme.colorScheme.onSurface,
-            contentColor = MaterialTheme.colorScheme.surface,
-        ) { Text("＋", style = MaterialTheme.typography.headlineMedium) }
-    }
-}
-
-@Composable
-private fun CommunityHeader() {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("社区", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Text("在这里，和同路人一起变好", style = MaterialTheme.typography.bodyLarge, color = InkMuted)
-        }
-        Box(Modifier.width(184.dp).height(104.dp)) {
-            Surface(
-                modifier = Modifier.align(Alignment.CenterStart).width(118.dp),
-                color = SagePale,
-                shape = RoundedCornerShape(22.dp),
-            ) {
-                Text(
-                    "分享 · 陪伴\n成长 · 更好的自己",
-                    Modifier.padding(horizontal = 13.dp, vertical = 11.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = SageDark,
-                )
-            }
-            Image(
-                painter = painterResource(R.drawable.duck_community_header),
-                contentDescription = "探出头陪伴分享的小鸭",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CommunityFlatCard(
-    modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null,
-    content: @Composable () -> Unit,
-) {
-    if (onClick == null) {
-        Surface(
-            modifier = modifier.fillMaxWidth(),
-            color = WarmWhite,
-            shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(1.dp, WarmOutline),
-        ) { content() }
-    } else {
-        Surface(
-            onClick = onClick,
-            modifier = modifier.fillMaxWidth(),
-            color = WarmWhite,
-            shape = RoundedCornerShape(18.dp),
-            border = BorderStroke(1.dp, WarmOutline),
-        ) { content() }
-    }
-}
-
-@Composable
-private fun CommunityAvatar(
-    path: String?,
-    authorName: String,
-    size: Dp,
-    onClick: (() -> Unit)? = null,
-) {
-    val bitmap = remember(path) { path?.let { BitmapFactory.decodeFile(it)?.asImageBitmap() } }
-    val clickableModifier = if (onClick == null) Modifier else Modifier.clickable(onClick = onClick)
-    Box(
-        Modifier.size(size).clip(CircleShape).background(SagePale).then(clickableModifier),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (bitmap != null) {
-            Image(bitmap, "$authorName 的社区头像", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-        } else {
-            Image(
-                painter = painterResource(R.drawable.duck_community_avatar),
-                contentDescription = "$authorName 的默认小鸭头像",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CommunityPostCard(
-    entry: CommunityFeedEntry,
-    avatarPath: String?,
-    customImagePath: String?,
-    liked: Boolean,
-    onOpen: () -> Unit,
-    onAvatarClick: (() -> Unit)?,
-    onImageClick: () -> Unit,
-    onLike: () -> Unit,
-    onComments: () -> Unit,
-    onShare: () -> Unit,
-) {
-    val post = entry.post
-    val displayedImagePath = customImagePath ?: post.imagePath
-    val displayedIllustration = entry.illustration.takeIf { customImagePath == null }
-    val hasMedia = post.videoPath != null || displayedImagePath != null || displayedIllustration != null
-    CommunityFlatCard(onClick = onOpen) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CommunityAvatar(avatarPath, post.authorName, 44.dp, onAvatarClick)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                        Text(post.authorName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Surface(color = if (post.isMine) TerracottaPale else SagePale, shape = RoundedCornerShape(8.dp)) {
-                            Text(post.authorBadge, Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                                style = MaterialTheme.typography.bodySmall, color = SageDark)
-                        }
-                    }
-                    Text(relativeTime(post.createdAt), style = MaterialTheme.typography.bodySmall, color = InkMuted)
-                }
-            }
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                if (maxWidth < 250.dp && hasMedia) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        CommunityPostText(post)
-                        CommunityPostMedia(post.videoPath, displayedImagePath, displayedIllustration,
-                            Modifier.fillMaxWidth().height(142.dp), onImageClick)
-                    }
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
-                        Column(Modifier.weight(1f)) { CommunityPostText(post) }
-                        CommunityPostMedia(post.videoPath, displayedImagePath, displayedIllustration, Modifier.size(98.dp), onImageClick)
-                    }
-                }
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                post.topic?.let { topic ->
-                    Surface(color = SagePale, shape = AppButtonShape) {
-                        Text("# $topic", Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = SageDark,
-                            style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-                if (post.sourceRecordId != null) {
-                    Spacer(Modifier.width(8.dp))
-                    Text("来自我的记录", style = MaterialTheme.typography.bodySmall, color = InkMuted)
-                }
-                if (post.videoPath != null) {
-                    Spacer(Modifier.width(8.dp))
-                    Text("视频", style = MaterialTheme.typography.bodySmall, color = InkMuted)
-                }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                CommunityActionButton(
-                    iconRes = R.drawable.ic_community_like,
-                    contentDescription = if (liked) "取消点赞" else "点赞",
-                    count = post.likeCount + if (liked) 1 else 0,
-                    active = liked,
-                    onClick = onLike,
-                )
-                CommunityActionButton(
-                    iconRes = R.drawable.ic_community_comment,
-                    contentDescription = "查看评论",
-                    count = post.commentCount,
-                    onClick = onComments,
-                )
-                CommunityActionButton(
-                    iconRes = R.drawable.ic_community_share,
-                    contentDescription = "分享",
-                    count = post.shareCount,
-                    onClick = onShare,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommunityActionButton(
-    @DrawableRes iconRes: Int,
-    contentDescription: String,
-    count: Int,
-    active: Boolean = false,
-    onClick: () -> Unit,
-) {
-    TextButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 7.dp, vertical = 5.dp)) {
-        Image(
-            painter = painterResource(iconRes),
-            contentDescription = contentDescription,
-            modifier = Modifier.size(22.dp),
-            colorFilter = if (active) ColorFilter.tint(Color(0xFFE04753)) else null,
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(count.toString(), color = if (active) Color(0xFFE04753) else InkMuted)
-    }
-}
-
-@Composable
-private fun CommunityPostText(post: CommunityPost) {
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        Text(post.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        if (post.content.isNotBlank()) Text(post.content, maxLines = 4, overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun CommunityPostMedia(
-    videoPath: String?,
-    path: String?,
-    @DrawableRes illustration: Int?,
-    modifier: Modifier,
-    onClick: (() -> Unit)? = null,
-) {
-    val videoThumbnail = remember(videoPath) { videoPath?.let(::videoThumbnail) }
-    val bitmap = remember(path) { path?.let { BitmapFactory.decodeFile(it)?.asImageBitmap() } }
-    val interactive = if (onClick == null) modifier else modifier.clickable(onClick = onClick)
-    when {
-        videoPath != null -> Box(
-            modifier.clip(RoundedCornerShape(18.dp)).background(Color(0xFF26322C)),
-            contentAlignment = Alignment.Center,
-        ) {
-            videoThumbnail?.let {
-                Image(it, "分享中的视频封面", Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
-            }
-            Surface(color = Color.Black.copy(alpha = 0.62f), shape = CircleShape) {
-                Text("▶", Modifier.padding(horizontal = 12.dp, vertical = 8.dp), color = Color.White)
-            }
-        }
-        bitmap != null -> Image(bitmap, "分享中的照片", interactive.clip(RoundedCornerShape(18.dp)), contentScale = ContentScale.Crop)
-        illustration != null -> Image(painterResource(illustration), "分享插画",
-            interactive.clip(RoundedCornerShape(18.dp)).background(SagePale), contentScale = ContentScale.Crop)
-    }
-}
-
-private fun videoThumbnail(path: String): androidx.compose.ui.graphics.ImageBitmap? {
-    val source = File(path)
-    if (!source.isFile) return null
-    val retriever = MediaMetadataRetriever()
-    return try {
-        retriever.setDataSource(source.absolutePath)
-        retriever.getFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)?.asImageBitmap()
-    } catch (_: Throwable) {
-        null
-    } finally {
-        retriever.release()
-    }
-}
-
-@Composable
-private fun CommunityVideoPlayer(path: String, modifier: Modifier = Modifier) {
-    var videoView by remember(path) { mutableStateOf<VideoView?>(null) }
-    DisposableEffect(path) {
-        onDispose { videoView?.runCatching { stopPlayback() } }
-    }
-    AndroidView(
-        factory = { viewContext ->
-            VideoView(viewContext).apply {
-                videoView = this
-                val controls = MediaController(viewContext)
-                controls.setAnchorView(this)
-                setMediaController(controls)
-                setVideoPath(path)
-                setOnPreparedListener { player ->
-                    player.isLooping = false
-                    seekTo(1)
-                }
-                setOnClickListener { if (isPlaying) pause() else start() }
-            }
-        },
-        update = { view ->
-            if (view.tag != path) {
-                view.tag = path
-                view.setVideoPath(path)
-                view.seekTo(1)
-            }
-        },
-        modifier = modifier.clip(RoundedCornerShape(18.dp)).background(Color.Black),
-    )
-}
-
-private data class CommunityComment(
-    val author: String,
-    val badge: String,
-    val time: String,
-    val content: String,
-    val likes: Int,
-    val color: Color,
-)
-
-@Composable
-private fun CommunityPostDetailScreen(
-    contentPadding: PaddingValues,
-    entry: CommunityFeedEntry,
-    avatarPath: String?,
-    customImagePath: String?,
-    liked: Boolean,
-    mediaNotice: String?,
-    onBack: () -> Unit,
-    onAvatarClick: (() -> Unit)?,
-    onImageClick: () -> Unit,
-    onLike: () -> Unit,
-    onShare: () -> Unit,
-    onDelete: (() -> Unit)?,
-) {
-    BackHandler(onBack = onBack)
-    val post = entry.post
-    val displayedImagePath = customImagePath ?: post.imagePath
-    val displayedIllustration = entry.illustration.takeIf { customImagePath == null }
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-    val comments = remember(post.id) { demoComments(post) }
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize().background(Cream).statusBarsPadding().navigationBarsPadding(),
-        contentPadding = PaddingValues(
-            start = 20.dp,
-            top = 12.dp + contentPadding.calculateTopPadding(),
-            end = 20.dp,
-            bottom = 28.dp,
-        ),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-    ) {
-        item {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack, contentPadding = PaddingValues(horizontal = 2.dp, vertical = 8.dp)) {
-                    Text("‹", style = MaterialTheme.typography.displaySmall, color = SageDark)
-                }
-                Spacer(Modifier.width(8.dp))
-                CommunityAvatar(avatarPath, post.authorName, 48.dp, onAvatarClick)
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(post.authorName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Surface(color = if (post.isMine) TerracottaPale else SagePale, shape = RoundedCornerShape(8.dp)) {
-                        Text(
-                            post.authorBadge,
-                            Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SageDark,
-                        )
-                    }
-                }
-                onDelete?.let { TextButton(onClick = it, contentPadding = PaddingValues(horizontal = 7.dp)) { Text("···", color = InkMuted) } }
-            }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (post.videoPath != null) "点击头像可更换头像；视频可直接播放"
-                    else "点击头像或配图可从拍照、相册更换",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = InkMuted,
-                )
-            }
-            mediaNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Color(0xFFC65B48)) }
-        }
-
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
-                Text(post.title, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                Text("${relativeTime(post.createdAt)} · 来自鸭力Go社区", style = MaterialTheme.typography.bodyMedium, color = InkMuted)
-                if (post.videoPath != null) {
-                    CommunityVideoPlayer(post.videoPath, Modifier.fillMaxWidth().height(300.dp))
-                    Text("点按视频开始或暂停，也可以使用播放器控件拖动进度。", style = MaterialTheme.typography.bodySmall, color = InkMuted)
-                } else if (displayedImagePath != null || displayedIllustration != null) {
-                    CommunityPostMedia(null, displayedImagePath, displayedIllustration,
-                        Modifier.fillMaxWidth().height(238.dp), onImageClick)
-                }
-                if (post.content.isNotBlank()) {
-                    Text(post.content, style = MaterialTheme.typography.bodyLarge)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    post.topic?.let { topic ->
-                        Surface(color = SagePale, shape = RoundedCornerShape(12.dp)) {
-                            Text("# $topic", Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = SageDark)
-                        }
-                    }
-                    if (post.sourceRecordId != null) Text("来自我的记录", style = MaterialTheme.typography.bodySmall, color = InkMuted)
-                }
-            }
-        }
-
-        item {
-            HorizontalDivider(color = WarmOutline)
-            Row(
-                Modifier.fillMaxWidth().padding(top = 5.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CommunityActionButton(
-                    iconRes = R.drawable.ic_community_like,
-                    contentDescription = if (liked) "取消点赞" else "点赞",
-                    count = post.likeCount + if (liked) 1 else 0,
-                    active = liked,
-                    onClick = onLike,
-                )
-                CommunityActionButton(
-                    iconRes = R.drawable.ic_community_comment,
-                    contentDescription = "查看评论",
-                    count = post.commentCount,
-                    onClick = { scope.launch { listState.animateScrollToItem(3) } },
-                )
-                CommunityActionButton(
-                    iconRes = R.drawable.ic_community_share,
-                    contentDescription = "分享",
-                    count = post.shareCount,
-                    onClick = onShare,
-                )
-            }
-            HorizontalDivider(color = WarmOutline)
-        }
-
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(4.dp, 22.dp).background(SageDark, RoundedCornerShape(2.dp)))
-                    Spacer(Modifier.width(9.dp))
-                    Text("评论 (${post.commentCount})", style = MaterialTheme.typography.titleLarge)
-                    Spacer(Modifier.weight(1f))
-                    if (!post.isMine) {
-                        Text("本机演示讨论", style = MaterialTheme.typography.bodySmall, color = InkMuted)
-                    }
-                }
-                if (comments.isEmpty()) {
-                    Text("刚刚发布，还没有评论。", style = MaterialTheme.typography.bodyMedium, color = InkMuted)
-                } else {
-                    comments.forEach { comment -> CommunityCommentRow(comment) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CommunityCommentRow(comment: CommunityComment) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        Box(
-            Modifier.size(42.dp).clip(CircleShape).background(comment.color),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(comment.author.take(1), fontWeight = FontWeight.Bold, color = SageDark)
-        }
-        Spacer(Modifier.width(11.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                Text(comment.author, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Surface(color = SagePale, shape = RoundedCornerShape(7.dp)) {
-                    Text(comment.badge, Modifier.padding(horizontal = 6.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall, color = SageDark)
-                }
-            }
-            Text(comment.time, style = MaterialTheme.typography.bodySmall, color = InkMuted)
-            Text(comment.content, style = MaterialTheme.typography.bodyLarge)
-            Text("♡ ${comment.likes}", style = MaterialTheme.typography.bodySmall, color = InkMuted)
-            HorizontalDivider(Modifier.padding(top = 5.dp), color = WarmOutline)
-        }
-    }
-}
-
-private fun demoComments(post: CommunityPost): List<CommunityComment> {
-    if (post.isMine) return emptyList()
-    return when (post.id) {
-        "demo-1" -> listOf(
-            CommunityComment("研途有光", "备考同路人", "18分钟前", "先把学校、专业课和复试问题分开列，师兄师姐回答起来也会更轻松。", 16, Color(0xFFE6EFE8)),
-            CommunityComment("橘子汽水", "提问练习中", "43分钟前", "我以前总怕问题太基础，后来发现问清楚反而省下很多反复纠结的时间。", 9, Color(0xFFF5E7DE)),
-            CommunityComment("纸飞机", "慢慢准备", "1小时前", "愿意开口求助就是很具体的一步，祝你得到有用的信息。", 7, Color(0xFFE8E7F3)),
-        )
-        "demo-2" -> listOf(
-            CommunityComment("半页书", "重新起步", "21分钟前", "二十分钟不是“只学了”，而是今天真的重新坐下来了。", 14, Color(0xFFFFE9C9)),
-            CommunityComment("青团", "轻量计划", "52分钟前", "我也把任务改成先读两页，开始以后通常会自然多做一点。", 8, Color(0xFFE1EFEA)),
-            CommunityComment("晚风", "普通学习者", "2小时前", "允许状态有起伏，反而比较容易把节奏维持下去。", 6, Color(0xFFEDE5F5)),
-        )
-        "demo-3" -> listOf(
-            CommunityComment("错题本", "方法调整中", "35分钟前", "能说清薄弱点比单纯记录学习时长更有用，这个变化很扎实。", 19, Color(0xFFE7EEF8)),
-            CommunityComment("一颗豆子", "今日复盘", "1小时前", "我准备试试每天只写一个真正弄懂的问题，不再拿时长吓自己。", 12, Color(0xFFF5E7DE)),
-            CommunityComment("北窗", "备考中", "3小时前", "老师的建议很具体，也看得出你认真把建议落到了行动里。", 10, Color(0xFFE6EFE8)),
-        )
-        "demo-4" -> listOf(
-            CommunityComment("跑慢一点", "夜跑搭子", "27分钟前", "十分钟慢跑刚刚好，回来脑子会清醒很多，也不会累到第二天。", 22, Color(0xFFE1EFEA)),
-            CommunityComment("云边散步", "生活观察员", "58分钟前", "公园那一段很有画面感。休息不是奖励，本来就是生活的一部分。", 15, Color(0xFFFFE9C9)),
-            CommunityComment("石榴籽", "作息修复中", "2小时前", "谢谢提醒，今晚不硬撑到凌晨了，我也出去走一圈。", 11, Color(0xFFE8E7F3)),
-        )
-        "demo-5" -> listOf(
-            CommunityComment("小满", "倾听者", "16分钟前", "家人先问你有没有好好吃饭，这句话听着很温柔。", 25, Color(0xFFF5E7DE)),
-            CommunityComment("灯下", "表达练习中", "49分钟前", "把压力说出口可能很难，但也让身边的人知道该怎样陪你。", 18, Color(0xFFEDE5F5)),
-            CommunityComment("一勺月光", "同路人", "1小时前", "勇敢不一定是装作没事，也可以是承认自己需要一点支持。", 13, Color(0xFFE6EFE8)),
-        )
-        else -> emptyList()
-    }
-}
-
-private fun shareCommunityPost(context: android.content.Context, post: CommunityPost) {
-    val video = post.videoPath?.let(::File)?.takeIf(File::isFile)
-    val share = Intent(Intent.ACTION_SEND).apply {
-        type = if (video != null) "video/*" else "text/plain"
-        putExtra(Intent.EXTRA_TEXT, "${post.title}\n${post.content}\n——来自鸭力Go社区")
-        if (video != null) {
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", video)
-            putExtra(Intent.EXTRA_STREAM, uri)
-            clipData = android.content.ClipData.newRawUri("社区视频", uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-    }
-    context.startActivity(Intent.createChooser(share, "分享这条内容"))
-}
-
-@Composable
-private fun CommunityComposerScreen(
-    contentPadding: PaddingValues,
-    userName: String,
-    store: CommunityPostStore,
-    avatarPath: String?,
-    initialDraft: CommunityDraft?,
-    onAvatarClick: () -> Unit,
-    onBack: () -> Unit,
-    onPublished: () -> Unit,
-) {
-    val context = LocalContext.current
-    val records = remember { LocalRecordRepository(context).load().filter { it.status == "saved" } }
-    var draft by remember(initialDraft?.sourceVideoPath) { mutableStateOf(initialDraft ?: CommunityDraft()) }
-    var showRecordPicker by remember { mutableStateOf(false) }
-    var publishing by remember { mutableStateOf(false) }
-    var importingVideo by remember { mutableStateOf(false) }
+    var topic by remember { mutableStateOf("") }
+    var cached by remember { mutableStateOf(posts.isNotEmpty()) }
+    var profile by remember { mutableStateOf<JSONObject?>(null) }
+    var selected by remember { mutableStateOf<JSONObject?>(null) }
+    var detailReady by remember { mutableStateOf(false) }
+    var comments by remember { mutableStateOf(emptyList<JSONObject>()) }
+    var commentCursor by remember { mutableStateOf<String?>(null) }
+    var comment by remember { mutableStateOf("") }
+    var commentClientId by remember { mutableStateOf(UUID.randomUUID().toString()) }
+    var pendingComment by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf(store.draft()) }
+    var busy by remember { mutableStateOf(false) }
     var notice by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
+    var profileDialog by remember { mutableStateOf(false) }
+    var nickname by remember { mutableStateOf("") }
+    var avatar by remember { mutableIntStateOf(0) }
+    var confirmPublish by remember { mutableStateOf(false) }
+    var confirmDiscard by remember { mutableStateOf(false) }
+    var importRecords by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf<ReportTarget?>(null) }
+    var reporting by remember { mutableStateOf<ReportTarget?>(null) }
+    var reportReason by remember { mutableStateOf("privacy") }
+    var reportText by remember { mutableStateOf("") }
+    var deleting by remember { mutableStateOf<ReportTarget?>(null) }
+    var blocking by remember { mutableStateOf<ReportTarget?>(null) }
+    var blockedUsers by remember { mutableStateOf(emptyList<JSONObject>()) }
+    var videoNotice by remember { mutableStateOf<String?>(null) }
 
-    fun closeComposer() {
-        store.discardDraftVideo(draft.sourceVideoPath)
-        onBack()
-    }
-    BackHandler(onBack = ::closeComposer)
-
-    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        importingVideo = true
-        notice = null
+    fun run(action: suspend () -> Unit) {
+        if (busy) return
+        busy = true; notice = null
         scope.launch {
-            val result = withContext(Dispatchers.IO) { runCatching { store.importDraftVideo(uri) } }
-            importingVideo = false
-            result.onSuccess { path ->
-                store.discardDraftVideo(draft.sourceVideoPath)
-                draft = draft.copy(sourceVideoPath = path, sourcePhotoPath = null, topic = draft.topic ?: "成长小片")
-            }.onFailure { notice = it.message ?: "视频读取失败，请重新选择。" }
+            try { action() }
+            catch (e: CancellationException) { throw e }
+            catch (e: Exception) { notice = e.message ?: "连接暂时不可用，请重试；草稿仍在本机" }
+            finally { busy = false }
         }
     }
-
-    if (showRecordPicker) {
-        RecordImportDialog(
-            records = records,
-            onDismiss = { showRecordPicker = false },
-            onSelect = { record ->
-                CommunityRecordImport.from(record)?.let {
-                    store.discardDraftVideo(draft.sourceVideoPath)
-                    draft = it
-                }
-                showRecordPicker = false
-            },
-        )
+    fun save(value: CloudCommunityDraft) { draft = value; store.save(value) }
+    suspend fun loadFeed(append: Boolean = false) {
+        val params = mutableMapOf("q" to query.trim(), "topic" to topic, "mine" to myOnly.toString())
+        if (append) nextCursor?.let { params["cursor"] = it }
+        val result = api.request("GET", "/posts", query = params)
+        val rows = result.optJSONArray("posts").objects()
+        posts = if (append) (posts + rows).distinctBy { it.getString("id") } else rows
+        nextCursor = result.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
+        cached = false
+        if (!myOnly && query.isBlank() && topic.isBlank()) store.cache(posts)
     }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(Cream)
-            .padding(
-                top = contentPadding.calculateTopPadding(),
-                bottom = contentPadding.calculateBottomPadding(),
-            )
-            .imePadding(),
-        contentPadding = PaddingValues(start = 20.dp, top = 18.dp, end = 20.dp, bottom = 40.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = ::closeComposer) { Text("‹ 返回") }
-                Column(Modifier.weight(1f)) {
-                    Text("发布分享", style = MaterialTheme.typography.headlineMedium)
-                    Text("把真实经历整理成愿意表达的一小步", style = MaterialTheme.typography.bodyMedium, color = InkMuted)
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CommunityAvatar(avatarPath, userName, 48.dp, onAvatarClick)
-                    Text("换头像", style = MaterialTheme.typography.labelSmall, color = SageDark)
+    suspend fun loadComments(append: Boolean = false) {
+        val current = selected ?: return
+        if (current.optString("status") != "published") { comments = emptyList(); return }
+        val params = if (append && commentCursor != null) mapOf("cursor" to commentCursor!!) else emptyMap()
+        val result = api.request("GET", "/posts/${current.getString("id")}/comments", query = params)
+        val rows = result.optJSONArray("comments").objects()
+        comments = if (append) (comments + rows).distinctBy { it.getString("id") } else rows
+        commentCursor = result.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
+    }
+    fun updatePost(value: JSONObject) {
+        posts = posts.map { if (it.optString("id") == value.optString("id")) value else it }
+        if (selected?.optString("id") == value.optString("id")) selected = value
+        store.clearFeed() // A changed or removed item must never survive as an older offline snapshot.
+    }
+    fun openProfile() {
+        nickname = profile?.optString("nickname").orEmpty()
+        avatar = profile?.optInt("avatar") ?: 0
+        profileDialog = true
+    }
+    fun shareVideo(path: String) {
+        runCatching {
+            val file = File(path); require(file.isFile) { "视频文件已不存在" }
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.files", file)
+            context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                type = "video/mp4"; putExtra(Intent.EXTRA_STREAM, uri)
+                clipData = ClipData.newRawUri("成长小片", uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }, "分享成长小片"))
+        }.onFailure { notice = it.message ?: "暂时无法分享" }
+    }
+    val videoSave = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("video/mp4")) { uri ->
+        val source = videoNotice
+        if (uri != null && source != null) run {
+            withContext(Dispatchers.IO) {
+                context.contentResolver.openOutputStream(uri)?.use { out -> File(source).inputStream().use { it.copyTo(out) } }
+                    ?: error("无法保存到所选位置")
+            }; notice = "视频已保存"
+        }
+    }
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(3)) { uris ->
+        if (uris.isNotEmpty()) run {
+            val remaining = 3 - draft.pictures.size
+            val paths = uris.take(remaining).map { store.importPicture(it) }
+            save(draft.copy(pictures = draft.pictures + paths, uploaded = emptyList()))
+            if (uris.size > remaining) notice = "每帖最多3张图片，已保留前${remaining}张"
+        }
+    }
+    LaunchedEffect(Unit) {
+        run { profile = api.request("GET", "/profile"); loadFeed() }
+    }
+    LaunchedEffect(initialVideoPath) {
+        if (initialVideoPath != null) { videoNotice = initialVideoPath; onInitialVideoConsumed() }
+    }
+    LaunchedEffect(page, selected?.optString("id")) {
+        onDetailVisibilityChanged(page != "feed")
+        if (page == "detail") {
+            detailReady = false
+            comments = emptyList(); comment = ""; pendingComment = false
+            commentClientId = UUID.randomUUID().toString()
+            // Revalidate a cached detail before showing its image or accepting an interaction.
+            snapshotFlow { busy }.first { !it }
+            run {
+                val id = selected?.getString("id") ?: return@run
+                try { selected = api.request("GET", "/posts/$id"); detailReady = true; loadComments() }
+                catch (e: CommunityHttpException) {
+                    if (e.status == 404) { posts = posts.filterNot { it.getString("id") == id }; store.clearFeed(); page = "feed"; selected = null }
+                    throw e
                 }
             }
         }
-        item {
-            CommunityFlatCard {
-                Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(onClick = { showRecordPicker = true }, modifier = Modifier.fillMaxWidth(), shape = AppButtonShape) {
-                        Text("从我的记录导入")
+    }
+    DisposableEffect(Unit) { onDispose { onDetailVisibilityChanged(false) } }
+    BackHandler(enabled = page != "feed") { page = "feed"; selected = null }
+
+    if (profileDialog) AlertDialog(onDismissRequest = { if (!busy) profileDialog = false },
+        title = { Text("设置社区名片") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("社区使用独立昵称和预设头像。这里不会展示你的私人画像或联系方式。")
+                OutlinedTextField(nickname, { if (it.length <= 20) nickname = it }, label = { Text("昵称（2—20字）") }, singleLine = true)
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    communityAvatars.forEachIndexed { index, emoji ->
+                        TextButton(onClick = { avatar = index }) { Text(if (avatar == index) "[$emoji]" else emoji) }
                     }
-                    OutlinedButton(
-                        onClick = { videoPicker.launch("video/*") },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !importingVideo,
-                        shape = AppButtonShape,
-                    ) {
-                        if (importingVideo) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else Text("选择本机视频")
-                    }
-                    Text("也可以直接在下面写。导入后仍可修改，只有确认发布才会出现在社区。",
-                        style = MaterialTheme.typography.bodyMedium, color = InkMuted)
-                    OutlinedTextField(
-                        value = draft.title,
-                        onValueChange = { draft = draft.copy(title = it) },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("标题") },
-                        placeholder = { Text("给这一刻起个名字") },
-                        shape = RoundedCornerShape(20.dp),
-                    )
-                    OutlinedTextField(
-                        value = draft.content,
-                        onValueChange = { draft = draft.copy(content = it) },
-                        modifier = Modifier.fillMaxWidth().height(190.dp),
-                        label = { Text("想分享的话") },
-                        placeholder = { Text("发生了什么？你看见了自己怎样的变化？") },
-                        shape = RoundedCornerShape(20.dp),
-                    )
-                    draft.sourcePhotoPath?.let { path ->
-                        val bitmap = remember(path) { BitmapFactory.decodeFile(path)?.asImageBitmap() }
-                        if (bitmap != null) {
-                            Image(bitmap, "准备发布的照片", Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp)),
-                                contentScale = ContentScale.Crop)
-                            TextButton(onClick = { draft = draft.copy(sourcePhotoPath = null) }) { Text("不带照片发布") }
-                        }
-                    }
-                    draft.sourceVideoPath?.let { path ->
-                        val thumbnail = remember(path) { videoThumbnail(path) }
-                        Box(
-                            Modifier.fillMaxWidth().height(210.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFF26322C)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            thumbnail?.let { Image(it, "准备发布的视频封面", Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
-                            Surface(color = Color.Black.copy(alpha = 0.62f), shape = CircleShape) {
-                                Text("▶ 已加入视频", Modifier.padding(horizontal = 14.dp, vertical = 9.dp), color = Color.White)
-                            }
-                        }
-                        Text("发布后可以在社区详情中点开播放。", style = MaterialTheme.typography.bodySmall, color = InkMuted)
-                        TextButton(onClick = {
-                            store.discardDraftVideo(draft.sourceVideoPath)
-                            draft = draft.copy(sourceVideoPath = null)
-                        }) { Text("不带视频发布") }
-                    }
-                    draft.sourceRecordId?.let {
-                        Surface(color = SagePale, shape = RoundedCornerShape(14.dp)) {
-                            Text("已导入一条本机记录；发布后会保存独立副本。",
-                                Modifier.fillMaxWidth().padding(12.dp), style = MaterialTheme.typography.bodyMedium, color = SageDark)
-                        }
-                    }
-                    notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    Button(
-                        onClick = {
-                            publishing = true
-                            notice = null
-                            scope.launch {
-                                val result = withContext(Dispatchers.IO) { runCatching { store.publish(draft, userName) } }
-                                publishing = false
-                                result.onSuccess { onPublished() }
-                                    .onFailure { notice = it.message ?: "暂时无法发布" }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        enabled = !publishing && !importingVideo,
-                        shape = AppButtonShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                    ) {
-                        if (publishing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        else Text("确认发布", fontWeight = FontWeight.SemiBold)
-                    }
-                    Text("这是本机演示社区，不会自动上传到公开网络。", style = MaterialTheme.typography.bodySmall, color = InkMuted)
                 }
+            }
+        }, confirmButton = { TextButton(enabled = !busy && nickname.trim().length in 2..20, onClick = { run {
+            profile = api.request("PATCH", "/profile", JSONObject().put("nickname", nickname.trim()).put("avatar", avatar))
+            profileDialog = false; loadFeed()
+        } }) { Text("保存名片") } }, dismissButton = { TextButton(onClick = { profileDialog = false }) { Text("取消") } })
+    if (confirmPublish) AlertDialog(onDismissRequest = { confirmPublish = false }, title = { Text("确认公开分享？") },
+        text = { Text("帖子和图片将对其他受邀体验者可见。请检查并移除姓名、联系方式和他人隐私；社区内容不会自动进入你的长期记忆或压力分析。") },
+        confirmButton = { TextButton(onClick = {
+            confirmPublish = false
+            run {
+                if (!draft.pending) save(draft.copy(pending = true))
+                while (draft.uploaded.size < draft.pictures.size) {
+                    val id = api.upload(draft.pictures[draft.uploaded.size])
+                    save(draft.copy(uploaded = draft.uploaded + id))
+                }
+                val posted = api.request("POST", "/posts", draft.payload())
+                store.clearDraft(); draft = CloudCommunityDraft(); selected = posted; page = "detail"
+                loadFeed(); notice = "已发布，其他体验者现在可以看到"
+            }
+        }) { Text(if (draft.pending) "重试这次发布" else "确认发布") } },
+        dismissButton = { TextButton(onClick = { confirmPublish = false }) { Text("再检查一下") } })
+    if (confirmDiscard) AlertDialog(onDismissRequest = { confirmDiscard = false }, title = { Text("清空当前草稿？") },
+        text = { Text("如果上次提交时断网，请先查看“我的帖子”确认是否已发布。清空草稿不会删除已发布的帖子。") },
+        confirmButton = { TextButton(onClick = { store.clearDraft(); draft = CloudCommunityDraft(); confirmDiscard = false }) { Text("清空草稿") } },
+        dismissButton = { TextButton(onClick = { confirmDiscard = false }) { Text("保留") } })
+    if (videoNotice != null) AlertDialog(onDismissRequest = { videoNotice = null }, title = { Text("云端社区暂不支持视频") },
+        text = { Text("可以保存或通过系统分享成长小片，也可以发布一段文字和最多3张图片。") },
+        confirmButton = { TextButton(onClick = { videoNotice?.let(::shareVideo) }) { Text("系统分享") } },
+        dismissButton = { Row {
+            TextButton(onClick = { videoSave.launch("鸭力Go成长小片.mp4") }) { Text("保存视频") }
+            TextButton(onClick = { videoNotice = null }) { Text("知道了") }
+        } })
+    if (importRecords) {
+        val records = remember { LocalRecordRepository(context).load().mapNotNull { CommunityRecordImport.from(it) } }
+        AlertDialog(onDismissRequest = { importRecords = false }, title = { Text("选择一条记录作为草稿") },
+            text = { LazyColumn(Modifier.heightIn(max = 400.dp)) {
+                item { Text("仅复制你选中的文字和照片。导入后可删改，确认发布前不会上传。选择后替换当前草稿。") }
+                if (records.isEmpty()) item { Text("暂无可导入的已保存记录") }
+                items(records) { record -> TextButton(onClick = {
+                    run {
+                        val path = record.sourcePhotoPath?.let { store.importPicture(Uri.fromFile(File(it))) }
+                        save(CloudCommunityDraft(title = record.title.take(50), content = record.content.take(2000),
+                            topic = record.topic ?: "成长分享", pictures = listOfNotNull(path)))
+                        importRecords = false
+                    }
+                }) { Text(record.title) } }
+            } }, confirmButton = { TextButton(onClick = { importRecords = false }) { Text("取消") } })
+    }
+    menu?.let { target -> AlertDialog(onDismissRequest = { menu = null }, title = { Text("内容操作") }, text = {
+        Column {
+            if (target.mine) TextButton(onClick = { deleting = target; menu = null }) { Text("删除我的内容") }
+            else {
+                TextButton(onClick = { reporting = target; reportReason = "privacy"; reportText = ""; menu = null }) { Text("举报此内容") }
+                TextButton(onClick = { blocking = target; menu = null }) { Text("屏蔽此作者") }
+            }
+        }
+    }, confirmButton = { TextButton(onClick = { menu = null }) { Text("关闭") } }) }
+    deleting?.let { target -> AlertDialog(onDismissRequest = { deleting = null }, title = { Text("删除后无法恢复，确认删除？") },
+        confirmButton = { TextButton(enabled = !busy, onClick = { run {
+            api.request("DELETE", if (target.kind == "post") "/posts/${target.id}" else "/comments/${target.id}")
+            deleting = null; store.clearFeed()
+            if (target.kind == "post") { selected = null; page = "feed"; loadFeed() }
+            else { loadComments(); selected?.let { updatePost(api.request("GET", "/posts/${it.getString("id")}")) } }
+        } }) { Text("确认删除") } }, dismissButton = { TextButton(onClick = { deleting = null }) { Text("取消") } }) }
+    blocking?.let { target -> AlertDialog(onDismissRequest = { blocking = null }, title = { Text("屏蔽此作者？") },
+        text = { Text("不再显示此作者的帖子与评论。你可在“屏蔽管理”中解除。") },
+        confirmButton = { TextButton(enabled = !busy, onClick = { run {
+            api.request("PUT", "/blocks/${target.author}"); blocking = null; selected = null
+            posts = emptyList(); store.clearFeed(); page = "feed"; loadFeed()
+        } }) { Text("确认屏蔽") } }, dismissButton = { TextButton(onClick = { blocking = null }) { Text("取消") } }) }
+    reporting?.let { target -> AlertDialog(onDismissRequest = { reporting = null }, title = { Text("举报内容") }, text = {
+        Column {
+            listOf("privacy" to "泄露隐私", "harassment" to "骚扰或攻击", "spam" to "广告灌水", "dangerous" to "危险内容", "other" to "其他").forEach { (key, label) ->
+                TextButton(onClick = { reportReason = key }) { Text((if (reportReason == key) "● " else "○ ") + label) }
+            }
+            OutlinedTextField(reportText, { if (it.length <= 300) reportText = it }, label = { Text("补充说明（选填，最多300字）") })
+            Text("举报将交由管理员查看，不会因举报次数自动下架。")
+        }
+    }, confirmButton = { TextButton(enabled = !busy, onClick = { run {
+        api.request("POST", "/reports", JSONObject().put("kind", target.kind).put("target_id", target.id).put("reason", reportReason).put("detail", reportText))
+        reporting = null; notice = "举报已收到，谢谢你的反馈"
+    } }) { Text("提交举报") } }, dismissButton = { TextButton(onClick = { reporting = null }) { Text("取消") } }) }
+
+    key(page) {
+    LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(contentPadding).imePadding(),
+        contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Column {
+                if (page != "feed") TextButton(onClick = { page = "feed"; selected = null }) { Text("‹ 返回社区") }
+                Text(when (page) { "compose" -> "写一篇分享"; "detail" -> "分享详情"; "legacy" -> "本机旧帖"; "blocks" -> "屏蔽管理"; else -> "一起成长" },
+                    style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                if (page == "feed") Text("和其他体验者分享真实的小步，也给彼此一点支持。", style = MaterialTheme.typography.bodyMedium)
+                if (busy) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp))
+                notice?.let { Text(it, Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.primary) }
+            }
+        }
+        if (page == "feed") {
+            item {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(enabled = !busy, onClick = { page = "compose" }) { Text("写分享") }
+                    OutlinedButton(enabled = !busy, onClick = { openProfile() }) { Text("社区名片") }
+                    OutlinedButton(enabled = !busy, onClick = { page = "legacy" }) { Text("本机旧帖") }
+                    OutlinedButton(enabled = !busy, onClick = { run { blockedUsers = api.request("GET", "/blocks").optJSONArray("profiles").objects(); page = "blocks" } }) { Text("屏蔽管理") }
+                }
+            }
+            item {
+                OutlinedTextField(query, { if (it.length <= 100) query = it }, Modifier.fillMaxWidth(), label = { Text("搜索标题或正文") }, singleLine = true)
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    TextButton(enabled = !busy, onClick = { run { myOnly = false; loadFeed() } }) { Text(if (!myOnly) "● 最新" else "最新") }
+                    TextButton(enabled = !busy, onClick = { run { myOnly = true; loadFeed() } }) { Text(if (myOnly) "● 我的帖子" else "我的帖子") }
+                    TextButton(enabled = !busy, onClick = { run { loadFeed() } }) { Text("搜索 / 刷新") }
+                }
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    (listOf("") + communityTopics).forEach { value ->
+                        FilterChip(selected = topic == value, enabled = !busy,
+                            onClick = { run { topic = value; loadFeed() } }, label = { Text(value.ifBlank { "全部话题" }) })
+                        Spacer(Modifier.width(6.dp))
+                    }
+                }
+                if (cached) Text("显示上次加载的内容；联网刷新后更新。离线时不能发布或互动。", style = MaterialTheme.typography.bodySmall)
+                if (profile?.optBoolean("restricted") == true) Text("社区发布功能已受限。你仍可阅读，私人陪伴功能不受影响。")
+            }
+            if (posts.isEmpty() && !busy) item { Text("这里暂时没有帖子。可以刷新，或分享你的第一小步。", Modifier.padding(vertical = 24.dp)) }
+            items(posts, key = { "post-" + it.getString("id") }) { post ->
+                CloudPostCard(post, api, cached, detail = false, onOpen = { if (!busy) { selected = post; page = "detail" } },
+                    onLike = { run { updatePost(api.request(if (post.optBoolean("liked")) "DELETE" else "PUT", "/posts/${post.getString("id")}/like")) } },
+                    onMenu = { menu = post.target("post") }, enabled = !busy && !cached)
+            }
+            if (nextCursor != null && !cached) item { OutlinedButton(enabled = !busy, onClick = { run { loadFeed(true) } }, modifier = Modifier.fillMaxWidth()) { Text("加载更多") } }
+        } else if (page == "compose") {
+            item {
+                Text("草稿保存在这台手机。只会发布下面可见的文字和图片，最多3张；本轮不支持视频。")
+                if (profile?.optBoolean("configured") != true) OutlinedButton(enabled = !busy, onClick = ::openProfile) { Text("先设置独立社区昵称") }
+                if (draft.pending) Text("上次发布尚未确认。为避免重复或内容错位，草稿已锁定，请重试原请求；也可先在“我的帖子”查看。", color = MaterialTheme.colorScheme.primary)
+                OutlinedTextField(draft.title, { if (it.length <= 50) save(draft.copy(title = it)) }, Modifier.fillMaxWidth(),
+                    enabled = !busy && !draft.pending, label = { Text("标题 ${draft.title.length}/50") })
+                OutlinedTextField(draft.content, { if (it.length <= 2000) save(draft.copy(content = it)) }, Modifier.fillMaxWidth().heightIn(min = 170.dp),
+                    enabled = !busy && !draft.pending, label = { Text("想分享的经历 ${draft.content.length}/2000") }, minLines = 5)
+                Row(Modifier.horizontalScroll(rememberScrollState())) { communityTopics.forEach { value ->
+                    FilterChip(selected = draft.topic == value, enabled = !busy && !draft.pending,
+                        onClick = { save(draft.copy(topic = value)) }, label = { Text(value) }); Spacer(Modifier.width(6.dp))
+                } }
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    OutlinedButton(enabled = !busy && !draft.pending && draft.pictures.size < 3, onClick = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) { Text("选择照片（${draft.pictures.size}/3）") }
+                    TextButton(enabled = !busy && !draft.pending, onClick = { importRecords = true }) { Text("从我的记录导入") }
+                }
+            }
+            items(draft.pictures, key = { it }) { path ->
+                Column {
+                    LocalCommunityPicture(path)
+                    TextButton(enabled = !busy && !draft.pending, onClick = { save(draft.copy(pictures = draft.pictures - path, uploaded = emptyList())) }) { Text("移除这张图片") }
+                }
+            }
+            item {
+                Button(enabled = !busy && profile?.optBoolean("configured") == true && profile?.optBoolean("restricted") != true &&
+                    draft.title.isNotBlank() && (draft.content.isNotBlank() || draft.pictures.isNotEmpty()),
+                    onClick = { confirmPublish = true }, modifier = Modifier.fillMaxWidth()) { Text(if (draft.pending) "重试原发布" else "检查并发布") }
+                TextButton(enabled = !busy, onClick = { confirmDiscard = true }) { Text("清空草稿") }
+                Text("返回不会丢失草稿，也不会自动发布。", style = MaterialTheme.typography.bodySmall)
+            }
+        } else if (page == "detail") {
+            if (!detailReady && !busy) item { OutlinedButton(onClick = { run {
+                selected?.let { selected = api.request("GET", "/posts/${it.getString("id")}"); detailReady = true; loadComments() }
+            } }) { Text("重新加载详情") } }
+            selected?.takeIf { detailReady }?.let { post ->
+                item { CloudPostCard(post, api, cached = false, detail = true, onOpen = {}, enabled = !busy,
+                    onLike = { run { updatePost(api.request(if (post.optBoolean("liked")) "DELETE" else "PUT", "/posts/${post.getString("id")}/like")) } },
+                    onMenu = { menu = post.target("post") }) }
+                if (post.optString("status") == "published") {
+                    item { Text("评论", style = MaterialTheme.typography.titleLarge) }
+                    if (comments.isEmpty() && !busy) item { Text("还没有评论，可以留下一句支持。") }
+                    items(comments, key = { "comment-" + it.getString("id") }) { row ->
+                        ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) {
+                            CommunityAuthor(row.getJSONObject("author")); Text(row.optString("content"))
+                            Row { Text(cloudTime(row.optString("created_at")), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                TextButton(enabled = !busy, onClick = { menu = row.target("comment") }) { Text("操作") } }
+                        } }
+                    }
+                    if (commentCursor != null) item { TextButton(enabled = !busy, onClick = { run { loadComments(true) } }) { Text("更多评论") } }
+                    item {
+                        OutlinedTextField(comment, { if (it.length <= 500) comment = it }, enabled = !busy && !pendingComment,
+                            modifier = Modifier.fillMaxWidth(), label = { Text("友善地说一句（最多500字）") }, minLines = 2)
+                        if (pendingComment) Text("评论尚未确认，可重试相同内容，避免重复。")
+                        Button(enabled = !busy && comment.isNotBlank(), onClick = {
+                            if (profile?.optBoolean("configured") != true) openProfile()
+                            else run {
+                                pendingComment = true
+                                api.request("POST", "/posts/${post.getString("id")}/comments", JSONObject().put("client_id", commentClientId).put("content", comment.trim()))
+                                comment = ""; pendingComment = false; commentClientId = UUID.randomUUID().toString()
+                                loadComments(); updatePost(api.request("GET", "/posts/${post.getString("id")}"))
+                            }
+                        }) { Text(if (pendingComment) "重试评论" else "发送评论") }
+                    }
+                }
+            }
+        } else if (page == "legacy") {
+            item { Text("以下仅来自这台手机，以前的点赞和评论数不会上传。点选后进入可编辑草稿，确认发布后才进入共享社区。") }
+            val oldPosts = localStore.loadOwnPosts()
+            if (oldPosts.isEmpty()) item { Text("暂无本机旧帖") }
+            items(oldPosts, key = { "legacy-" + it.id }) { old ->
+                ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
+                    Text(old.title, style = MaterialTheme.typography.titleMedium); Text(old.content)
+                    old.imagePath?.let { LocalCommunityPicture(it) }
+                    OutlinedButton(enabled = !busy && !draft.pending, onClick = { run {
+                        val path = old.imagePath?.let { store.importPicture(Uri.fromFile(File(it))) }
+                        save(CloudCommunityDraft(title = old.title.take(50), content = old.content.take(2000),
+                            topic = old.topic?.takeIf { it in communityTopics } ?: "成长分享", pictures = listOfNotNull(path)))
+                        page = "compose"
+                    } }) { Text("替换草稿并编辑") }
+                    old.videoPath?.let { path -> TextButton(onClick = { videoNotice = path }) { Text("保存或分享旧帖视频") } }
+                    if (draft.pending) Text("请先处理尚未确认的发布草稿。")
+                } }
+            }
+        } else if (page == "blocks") {
+            if (blockedUsers.isEmpty()) item { Text("你尚未屏蔽任何作者") }
+            items(blockedUsers, key = { it.getString("id") }) { author ->
+                Row(Modifier.fillMaxWidth()) {
+                    Column(Modifier.weight(1f)) { CommunityAuthor(author) }
+                    TextButton(enabled = !busy, onClick = { run {
+                        api.request("DELETE", "/blocks/${author.getString("id")}")
+                        blockedUsers = blockedUsers.filterNot { it.getString("id") == author.getString("id") }; store.clearFeed()
+                    } }) { Text("解除屏蔽") }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+    }
+}
+
+private fun JSONObject.target(kind: String) = ReportTarget(kind, getString("id"), getJSONObject("author").getString("id"), optBoolean("is_mine"))
+private fun cloudTime(value: String): String = runCatching { Instant.parse(value).atZone(ZoneId.systemDefault())
+    .format(DateTimeFormatter.ofPattern("MM-dd HH:mm")) }.getOrDefault(value.take(16))
+
+@Composable
+private fun CommunityAuthor(author: JSONObject) {
+    Text("${communityAvatars.getOrElse(author.optInt("avatar")) { "🐣" }}  ${author.optString("nickname", "新朋友")}", fontWeight = FontWeight.Medium)
+}
+
+@Composable
+private fun CloudPostCard(post: JSONObject, api: CommunityApiClient, cached: Boolean, detail: Boolean,
+                          onOpen: () -> Unit, onLike: () -> Unit, onMenu: () -> Unit, enabled: Boolean) {
+    ElevatedCard(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            CommunityAuthor(post.getJSONObject("author"))
+            Text(post.optString("title"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(post.optString("content"), maxLines = if (detail) Int.MAX_VALUE else 5)
+            val media = post.optJSONArray("media_ids").strings()
+            (if (detail) media else media.take(1)).forEach { id -> CloudCommunityPicture(api, id, cached) }
+            if (!detail && media.size > 1) Text("共${media.size}张图片，点开查看", style = MaterialTheme.typography.bodySmall)
+            Text("${post.optString("topic")} · ${cloudTime(post.optString("created_at"))}", style = MaterialTheme.typography.bodySmall)
+            if (post.optString("status") == "hidden") Text("此帖已下架：${post.optString("reason")}", color = MaterialTheme.colorScheme.error)
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                TextButton(enabled = enabled && post.optString("status") == "published", onClick = onLike) { Text("${if (post.optBoolean("liked")) "♥" else "♡"} ${post.optInt("like_count")}") }
+                TextButton(onClick = onOpen) { Text("评论 ${post.optInt("comment_count")}") }
+                TextButton(enabled = enabled, onClick = onMenu) { Text("操作") }
             }
         }
     }
 }
 
 @Composable
-private fun RecordImportDialog(
-    records: List<RecordDraft>,
-    onDismiss: () -> Unit,
-    onSelect: (RecordDraft) -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("选择一条记录") },
-        text = {
-            if (records.isEmpty()) {
-                Text("还没有可发布的已保存记录。先到记录页写一句、说一句或拍一张吧。")
-            } else {
-                LazyColumn(Modifier.heightIn(max = 430.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(records, key = { it.id }) { record ->
-                        val content = record.photoComment.ifBlank { record.text }.ifBlank { record.aiDescription }.ifBlank { "一张照片记录" }
-                        Surface(onClick = { onSelect(record) }, color = SagePale, shape = RoundedCornerShape(16.dp)) {
-                            Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(when (record.mode) { RecordMode.TEXT -> "文字记录"; RecordMode.VOICE -> "语音转写"; RecordMode.PHOTO -> "照片记录" },
-                                    style = MaterialTheme.typography.labelLarge, color = SageDark)
-                                Text(content, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
+private fun CloudCommunityPicture(api: CommunityApiClient, id: String, offline: Boolean) {
+    var bitmap by remember(id, offline) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var failed by remember(id, offline) { mutableStateOf(false) }
+    LaunchedEffect(id, offline) {
+        if (offline) { failed = true; return@LaunchedEffect }
+        try { val bytes = api.media(id); bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }; failed = bitmap == null }
+        catch (e: CancellationException) { throw e }
+        catch (_: Exception) { failed = true }
+    }
+    val image = bitmap
+    if (image != null) Image(image.asImageBitmap(), "社区分享图片", Modifier.fillMaxWidth().heightIn(max = 360.dp), contentScale = ContentScale.Fit)
+    else Text(if (failed) "图片暂不可用，请联网刷新查看" else "图片加载中…", style = MaterialTheme.typography.bodySmall)
 }
 
-private fun relativeTime(createdAt: Long): String =
-    DateUtils.getRelativeTimeSpanString(createdAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
-
-private fun demoCommunityPosts(): List<CommunityFeedEntry> {
-    val now = System.currentTimeMillis()
-    return listOf(
-        CommunityFeedEntry(
-            CommunityPost("demo-1", "木淮南", "坚持者", "学习能力和愿意求助，可以一起成长",
-                "今天终于把目标院校的问题整理清楚，准备向师兄师姐请教。把问题说具体以后，焦虑也没有那么大了。",
-                topic = "学习与求助", createdAt = now - 2 * 60 * 60 * 1000, likeCount = 24, commentCount = 12, shareCount = 3),
-            R.drawable.duck_story_guidance,
-        ),
-        CommunityFeedEntry(
-            CommunityPost("demo-2", "五月雨", "治愈系", "我又愿意翻开书了",
-                "没有逼自己完成整张计划表，只学了二十分钟。小鸭说，重新开始也算向前。",
-                topic = "今日记录", createdAt = now - 5 * 60 * 60 * 1000, likeCount = 18, commentCount = 8, shareCount = 2),
-            R.drawable.duck_story_study,
-        ),
-        CommunityFeedEntry(
-            CommunityPost("demo-3", "慢慢来", "新同学", "不只比较学习时长",
-                "听了老师的建议，我开始记录真正弄懂的问题。今天没有学很久，但能说清自己的薄弱点了。",
-                topic = "备考调整", createdAt = now - 26 * 60 * 60 * 1000, likeCount = 32, commentCount = 15, shareCount = 4),
-        ),
-        CommunityFeedEntry(
-            CommunityPost("demo-4", "向前一点点", "行动派", "给生活留一点空间",
-                "傍晚和同学慢跑十分钟，又在公园走了一会儿。休息不是放弃，是为了更有力气继续。",
-                topic = "运动与生活", createdAt = now - 2 * 24 * 60 * 60 * 1000, likeCount = 29, commentCount = 10, shareCount = 5),
-            R.drawable.duck_story_exercise,
-        ),
-        CommunityFeedEntry(
-            CommunityPost("demo-5", "小路同学", "表达练习中", "第一次把压力告诉家人",
-                "他们没有催我给出结果，只问我最近有没有好好吃饭。原来表达脆弱，也可以是一种勇敢。",
-                topic = "愿意表达", createdAt = now - 3 * 24 * 60 * 60 * 1000, likeCount = 41, commentCount = 19, shareCount = 6),
-            R.drawable.duck_story_outdoors,
-        ),
-    )
+@Composable
+private fun LocalCommunityPicture(path: String) {
+    val bitmap by produceState<android.graphics.Bitmap?>(null, path) {
+        value = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = 2 }) }
+    }
+    bitmap?.let { Image(it.asImageBitmap(), "待分享的照片", Modifier.fillMaxWidth().heightIn(max = 240.dp), contentScale = ContentScale.Fit) }
 }
