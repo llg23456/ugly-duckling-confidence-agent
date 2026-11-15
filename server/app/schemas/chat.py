@@ -33,6 +33,7 @@ class ChatResponse(BaseModel):
     assistant_message_id: int | None = None
     check_in_scheduled: bool = False
     safety_triggered: bool = False
+    wellbeing: dict | None = None
 
 
 class ConversationMessage(BaseModel):

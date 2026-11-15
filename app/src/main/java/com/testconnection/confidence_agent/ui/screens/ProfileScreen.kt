@@ -114,7 +114,7 @@ fun ProfileScreen(
             runCatching { ServerConnectionManager.detectOnWifi(context) }
                 .onSuccess { health ->
                     serverAddress = ServerEndpoint.save(context, health.baseUrl)
-                    serverStatus = "连接成功 · ${health.model}${if (health.liveAi) " · 云端 AI 已启用" else " · 演示回复"}"
+                    serverStatus = "连接成功：${health.baseUrl}\n${health.model}${if (health.liveAi) " · 真实 AI 已启用" else " · 演示回复"}"
                     onServerEndpointChanged()
                 }
                 .onFailure { error ->
@@ -124,15 +124,15 @@ fun ProfileScreen(
         }
     }
 
-    fun checkAndSaveServer() {
+    fun checkAndSaveServer(input: String) {
         if (serverChecking) return
         serverChecking = true
         serverStatus = "正在检测输入的地址…"
         coroutineScope.launch {
-            runCatching { ServerConnectionManager.check(serverAddress) }
+            runCatching { ServerConnectionManager.check(input) }
                 .onSuccess { health ->
                     serverAddress = ServerEndpoint.save(context, health.baseUrl)
-                    serverStatus = "连接成功 · ${health.model}${if (health.liveAi) " · 云端 AI 已启用" else " · 演示回复"}"
+                    serverStatus = "连接成功：${health.baseUrl}\n${health.model}${if (health.liveAi) " · 真实 AI 已启用" else " · 演示回复"}"
                     onServerEndpointChanged()
                 }
                 .onFailure { error ->
@@ -146,7 +146,7 @@ fun ProfileScreen(
         onDismissRequest = { if (!serverChecking) showHelpResources = false },
         containerColor = Cream,
         shape = RoundedCornerShape(30.dp),
-        title = { Text("帮助与求助资源") },
+        title = { Text(if (com.testconnection.confidence_agent.BuildConfig.CLOUD_TEST) "帮助与求助资源" else "后端连接与帮助") },
         text = {
             Column(
                 modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
@@ -159,7 +159,8 @@ fun ProfileScreen(
                     Text("已连接项目云端服务，可直接使用手机网络。遇到连接或授权问题时，请联系测试组织者。")
                 } else {
                 Text("后端连接 · 测试工具", style = MaterialTheme.typography.titleMedium)
-                Text("手机和电脑连接同一 Wi-Fi，或电脑连接当前手机热点时，可以自动找到并保存后端地址。")
+                Text("同一热点 / Wi-Fi：电脑后端需要启用局域网监听，再点击一键检测。也可以输入电脑的局域网地址。")
+                Text("USB：电脑执行 adb reverse tcp:8000 tcp:8000 后，点击下方 USB 连接。", style = MaterialTheme.typography.bodySmall, color = InkMuted)
                 OutlinedTextField(
                     value = serverAddress,
                     onValueChange = { serverAddress = it; serverStatus = "地址尚未检测" },
@@ -177,10 +178,15 @@ fun ProfileScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = SageDark),
                 ) { Text("一键检测局域网") }
                 TextButton(
-                    onClick = ::checkAndSaveServer,
+                    onClick = { checkAndSaveServer(serverAddress) },
                     enabled = !serverChecking,
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text("检测并保存输入地址") }
+                TextButton(
+                    onClick = { checkAndSaveServer("http://127.0.0.1:8000") },
+                    enabled = !serverChecking,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("连接 USB 本地后端") }
                 if (serverChecking) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(22.dp).align(Alignment.CenterHorizontally),
@@ -326,6 +332,23 @@ fun ProfileScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item { Text("我的", style = MaterialTheme.typography.displaySmall) }
+
+        if (!com.testconnection.confidence_agent.BuildConfig.CLOUD_TEST) {
+            item {
+                WarmCard {
+                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("本地测试 · 后端连接", style = MaterialTheme.typography.titleMedium)
+                        Text(serverStatus, style = MaterialTheme.typography.bodySmall, color = InkMuted)
+                        Button(onClick = ::detectServer, enabled = !serverChecking, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (serverChecking) "正在检测…" else "一键检测局域网")
+                        }
+                        TextButton(onClick = { showHelpResources = true }, enabled = !serverChecking) {
+                            Text("手动地址 / USB 连接设置")
+                        }
+                    }
+                }
+            }
+        }
 
         item {
             WarmCard {

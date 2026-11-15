@@ -42,6 +42,7 @@ class ReviewResponse(BaseModel):
     range_end: str | None = None
     title: str
     story: str = ""
+    one_sentence: str = ""
     own_effort: str
     support_received: str
     pause_or_restart: str = ""
@@ -55,6 +56,7 @@ class ReviewResponse(BaseModel):
     model: str | None = None
     mock: bool = True
     structure_version: str = "legacy"
+    source_fingerprint: str = ""
 
 
 class ReviewOverviewRequest(ReviewGenerateRequest):

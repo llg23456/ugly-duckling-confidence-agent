@@ -71,6 +71,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(HomeUiState())
     private var checkInNoticeJob: Job? = null
     private var stressRefreshJob: Job? = null
+    private var supportRevision = 0
     private var lastPresentedStressToken: String? =
         stressPresentationPrefs.getString("last_presented_token", null)
     private var lastViewedStressToken: String? =
@@ -134,6 +135,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val message = _uiState.value.draft.trim()
         val image = _uiState.value.pendingImage
         if ((message.isEmpty() && image == null) || _uiState.value.sending) return
+        supportRevision++
         showingArchivedSource = false
         publishVisibleMessages()
         val prompt = message.ifBlank { "请看看这张图片，结合我现在的处境温柔地回应。" }
@@ -149,7 +151,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 pendingImage = null,
                 sending = true,
                 error = null,
-                supportSuggestion = null,
+                supportSuggestion = null, supportLoading = false,
                 supportFeedbackOutcome = null,
             )
         }
@@ -170,9 +172,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     handleCheckInScheduling(response.checkInScheduled)
                     pollStressAlert()
-                    if (response.strategy == "seek_support") {
-                        requestSupport(prompt, response.userMessageId)
-                    }
+                    requestSupport(prompt, response.userMessageId)
                 }
                 .onFailure {
                     _uiState.update { state ->
@@ -190,9 +190,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendAudio(file: File) {
         if (_uiState.value.sending) return
+        supportRevision++
         showingArchivedSource = false
         publishVisibleMessages()
-        _uiState.update { it.copy(sending = true, error = null, supportSuggestion = null, supportFeedbackOutcome = null) }
+        _uiState.update { it.copy(sending = true, error = null, supportSuggestion = null, supportLoading = false, supportFeedbackOutcome = null) }
         viewModelScope.launch {
             try {
                 val response = repository.sendAudio(file)
@@ -209,9 +210,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 handleCheckInScheduling(response.checkInScheduled)
                 pollStressAlert()
-                if (response.strategy == "seek_support") {
-                    requestSupport(transcript, response.userMessageId)
-                }
+                requestSupport(transcript, response.userMessageId)
             } catch (error: Throwable) {
                 _uiState.update {
                     it.copy(
@@ -243,9 +242,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissSupportSuggestion() {
+        supportRevision++
         _uiState.update {
             it.copy(
-                supportSuggestion = null,
+                supportSuggestion = null, supportLoading = false,
                 supportFeedbackOutcome = null,
             )
         }
@@ -407,11 +407,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private suspend fun sendCheckInFollowUp(message: String) {
+        supportRevision++
         _uiState.update {
             it.copy(
                 pendingMessage = ChatMessage(text = message, fromUser = true),
                 sending = true,
-                supportSuggestion = null,
+                supportSuggestion = null, supportLoading = false,
                 supportFeedbackOutcome = null,
             )
         }
@@ -425,9 +426,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                         lastEvidence = response.evidence,
                     )
                 }
-                if (response.strategy == "seek_support") {
-                    requestSupport(message, response.userMessageId)
-                }
+                requestSupport(message, response.userMessageId)
             }
             .onFailure {
                 _uiState.update { state ->
@@ -442,15 +441,16 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun requestSupport(situation: String, sourceMessageId: Long? = null) {
-        if (situation.isBlank() || _uiState.value.supportLoading) return
+        if (situation.isBlank()) return
+        val revision = ++supportRevision
         _uiState.update { it.copy(supportLoading = true, supportSuggestion = null, supportFeedbackOutcome = null, error = null) }
         viewModelScope.launch {
             runCatching { supportApi.suggest(deviceId, situation, sourceMessageId) }
                 .onSuccess { proposal ->
-                    _uiState.update { it.copy(supportSuggestion = proposal, supportLoading = false) }
+                    if (revision == supportRevision) _uiState.update { it.copy(supportSuggestion = proposal, supportLoading = false) }
                 }
                 .onFailure {
-                    _uiState.update { it.copy(supportLoading = false, error = "暂时无法生成求助建议，请稍后重试。") }
+                    if (revision == supportRevision) _uiState.update { it.copy(supportLoading = false, error = "暂时无法生成求助建议，请稍后重试。") }
                 }
         }
     }
@@ -459,17 +459,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         val suggestion = _uiState.value.supportSuggestion ?: return
         val suggestionId = suggestion.id ?: return
         if (_uiState.value.supportFeedbackLoading) return
+        val revision = supportRevision
         _uiState.update { it.copy(supportFeedbackLoading = true, error = null) }
         viewModelScope.launch {
             runCatching { supportApi.feedback(deviceId, suggestionId, outcome, ownEffort, supportReceived) }
                 .onSuccess {
-                    _uiState.update { it.copy(supportFeedbackLoading = false, supportFeedbackOutcome = outcome) }
+                    _uiState.update { it.copy(supportFeedbackLoading = false,
+                        supportFeedbackOutcome = if (revision == supportRevision) outcome else it.supportFeedbackOutcome) }
                     reviewCache.markDirty()
                     runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication()) }
                     runCatching { repository.newCheckInNotice() }.getOrNull()?.let {
                         _uiState.update { state -> state.copy(checkInScheduledNotice = scheduledNoticeText()) }
                     }
-                    if (outcome == "helped" || outcome == "not_helped") {
+                    if (revision == supportRevision && (outcome == "helped" || outcome == "not_helped")) {
                         requestSupport(suggestion.situation, suggestion.sourceMessageId)
                     }
                 }

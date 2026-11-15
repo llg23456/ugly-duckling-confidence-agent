@@ -16,6 +16,7 @@ from app.services.video_service import (
     PROMPT_VERSION, generate_captions, group_events_by_day, scenes_for, suggest_keywords,
 )
 from app.services.video_render_service import render_uploaded_video, scene_music_moods
+from app.services.review_materials import selected_materials
 
 router = APIRouter(prefix="/videos", tags=["videos"])
 
@@ -45,10 +46,7 @@ def keyword_suggestions(
     conversation = get_conversation(db, request.device_id)
     if conversation is None or len(request.event_ids) != len(set(request.event_ids)):
         raise HTTPException(status_code=422, detail="请选择本设备的真实事件")
-    events = list(db.scalars(select(GrowthEvent).where(
-        GrowthEvent.conversation_id == conversation.id,
-        GrowthEvent.id.in_(request.event_ids),
-    ).order_by(GrowthEvent.created_at, GrowthEvent.id)))
+    events = selected_materials(db, conversation.id, request.event_ids)
     if len(events) != len(request.event_ids):
         raise HTTPException(status_code=422, detail="部分事件已不存在，请返回周报告后重新进入")
     if any(item.sensitivity == "high" for item in events):
@@ -62,10 +60,7 @@ def create_script(request: VideoScriptRequest, db: Session = Depends(get_db)) ->
     conversation = get_conversation(db, request.device_id)
     if conversation is None or len(request.event_ids) != len(set(request.event_ids)):
         raise HTTPException(status_code=422, detail="请选择本设备的真实事件")
-    events = list(db.scalars(select(GrowthEvent).where(
-        GrowthEvent.conversation_id == conversation.id,
-        GrowthEvent.id.in_(request.event_ids),
-    ).order_by(GrowthEvent.created_at, GrowthEvent.id)))
+    events = selected_materials(db, conversation.id, request.event_ids)
     if len(events) != len(request.event_ids):
         raise HTTPException(status_code=422, detail="部分事件已不存在，请返回周报告后重新进入")
     if any(item.sensitivity == "high" for item in events):
@@ -124,10 +119,9 @@ def render_video(
     db: Session = Depends(get_db),
 ) -> Response:
     script = _owned(db, script_id, device_id)
-    events = list(db.scalars(select(GrowthEvent).where(
-        GrowthEvent.conversation_id == script.conversation_id,
-        GrowthEvent.id.in_(script.source_event_ids),
-    )))
+    events = selected_materials(db, script.conversation_id, script.source_event_ids)
+    if len(events) != len(script.source_event_ids) or any(item.sensitivity == "high" for item in events):
+        raise HTTPException(422, "来源已删除或包含高敏感内容，请重新选择素材")
     music_moods = scene_music_moods(script.scenes, events)
     video = render_uploaded_video(manifest, files, scene_music_moods=music_moods)
     return Response(

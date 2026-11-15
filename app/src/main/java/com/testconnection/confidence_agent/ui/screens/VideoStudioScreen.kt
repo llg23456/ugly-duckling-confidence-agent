@@ -202,9 +202,23 @@ fun VideoStudioScreen(
     val selectedDayKeys = selectedIds.mapNotNull(candidateById::get).map(::dayKey).toSet()
     val selectedDayCount = selectedDayKeys.size
     val localRecords = remember(sourceEvents, resolvedRecordIds) { localRecordRepository.load().associateBy { it.id } }
+    var chatImages by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    LaunchedEffect(deviceId) {
+        com.testconnection.confidence_agent.data.repository.ChatRepository(context).observeHistory().collect { messages ->
+            chatImages = messages.mapNotNull { message ->
+                val id = message.id; val path = message.imagePath
+                if (id != null && path != null) id to path else null
+            }.toMap()
+        }
+    }
     val recordForEvent: (Long) -> RecordDraft? = { eventId ->
-        sourceEvents.firstOrNull { it.id == eventId }?.sourceRecordId
-            ?.let(resolvedRecordIds::get)?.let(localRecords::get)
+        val event = sourceEvents.firstOrNull { it.id == eventId }
+        val saved = event?.sourceRecordId?.let(resolvedRecordIds::get)?.let(localRecords::get)
+        saved ?: event?.sourceId?.let { messageId ->
+            chatImages[messageId]?.let { path ->
+                RecordDraft("chat-photo-$messageId", RecordMode.PHOTO, "", photoPath = path, photoComment = event.fact)
+            }
+        }
     }
     fun closeFullscreenVideo() {
         fullscreenVideoView?.runCatching { stopPlayback() }
@@ -239,7 +253,7 @@ fun VideoStudioScreen(
         val remoteEvents = if (missingEventIds.isEmpty()) {
             passedEvents
         } else {
-            runCatching { reviewApi.events(deviceId) }.getOrNull()
+            runCatching { reviewApi.events(deviceId, includeAllSources = true) }.getOrNull()
                 ?.filter { it.id in sourceEventIds }
                 .orEmpty()
         }

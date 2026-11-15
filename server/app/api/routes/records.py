@@ -13,6 +13,9 @@ from app.services.check_in_service import evaluate_check_in
 from app.services.event_service import process_record
 from app.services.multimodal_service import chat_with_image
 from app.services.stress_service import evaluate_stress_alert
+from app.services.wellbeing_service import ingest_source, remove_source, process_record_assessment
+from app.services.wellbeing_assessment import assess
+from app.services.notification_service import dispatch_for_url
 
 router = APIRouter(prefix="/records", tags=["records"])
 
@@ -32,6 +35,7 @@ def sync_records(request: RecordSyncRequest, background_tasks: BackgroundTasks, 
     conversation = get_or_create_conversation(db, request.device_id)
     result = []
     records_to_process: list[int] = []
+    wellbeing_to_process: list[int] = []
     for input_record in request.records:
         record = db.scalar(select(UserRecord).where(
             UserRecord.conversation_id == conversation.id,
@@ -83,11 +87,24 @@ def sync_records(request: RecordSyncRequest, background_tasks: BackgroundTasks, 
         elif event is not None:
             _delete_record_and_derived(db, record, delete_record=False)
         db.flush()
+        if changed:
+            if record.status == "saved":
+                # Only the user's own text/caption, never a client-provided AI photo description.
+                original = "\n".join(s for s in (record.text, record.photo_comment) if s)
+                ingest_source(db, conversation.id, "record", record.id, original,
+                              record.created_at, assess(original, use_model=False))
+                if original:
+                    wellbeing_to_process.append(record.id)
+            else:
+                remove_source(db, conversation.id, "record", record.id)
         result.append(_item(db, record))
     evaluate_stress_alert(db, conversation.id)
     evaluate_check_in(db, conversation.id)
     db.commit()
-    database_url = get_settings().database_url
+    database_url = str(db.get_bind().url)
+    background_tasks.add_task(dispatch_for_url, database_url)
+    for record_id in wellbeing_to_process:
+        background_tasks.add_task(process_record_assessment, database_url, conversation.id, record_id)
     for record_id in records_to_process:
         background_tasks.add_task(process_record, database_url, conversation.id, record_id)
     return RecordListResponse(records=result)
@@ -151,6 +168,8 @@ def _invalidate_event_derivatives(db: Session, conversation_id: int, event_id: i
 
 
 def _delete_record_and_derived(db: Session, record: UserRecord, *, delete_record: bool = True) -> None:
+    remove_source(db, record.conversation_id, "record", record.id)
+    _invalidate_event_derivatives(db, record.conversation_id, -10 * record.id - 2)
     event = db.scalar(select(GrowthEvent).where(GrowthEvent.source_record_id == record.id))
     if event is not None:
         event_id = event.id

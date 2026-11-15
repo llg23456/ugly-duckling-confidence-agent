@@ -54,6 +54,7 @@ import com.testconnection.confidence_agent.ui.screens.SupportCircleScreen
 import com.testconnection.confidence_agent.ui.screens.OnboardingScreen
 import com.testconnection.confidence_agent.ui.screens.DataToolsScreen
 import com.testconnection.confidence_agent.ui.screens.StressAlertScreen
+import com.testconnection.confidence_agent.ui.screens.WellbeingScreen
 import com.testconnection.confidence_agent.ui.theme.InkMuted
 import com.testconnection.confidence_agent.ui.theme.SageDark
 import com.testconnection.confidence_agent.ui.theme.SagePale
@@ -81,6 +82,7 @@ fun ConfidenceAgentApp(
         return
     }
     val context = LocalContext.current
+    com.testconnection.confidence_agent.data.sms.DeviceSmsDispatcher()
     var selectedDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
     var communityDetailOpen by rememberSaveable { mutableStateOf(false) }
     var showCover by rememberSaveable { mutableStateOf(true) }
@@ -91,6 +93,7 @@ fun ConfidenceAgentApp(
     var showWeeklyReport by rememberSaveable { mutableStateOf(false) }
     var showDataTools by rememberSaveable { mutableStateOf(false) }
     var showStressAlert by rememberSaveable { mutableStateOf(false) }
+    var showWellbeing by rememberSaveable { mutableStateOf(false) }
     var stressAlertId by rememberSaveable { mutableStateOf<Long?>(null) }
     var supportFromMemory by rememberSaveable { mutableStateOf(false) }
     var supportFromStress by rememberSaveable { mutableStateOf(false) }
@@ -161,6 +164,7 @@ fun ConfidenceAgentApp(
         externalDestination?.let {
             showMemoryCenter = false
             showSupportCircle = false
+            showWellbeing = false
             showWeeklyReport = false
             showVideoStudio = false
             showDataTools = false
@@ -221,6 +225,11 @@ fun ConfidenceAgentApp(
             supportFromMemory = false
             supportFromStress = false
         })
+        return
+    }
+
+    if (showWellbeing) {
+        WellbeingScreen(onBack = { showWellbeing = false }, onSupportCircle = { showSupportCircle = true })
         return
     }
 
@@ -412,6 +421,7 @@ fun ConfidenceAgentApp(
         Box(modifier = Modifier.fillMaxSize()) {
             when (selectedDestination) {
                 AppDestination.HOME -> HomeScreen(
+                    onOpenWellbeing = { showWellbeing = true },
                     contentPadding = padding,
                     viewModel = homeViewModel,
                     userName = displayName,

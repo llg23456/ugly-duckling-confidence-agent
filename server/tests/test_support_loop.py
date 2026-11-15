@@ -284,7 +284,9 @@ def test_no_contact_feedback_does_not_fabricate_help(client: TestClient) -> None
     assert result["feedback"]["support_received"] is None
     assert client.get("/api/v1/events?device_id=no-contact").json()["events"] == []
     review = client.get("/api/v1/reviews/month?device_id=no-contact").json()
-    assert review["mock"] is False and review["moments"] == []
+    assert review["mock"] is False and len(review["moments"]) == 1
+    assert review["moments"][0]["source_feedback_id"] == result["feedback"]["id"]
+    assert "还没有联系对方" in review["story"] and "不应保存" not in review["story"]
     assert "还没有记录" in review["support_received"]
 
 

@@ -69,10 +69,16 @@ object ServerConnectionManager {
         val appContext = context.applicationContext
         val connectivity = appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
 
-        // The saved endpoint is cheap to verify and may still work even when Android cannot expose
-        // the current LAN interface (some vendors hide hotspot interfaces from app APIs).
+        // LAN discovery must not silently return a working USB loopback or public cloud endpoint.
         val saved = runCatching { ServerEndpoint.normalize(ServerEndpoint.current()) }.getOrNull()
-        if (saved != null) {
+        val savedIsLan = saved?.let { value ->
+            val host = URL(value).host
+            val parts = host.split('.').mapNotNull(String::toIntOrNull)
+            parts.size == 4 && parts.all { it in 0..255 } &&
+                (parts[0] == 10 || (parts[0] == 172 && parts[1] in 16..31) ||
+                    (parts[0] == 192 && parts[1] == 168))
+        } == true
+        if (saved != null && savedIsLan) {
             runCatching { check(saved, SAVED_ADDRESS_TIMEOUT_MS) }.getOrNull()?.let { return it }
         }
 

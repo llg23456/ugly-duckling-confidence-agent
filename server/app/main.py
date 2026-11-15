@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import chat_router, check_ins_router, data_management_router, events_router, multimodal_router, memories_router, onboarding_router, reviews_router, records_router, stress_alerts_router, support_router, support_people_router, videos_router
 from app.api.routes.dev_demo import router as dev_demo_router
+from app.api.routes.wellbeing import router as wellbeing_router
+from app.api.routes.device_sms import router as device_sms_router
 from app.core.config import get_settings
 from app.core.cloud_access import require_cloud_access
 from app.api.routes.cloud_auth import router as cloud_auth_router
@@ -58,5 +60,7 @@ protected_api.include_router(videos_router)
 protected_api.include_router(check_ins_router)
 protected_api.include_router(stress_alerts_router)
 protected_api.include_router(dev_demo_router)
+protected_api.include_router(wellbeing_router)
+protected_api.include_router(device_sms_router)
 app.include_router(protected_api, prefix=settings.api_prefix)
 app.include_router(cloud_auth_router, prefix=settings.api_prefix)

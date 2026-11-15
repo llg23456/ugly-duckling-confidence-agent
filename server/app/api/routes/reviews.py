@@ -16,8 +16,22 @@ from app.schemas.review import (
 from app.services.mock_service import mock_review
 from app.services.memory_service import local_day
 from app.services.review_service import date_range, review_for, today_local
+from app.services.review_materials import review_materials
+
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
+
+
+@router.get("/materials")
+def materials(device_id: str = Query(min_length=1, max_length=128), db: Session = Depends(get_db)):
+    conversation = get_conversation(db, device_id)
+    rows = review_materials(db, conversation.id) if conversation else []
+    return {"events": [{"id": m.id, "fact": m.fact, "feeling": m.feeling, "attempt": m.attempt,
+                        "own_effort": m.own_effort, "support_received": m.support_received,
+                        "people": m.people, "confidence": m.confidence, "sensitivity": m.sensitivity,
+                        "source_id": m.source_user_message_id, "source_record_id": m.source_record_id,
+                        "source_feedback_id": m.source_feedback_id, "source_type": m.source_type,
+                        "created_at": m.created_at} for m in rows]}
 
 
 @router.post("/generate", response_model=ReviewResponse)
@@ -66,10 +80,8 @@ def generate_pending_daily(request: PendingDailyRequest, db: Session = Depends(g
     conversation = get_conversation(db, request.device_id)
     if conversation is None:
         return PendingDailyResponse()
-    dates = sorted({local_day(item.created_at) for item in db.scalars(select(GrowthEvent).where(
-        GrowthEvent.conversation_id == conversation.id,
-        or_(GrowthEvent.source_type.is_(None), GrowthEvent.source_type != "stress_scenario"),
-    )) if local_day(item.created_at) < today_local().isoformat()}, reverse=True)
+    dates = sorted({local_day(item.created_at) for item in review_materials(db, conversation.id)
+                    if local_day(item.created_at) < today_local().isoformat()}, reverse=True)
     return PendingDailyResponse(reviews=[review_for(
         db, request.device_id, "day", date.fromisoformat(day), date.fromisoformat(day), persist=True,
     ) for day in dates])

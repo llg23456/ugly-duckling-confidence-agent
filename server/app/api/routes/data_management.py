@@ -23,6 +23,7 @@ from app.db.models import (
     VideoScript,
 )
 from app.db.repository import get_conversation
+from app.db.models import DailyCheckIn, DailyStressSnapshot, WellbeingPreference, WellbeingSignal, TrustedContact, NotificationOutbox
 from app.db.session import get_db
 
 router = APIRouter(prefix="/data", tags=["data"])
@@ -34,7 +35,7 @@ def _rows(db: Session, model, conversation_id: int) -> list[dict]:
         values = {
             column.key: getattr(row, column.key)
             for column in sqlalchemy_inspect(model).columns
-            if column.key not in {"embedding"}
+            if column.key not in {"embedding", "code_digest"}
         }
         result.append(jsonable_encoder(values))
     return result
@@ -53,6 +54,8 @@ def export_data(
         "support_suggestions": [], "support_feedback": [], "video_scripts": [],
         "proactive_check_ins": [],
         "stress_alerts": [], "stress_alert_evidence": [],
+        "daily_check_ins": [], "daily_stress": [], "wellbeing_preferences": [],
+        "wellbeing_signals": [], "trusted_contacts": [], "notifications": [],
     }
     if conversation is None:
         return {"exported_at": datetime.now(UTC).isoformat(), "device_id": device_id, "data": empty}
@@ -105,6 +108,12 @@ def export_data(
         "proactive_check_ins": _rows(db, ProactiveCheckIn, conversation.id),
         "stress_alerts": stress_alerts,
         "stress_alert_evidence": stress_alert_evidence,
+        "daily_check_ins": _rows(db, DailyCheckIn, conversation.id),
+        "daily_stress": _rows(db, DailyStressSnapshot, conversation.id),
+        "wellbeing_preferences": _rows(db, WellbeingPreference, conversation.id),
+        "wellbeing_signals": _rows(db, WellbeingSignal, conversation.id),
+        "trusted_contacts": _rows(db, TrustedContact, conversation.id),
+        "notifications": _rows(db, NotificationOutbox, conversation.id),
     }
     return {"exported_at": datetime.now(UTC).isoformat(), "device_id": device_id, "data": data}
 
@@ -120,6 +129,8 @@ def delete_all_data(
     conversation_id = conversation.id
     # Dependents first: this works with SQLite foreign keys enabled and remains idempotent.
     for model in (
+        NotificationOutbox, TrustedContact, WellbeingSignal,
+        DailyStressSnapshot, DailyCheckIn, WellbeingPreference,
         MemoryDeletion,
         Memory,
         DailySummary,

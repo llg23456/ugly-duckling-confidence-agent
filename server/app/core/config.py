@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     embedding_model: str = "qwen3.7-text-embedding-flash"
     asr_model: str = "paraformer-v2"
     ffmpeg_path: str = ""
+    # Real SMS is deliberately not implemented by the first-version provider.
+    notification_mode: str = "disabled"  # disabled | mock (development only)
+    wellbeing_model_timeout: float = 15.0
+    counseling_url: str = ""  # A verified institution's HTTPS booking page, configured by the operator.
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

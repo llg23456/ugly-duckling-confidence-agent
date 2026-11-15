@@ -7,11 +7,15 @@
 captures/
 .externalNativeBuild/
 .cxx/
+*.hprof
 
 # Local Android SDK and IDE state
+# local.properties contains the machine-specific Android SDK path. Android
+# Studio creates it automatically; it must not be shared between machines.
 local.properties
 *.iml
 .idea/
+.fleet/
 
 # Signing credentials
 *.jks
@@ -34,13 +38,27 @@ venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.hypothesis/
+.tox/
+.nox/
 .coverage
 htmlcov/
+dist/
+*.egg-info/
 
 # Local databases, runtime uploads and generated test media
 *.db
+*.db-journal
+*.db-shm
+*.db-wal
 *.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
 *.sqlite3
+*.sqlite3-journal
+*.sqlite3-shm
+*.sqlite3-wal
 server/uploads/
 server/tmp/
 server/tts-test.*
@@ -49,16 +67,26 @@ server/tts-test.*
 *.apk
 *.aab
 *.log
+*.log.*
 
 # Local Codex/chart generation workspaces
 /.codex_build/
 /.codex_tmp/
 /artifacts/cloud-test/
 /.chart-data-*/
+/.codex_widget_check.png
+/.widget_page_*.png
 
 # Local presentation, submission and generated documentation artifacts
-# Files already tracked under docs/ remain tracked; this only blocks new files.
+# Presentation documents now live in ../docs, outside this Git repository.
+# Keep these rules to prevent accidentally importing them into the app again.
 /docs/
+/design_assets/
+/output/
+/tmp/
+/.codex*/
+/.drawio-tmp/
+/.pptx-edit-tmp/
 /今晚实施计划_画像记录与小组件.md
 /图标素材替换说明.md
 *.ppt
@@ -75,3 +103,16 @@ Thumbs.db
 desktop.ini
 *.swp
 *.tmp
+*.bak
+*.orig
+
+# Reproducible startup files must stay versioned. These exceptions protect the
+# Android and FastAPI entry points if broader ignore rules are added later.
+!gradlew
+!gradlew.bat
+!gradle/libs.versions.toml
+!gradle/wrapper/gradle-wrapper.jar
+!gradle/wrapper/gradle-wrapper.properties
+!server/.env.example
+!server/requirements.txt
+.local-data/

@@ -11,14 +11,13 @@ from app.schemas.chat import MemoryEvidence
 from app.services.memory_service import memory_prompt
 from app.services.mock_service import mock_chat
 from app.services.support_service import is_postgraduate_setback, needs_support
+from app.services.wellbeing_assessment import assess, rule_assessment, support_action
+from app.services.supportive_dialogue import supportive_reply
 
 
 logger = logging.getLogger(__name__)
 
 CHAT_PROMPT_VERSION = "chat-v2"
-ACUTE_TERMS = (
-    "想死", "不想活", "自杀", "结束生命", "伤害自己", "伤害别人", "杀了",
-)
 MEMORY_SUPPRESSION_TERMS = (
     "不要记", "别记", "不用记", "别保存", "不要保存", "忘掉刚才", "忘记刚才",
 )
@@ -30,11 +29,13 @@ SYSTEM_PROMPT = """你是“鸭力Go”，一位温柔、克制、尊重边界�
 有明确问题时先直接回答。适合建议时最多提出一个可拒绝的小步骤；一轮最多追问一个问题。
 回复通常控制在40到180个汉字，可根据问题复杂度自然缩短或延长，不以成绩或录取评价用户价值。
 只有在确实相关且能帮助当前对话时才引用记忆；不得补造次数、日期、经历、关系或已完成行为。
+严格区分准备、练习与实际完成：练过面试不等于已经参加或结束面试。用户换了话题，就回应最新困扰，不夸赞或重述已解决的旧话题。
 不得诊断心理或身体疾病，不得替代医生、心理咨询师或紧急服务，也不得替用户联系任何人。
 只输出一个 JSON 对象，不要输出 Markdown。"""
 
 
 class DialogueEnvelope(BaseModel):
+    image_observation: str = Field(default="", max_length=600)
     reply: str = Field(min_length=1, max_length=800)
     intent: Literal[
         "direct_question", "emotion", "reflection", "information",
@@ -63,8 +64,7 @@ def _content_to_text(content: Any) -> str:
 
 
 def is_crisis_message(message: str) -> bool:
-    compact = re.sub(r"\s+", "", message)
-    return any(term in compact for term in ACUTE_TERMS)
+    return support_action(rule_assessment(message)) == "urgent_support"
 
 
 def suppress_memory_for_message(message: str) -> bool:
@@ -300,6 +300,23 @@ def _live_chat(
 
 
 def chat_with_fallback(
+    request: ChatRequest,
+    settings: Settings | None = None,
+    history: list[dict[str, str]] | None = None,
+    evidence: list[MemoryEvidence] | None = None,
+) -> ChatResponse:
+    assessment = assess(request.message, history, settings=settings or get_settings())
+    if assessment["action"] in ("urgent_support", "clarify"):
+        reply, model = supportive_reply(request.message, history or [], assessment, settings or get_settings())
+        response = ChatResponse(reply=reply, strategy="seek_support", mock=False,
+                                model=model, safety_triggered=True)
+    else:
+        response = _chat_with_fallback(request, settings, history, evidence)
+    response.wellbeing = assessment
+    return response
+
+
+def _chat_with_fallback(
     request: ChatRequest,
     settings: Settings | None = None,
     history: list[dict[str, str]] | None = None,

@@ -10,6 +10,7 @@ from app.db.models import Base
 
 SQLITE_ADDITIONS = {
     "messages": {
+        "image_observation": "TEXT",
         "used_memory_ids": "JSON",
         "model": "VARCHAR(100)",
         "prompt_version": "VARCHAR(32)",

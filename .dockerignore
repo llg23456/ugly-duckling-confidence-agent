@@ -1,15 +1,24 @@
+# Only send the backend image's actual inputs to Docker.
+**
+!server/
+!server/app/
+!server/app/**
+!server/tests/
+!server/tests/**
+!deploy/
+!deploy/cloud-test/
+!deploy/cloud-test/Dockerfile
+!deploy/cloud-test/requirements.lock
+!deploy/cloud-test/start.sh
+!deploy/cloud-test/backup.py
+
+# Exclude local state even if it is placed inside an allowed source directory.
+**/__pycache__/
+**/*.py[cod]
 **/.env
 **/.env.*
-**/.venv
-**/__pycache__
 **/*.db
 **/*.sqlite*
+**/*.log
 **/*.jks
 **/*.keystore
-**/*.apk
-.git
-.codex_tmp
-.codex_build
-app
-gradle
-.gradle
