@@ -1,6 +1,6 @@
 # 受邀云测环境
 
-2026-11-14 已完成公网 HTTPS 和 Android 真机独立联网验收。入口为 `https://api.yaligo-growth.top`，香港 ECS `47.83.165.140`，当前后端发布为 `20261114-hk05-3e7e5d1`。云测版首次输入一次邀请码，后续可直接联网使用，无需 WireGuard、USB、电脑后端或 SSH 隧道。
+2026-11-14 已完成公网 HTTPS 和 Android 真机独立联网验收。入口为 `https://api.yaligo-growth.top`，香港 ECS `47.83.165.140`，当前后端发布为 `20261115-hk06-c9ff668`。云测版首次输入一次邀请码，后续可直接联网使用，无需 WireGuard、USB、电脑后端或 SSH 隧道。
 
 2026-11-14 23:38（Asia/Shanghai）已将本地合并提交 `3e7e5d1` 的后端部署到香港，发布前完成 SQLite 一致性备份，新镜像隔离运行后端测试 89 项通过。公网 HTTPS 压力趋势验收 11 项通过：无数据返回七天“暂无”、正常记录显示平稳、未触发提醒仍返回压力趋势、较强连续压力触发提醒、删除来源更新趋势、聊天纳入统计、删除全部归零，以及 401/403 认证隔离。测试身份的数据和凭据已清理/撤销，后台任务结束后再次确认无残留。详见 [本轮验收结果](stress-trend-verification.json)。本轮未重新进行手机界面验收。
 
@@ -111,3 +111,30 @@ docker compose -f deploy/cloud-test/compose.yaml exec -T api python backup.py
 升级先备份，再创建新的发布目录和镜像，通过检查后切换 `current`。撤回旧版本时同时考虑数据库和认证开关，不能回退成公网无认证服务。恢复备份必须先停服，复制到新的数据目录、验证 SQLite 完整性后再互换目录；保留原数据库及 WAL/SHM 以便撤回，不能覆盖运行中的主库。恢复旧备份也会恢复当时的授权状态，需复核并重新撤销备份之后已撤销的凭据。
 
 历史材料：[香港初始恢复](hongkong-recovery.md)、[香港模型冒烟](hongkong-verification.json)、[成都历史验收](verification.json)。历史 USB/SSH 联调包与本次公网云测包不同，不能用旧包验收独立联网。
+
+## 体验问卷与 Excel 导出
+
+2026-11-15 已部署三步体验问卷，入口为“我的 → 评价与建议”。包含功能评价、主观变化、困难时刻帮助、负面体验及改进建议。必填项为使用时间、体验功能、总体满意度和当前身份（可选择“暂不透露”），其他选填；提交用途需主动勾选。困难时刻问卷并非心理诊断或疗效量表。
+
+填写时可确认/修改身份，并选填测试代号、性别和年龄段，服务端保存当次快照，不随着日后画像变化。每次独立提交保留一份，同一次断网重试按提交编号去重。服务器接收时间是正式提交时间，Excel 同时提供北京时间和 UTC；设备编号关联的是设备，不保证一个设备只由一人使用。问卷不读取聊天或记录原文。
+
+电脑上双击本目录 **导出评价问卷.cmd**，或在项目根运行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File deploy/cloud-test/export-feedback.ps1
+```
+
+默认将文件下载到 `artifacts/feedback/`（已忽略，不上传 Git）。Excel 包含“填写明细、每人最新一份、选项统计、文字建议、题目与口径”五个工作表。默认使用文件内参与编号关联，不导出设备编号；需要私下核对设备时加 `-IncludeDeviceIds`。不要将含身份及文字建议的整份工作簿直接作为公开材料。
+
+统计按每设备、每问卷版本最新完整一份计算；跳过、不好判断和未经历等不进入判断分母，多选比例可能超过100%。自由文字作为普通文本写入，防止被 Excel 当作公式执行。用户在“数据导出”中可导出自己的问卷，通过“删除全部数据”可删除已提交问卷并清理本地草稿，即使没有聊天记录也能删除。
+
+仅服务器运维人员可通过 SSH 执行导出，没有公网问卷管理接口。服务器导出方式：
+
+```bash
+cd /opt/ugly-duckling-cloudtest/current
+docker compose -f deploy/cloud-test/compose.yaml exec -T api python -m app.feedback_export --output /backups/feedback/experience-feedback.xlsx
+```
+
+公网验收脚本为 [feedback-smoke.py](feedback-smoke.py)，结果见 [feedback-verification.json](feedback-verification.json)：12 项通过，测试身份和数据已清理。验收 Excel 为合成样例，不计入真实用户反馈。本轮本地后端115项、Android JVM19项通过，云端镜像114项通过、1项跳过（该项校验 Android 题库一致性，已在本地通过）。APK 构建和 Android 真机测试代码编译通过，未连接手机进行界面验收。
+
+发布 `20261115-hk06-c9ff668` 对应业务源提交 `c9ff668`，数据库仅新增问卷表；发布前备份在 `/backups/pre-hk06/`，旧镜像及发布目录保留。验收脚本中无模型调用，部署保留已有用户、邀请码、授权和配额配置。

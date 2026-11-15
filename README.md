@@ -1,5 +1,7 @@
 # 鸭力Go
 
+2026-11-15：已新增“我的 → 评价与建议”三步体验问卷，包含困难时刻的帮助反馈，填写时确认身份，服务器记录提交时间。云端已发布 `20261115-hk06-c9ff668`，12 项公网验收通过。电脑端双击 `deploy/cloud-test/导出评价问卷.cmd` 可将云端问卷下载为 Excel，保留身份快照和北京时间/UTC，提供明细及去重统计。详见 [使用与导出说明](deploy/cloud-test/README.md#体验问卷与-excel-导出)、[本轮验收](deploy/cloud-test/feedback-verification.json)。本轮无手机连接，未进行真机界面验收。
+
 2026-11-14 本地进度同步：`codex/real-stress-trend` 已合入香港云测分支的 `5e1b04b` 及后续入口修复 `5164fe0`，保留首次见面标签选择、首页输入框最多五行自动换行、真实压力趋势及支持对象选择等本地改进。云测认证、HTTPS 地址与独立包名沿用云测分支，显示名称统一为“鸭力Go·云测”。本次重新验证后端 89 项、Android JVM 19 项通过，APK 构建和真机测试代码编译通过；合并后的后端已发布到香港 `20261114-hk05-3e7e5d1`，在新镜像中重新通过后端 89 项测试，并通过 11 项公网压力趋势验收；新增趋势接口已可供云测使用，详见 [部署验收](deploy/cloud-test/stress-trend-verification.json)。本轮未重新进行真机界面验收。
 
 香港后端已完成 `api.yaligo-growth.top` 的可信 HTTPS、受邀设备认证与 Android 真机独立联网验收。云测版输入一次邀请码后可直接使用，无需 WireGuard 或电脑隧道；安装及邀请码管理见 [云测说明](deploy/cloud-test/README.md)，证据见 [公网接口验收](deploy/cloud-test/access-verification.json) 和 [真机验收](deploy/cloud-test/phone-verification.json)。此前云测分支验收为后端 80 项、Android JVM 18 项通过。新身份记忆提取和并发响应耗时仍待专项排查，历史记录见 [香港模型冒烟](deploy/cloud-test/hongkong-verification.json)。

@@ -1,0 +1,51 @@
+{
+  "started_at": "2026-11-15T04:11:11.120888+00:00",
+  "fixture": "synthetic acceptance only, not real user feedback",
+  "origin": "https://api.yaligo-growth.top",
+  "device_id": "feedback-smoke-1d1ab8fb46bf44e08c22177ab0c861fb",
+  "checks": {
+    "unauthenticated_401": true,
+    "cross_device_403": true,
+    "explicit_consent_required": true,
+    "idempotent_retry_same_id_and_server_time": true,
+    "separate_submissions_keep_distinct_server_times": true,
+    "identity_snapshots_and_own_data_export": true,
+    "xlsx_contains_both_identity_snapshots_and_latest_only_summary": true,
+    "xlsx_beijing_and_utc_times": true,
+    "user_text_is_not_excel_formula": true,
+    "delete_without_chat_conversation": true,
+    "synthetic_rows_removed": true,
+    "synthetic_credential_revoked": true
+  },
+  "submission_times_utc": [
+    "2026-11-15T04:11:11.413800+00:00",
+    "2026-11-15T04:11:12.549169+00:00"
+  ],
+  "sample_export": {
+    "submissions": 2,
+    "participants": 1,
+    "latest": 1,
+    "output": "/backups/feedback-acceptance-example.xlsx"
+  },
+  "passed": true,
+  "finished_at": "2026-11-15T04:11:12.819145+00:00",
+  "deployment": {
+    "release": "20261115-hk06-c9ff668",
+    "business_source_commit": "c9ff668",
+    "previous_release": "20261114-hk05-3e7e5d1",
+    "backend_local_tests": 115,
+    "backend_image_tests": 114,
+    "image_skipped_tests": 1,
+    "skip_reason": "Android asset equality check runs locally; Android sources are not packaged in backend image",
+    "android_jvm_tests": 19,
+    "android_assemble": "passed",
+    "android_instrumentation_compile": "passed",
+    "phone_ui_tested": false,
+    "backup": "/backups/pre-hk06/confidence-agent-20261115T040954488015Z.sqlite3",
+    "archive_sha256": "dc1234937f7394d3d6da1c823118d6ad51c2adaeb2be24b6ca8aecd493249ddb",
+    "image_digest": "sha256:a2430b07c89af1651fb970a406eb865fa1af0d48729ce5811ebc028d3d1c1de7",
+    "windows_excel_export_tool": "passed under Windows PowerShell 5.1",
+    "actual_survey_count_after_synthetic_cleanup": 0,
+    "sample_xlsx_sha256": "2436fff053559013193bead082aaf28926f1d6da614a645b4adfbe9316dececf"
+  }
+}
