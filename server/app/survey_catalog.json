@@ -1,0 +1,769 @@
+{
+  "version": "experience-v1",
+  "questions": [
+    {
+      "id": "duration",
+      "title": "1. 你使用鸭力Go多久了？",
+      "page": 0,
+      "kind": "single",
+      "required": true,
+      "options": [
+        {
+          "id": "first",
+          "label": "今天第一次"
+        },
+        {
+          "id": "2_3",
+          "label": "2—3天"
+        },
+        {
+          "id": "4_7",
+          "label": "4—7天"
+        },
+        {
+          "id": "1_4weeks",
+          "label": "1—4周"
+        },
+        {
+          "id": "month_plus",
+          "label": "超过一个月"
+        }
+      ]
+    },
+    {
+      "id": "features",
+      "title": "2. 你体验过哪些功能？",
+      "page": 0,
+      "kind": "multi",
+      "required": true,
+      "options": [
+        {
+          "id": "chat",
+          "label": "首页和小鸭聊天"
+        },
+        {
+          "id": "voice",
+          "label": "语音陪伴"
+        },
+        {
+          "id": "record",
+          "label": "记录“保存一笔”"
+        },
+        {
+          "id": "memory",
+          "label": "记忆中心与个人画像"
+        },
+        {
+          "id": "review",
+          "label": "成长回望"
+        },
+        {
+          "id": "support",
+          "label": "支持圈与求助建议"
+        },
+        {
+          "id": "stress",
+          "label": "压力趋势"
+        },
+        {
+          "id": "video",
+          "label": "成长小片"
+        },
+        {
+          "id": "widget",
+          "label": "桌面小组件"
+        },
+        {
+          "id": "community",
+          "label": "本机社区"
+        },
+        {
+          "id": "none",
+          "label": "还没正式体验"
+        }
+      ],
+      "limit": 10,
+      "exclusive": [
+        "none"
+      ]
+    },
+    {
+      "id": "goals",
+      "title": "3. 你主要希望它帮你做什么？",
+      "page": 0,
+      "kind": "multi",
+      "required": false,
+      "options": [
+        {
+          "id": "listen",
+          "label": "有人听我说说"
+        },
+        {
+          "id": "feelings",
+          "label": "整理想法和情绪"
+        },
+        {
+          "id": "growth",
+          "label": "记录生活与成长"
+        },
+        {
+          "id": "confidence",
+          "label": "更敢表达、增加自信"
+        },
+        {
+          "id": "support",
+          "label": "找到现实中的支持"
+        },
+        {
+          "id": "balance",
+          "label": "调整学习和生活节奏"
+        },
+        {
+          "id": "try",
+          "label": "只是来体验一下"
+        },
+        {
+          "id": "other",
+          "label": "其他"
+        }
+      ],
+      "limit": 3
+    },
+    {
+      "id": "satisfaction",
+      "title": "4. 总体来说，这次使用体验怎么样？",
+      "page": 1,
+      "kind": "single",
+      "required": true,
+      "options": [
+        {
+          "id": "1",
+          "label": "很不满意"
+        },
+        {
+          "id": "2",
+          "label": "不太满意"
+        },
+        {
+          "id": "3",
+          "label": "一般"
+        },
+        {
+          "id": "4",
+          "label": "比较满意"
+        },
+        {
+          "id": "5",
+          "label": "很满意"
+        }
+      ]
+    },
+    {
+      "id": "usability_appearance",
+      "title": "5. 页面是否清楚好看",
+      "page": 1,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "1",
+          "label": "很差"
+        },
+        {
+          "id": "2",
+          "label": "较差"
+        },
+        {
+          "id": "3",
+          "label": "一般"
+        },
+        {
+          "id": "4",
+          "label": "较好"
+        },
+        {
+          "id": "5",
+          "label": "很好"
+        },
+        {
+          "id": "unknown",
+          "label": "没体验或不好判断"
+        }
+      ]
+    },
+    {
+      "id": "usability_navigation",
+      "title": "5. 功能是否容易找到",
+      "page": 1,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "1",
+          "label": "很差"
+        },
+        {
+          "id": "2",
+          "label": "较差"
+        },
+        {
+          "id": "3",
+          "label": "一般"
+        },
+        {
+          "id": "4",
+          "label": "较好"
+        },
+        {
+          "id": "5",
+          "label": "很好"
+        },
+        {
+          "id": "unknown",
+          "label": "没体验或不好判断"
+        }
+      ]
+    },
+    {
+      "id": "usability_operation",
+      "title": "5. 操作是否顺手",
+      "page": 1,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "1",
+          "label": "很差"
+        },
+        {
+          "id": "2",
+          "label": "较差"
+        },
+        {
+          "id": "3",
+          "label": "一般"
+        },
+        {
+          "id": "4",
+          "label": "较好"
+        },
+        {
+          "id": "5",
+          "label": "很好"
+        },
+        {
+          "id": "unknown",
+          "label": "没体验或不好判断"
+        }
+      ]
+    },
+    {
+      "id": "usability_understanding",
+      "title": "5. 小鸭回复是否容易理解",
+      "page": 1,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "1",
+          "label": "很差"
+        },
+        {
+          "id": "2",
+          "label": "较差"
+        },
+        {
+          "id": "3",
+          "label": "一般"
+        },
+        {
+          "id": "4",
+          "label": "较好"
+        },
+        {
+          "id": "5",
+          "label": "很好"
+        },
+        {
+          "id": "unknown",
+          "label": "没体验或不好判断"
+        }
+      ]
+    },
+    {
+      "id": "helpful_features",
+      "title": "6. 哪些功能对你比较有帮助？",
+      "page": 1,
+      "kind": "multi",
+      "required": false,
+      "options": [
+        {
+          "id": "chat",
+          "label": "首页和小鸭聊天"
+        },
+        {
+          "id": "voice",
+          "label": "语音陪伴"
+        },
+        {
+          "id": "record",
+          "label": "记录“保存一笔”"
+        },
+        {
+          "id": "memory",
+          "label": "记忆中心与个人画像"
+        },
+        {
+          "id": "review",
+          "label": "成长回望"
+        },
+        {
+          "id": "support",
+          "label": "支持圈与求助建议"
+        },
+        {
+          "id": "stress",
+          "label": "压力趋势"
+        },
+        {
+          "id": "video",
+          "label": "成长小片"
+        },
+        {
+          "id": "widget",
+          "label": "桌面小组件"
+        },
+        {
+          "id": "community",
+          "label": "本机社区"
+        },
+        {
+          "id": "none",
+          "label": "暂时没有感觉有帮助"
+        },
+        {
+          "id": "unknown",
+          "label": "体验还不够，不好判断"
+        }
+      ],
+      "limit": 3,
+      "exclusive": [
+        "none",
+        "unknown"
+      ],
+      "condition": "experienced"
+    },
+    {
+      "id": "change_feelings",
+      "title": "7. 使用后：梳理自己的想法和感受",
+      "page": 1,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "worse",
+          "label": "更困难了"
+        },
+        {
+          "id": "slightly_worse",
+          "label": "有点更困难"
+        },
+        {
+          "id": "same",
+          "label": "没有变化"
+        },
+        {
+          "id": "slightly_better",
+          "label": "有点更容易"
+        },
+        {
+          "id": "better",
+          "label": "更容易了"
+        },
+        {
+          "id": "unknown",
+          "label": "体验不足、不好判断"
+        }
+      ],
+      "condition": "experienced"
+    },
+    {
+      "id": "change_growth",
+      "title": "7. 使用后：看见自己的努力与进步",
+      "page": 1,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "worse",
+          "label": "更困难了"
+        },
+        {
+          "id": "slightly_worse",
+          "label": "有点更困难"
+        },
+        {
+          "id": "same",
+          "label": "没有变化"
+        },
+        {
+          "id": "slightly_better",
+          "label": "有点更容易"
+        },
+        {
+          "id": "better",
+          "label": "更容易了"
+        },
+        {
+          "id": "unknown",
+          "label": "体验不足、不好判断"
+        }
+      ],
+      "condition": "experienced"
+    },
+    {
+      "id": "change_support",
+      "title": "7. 使用后：愿意向身边的人寻求支持",
+      "page": 1,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "worse",
+          "label": "更困难了"
+        },
+        {
+          "id": "slightly_worse",
+          "label": "有点更困难"
+        },
+        {
+          "id": "same",
+          "label": "没有变化"
+        },
+        {
+          "id": "slightly_better",
+          "label": "有点更容易"
+        },
+        {
+          "id": "better",
+          "label": "更容易了"
+        },
+        {
+          "id": "unknown",
+          "label": "体验不足、不好判断"
+        }
+      ],
+      "condition": "experienced"
+    },
+    {
+      "id": "difficult_help",
+      "title": "8. 当你压力特别大、情绪很低落，或觉得眼前的事情难以应付时，鸭力Go有没有给你带来帮助？",
+      "page": 1,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "clear",
+          "label": "有比较明显的帮助"
+        },
+        {
+          "id": "a_little",
+          "label": "有一点帮助，哪怕只是让我缓了一下"
+        },
+        {
+          "id": "none",
+          "label": "暂时没有感觉到帮助"
+        },
+        {
+          "id": "worse",
+          "label": "使用后反而感觉更不舒服"
+        },
+        {
+          "id": "not_used",
+          "label": "我还没有在这种情况下使用过"
+        },
+        {
+          "id": "skip",
+          "label": "不想回答"
+        }
+      ]
+    },
+    {
+      "id": "difficult_types",
+      "title": "它主要在哪些方面帮到了你？（选填）",
+      "page": 1,
+      "kind": "multi",
+      "required": false,
+      "options": [
+        {
+          "id": "listen",
+          "label": "让我有地方说出来，感觉有人倾听"
+        },
+        {
+          "id": "calm",
+          "label": "让我稍微平静下来"
+        },
+        {
+          "id": "clarify",
+          "label": "帮我理清困扰自己的事情"
+        },
+        {
+          "id": "step",
+          "label": "帮我找到一个可以尝试的小步骤"
+        },
+        {
+          "id": "support",
+          "label": "鼓励我联系身边的人或寻求专业支持"
+        },
+        {
+          "id": "practical",
+          "label": "对解决实际困难有一点帮助"
+        },
+        {
+          "id": "other",
+          "label": "其他"
+        }
+      ],
+      "limit": 7,
+      "condition": "difficult_help"
+    },
+    {
+      "id": "continue_use",
+      "title": "9. 接下来，你愿意继续使用吗？",
+      "page": 1,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "1",
+          "label": "很不愿意"
+        },
+        {
+          "id": "2",
+          "label": "不太愿意"
+        },
+        {
+          "id": "3",
+          "label": "还不确定"
+        },
+        {
+          "id": "4",
+          "label": "比较愿意"
+        },
+        {
+          "id": "5",
+          "label": "很愿意"
+        }
+      ]
+    },
+    {
+      "id": "issues",
+      "title": "10. 使用时，你遇到过哪些问题？",
+      "page": 2,
+      "kind": "multi",
+      "required": false,
+      "options": [
+        {
+          "id": "text",
+          "label": "页面文字太多"
+        },
+        {
+          "id": "navigation",
+          "label": "按钮或入口不好找"
+        },
+        {
+          "id": "steps",
+          "label": "操作步骤较多"
+        },
+        {
+          "id": "slow",
+          "label": "回复慢或加载久"
+        },
+        {
+          "id": "understanding",
+          "label": "回复没理解我的意思"
+        },
+        {
+          "id": "advice",
+          "label": "建议不符合实际情况"
+        },
+        {
+          "id": "accuracy",
+          "label": "记录、记忆或趋势不符合预期"
+        },
+        {
+          "id": "media",
+          "label": "语音、图片或视频使用不顺"
+        },
+        {
+          "id": "crash",
+          "label": "闪退或卡住"
+        },
+        {
+          "id": "connection",
+          "label": "连接或邀请码问题"
+        },
+        {
+          "id": "privacy",
+          "label": "担心隐私和数据使用"
+        },
+        {
+          "id": "other",
+          "label": "其他"
+        },
+        {
+          "id": "none",
+          "label": "暂时没有"
+        }
+      ],
+      "limit": 12,
+      "exclusive": [
+        "none"
+      ]
+    },
+    {
+      "id": "issue_location",
+      "title": "11. 具体是在哪里遇到的？（选填）",
+      "page": 2,
+      "kind": "single",
+      "required": false,
+      "options": [
+        {
+          "id": "chat",
+          "label": "首页和小鸭聊天"
+        },
+        {
+          "id": "voice",
+          "label": "语音陪伴"
+        },
+        {
+          "id": "record",
+          "label": "记录“保存一笔”"
+        },
+        {
+          "id": "memory",
+          "label": "记忆中心与个人画像"
+        },
+        {
+          "id": "review",
+          "label": "成长回望"
+        },
+        {
+          "id": "support",
+          "label": "支持圈与求助建议"
+        },
+        {
+          "id": "stress",
+          "label": "压力趋势"
+        },
+        {
+          "id": "video",
+          "label": "成长小片"
+        },
+        {
+          "id": "widget",
+          "label": "桌面小组件"
+        },
+        {
+          "id": "community",
+          "label": "本机社区"
+        },
+        {
+          "id": "onboarding",
+          "label": "首次见面"
+        },
+        {
+          "id": "activation",
+          "label": "邀请码与授权"
+        },
+        {
+          "id": "profile",
+          "label": "我的"
+        },
+        {
+          "id": "other",
+          "label": "其他"
+        }
+      ],
+      "condition": "has_issues"
+    },
+    {
+      "id": "issue_detail",
+      "title": "可以说说当时做了什么、哪里不符合预期（选填）",
+      "page": 2,
+      "kind": "text",
+      "required": false,
+      "condition": "has_issues",
+      "max_length": 300
+    },
+    {
+      "id": "priorities",
+      "title": "12. 你最希望我们优先改进什么？",
+      "page": 2,
+      "kind": "multi",
+      "required": false,
+      "options": [
+        {
+          "id": "appearance",
+          "label": "页面更好看"
+        },
+        {
+          "id": "text",
+          "label": "文字更简洁"
+        },
+        {
+          "id": "operation",
+          "label": "操作更方便"
+        },
+        {
+          "id": "speed",
+          "label": "回复更快更稳定"
+        },
+        {
+          "id": "understanding",
+          "label": "更理解我的处境"
+        },
+        {
+          "id": "advice",
+          "label": "建议更具体可行"
+        },
+        {
+          "id": "memory",
+          "label": "记忆和画像更准确"
+        },
+        {
+          "id": "growth",
+          "label": "成长变化更直观"
+        },
+        {
+          "id": "support",
+          "label": "现实求助更贴合需求"
+        },
+        {
+          "id": "privacy",
+          "label": "隐私说明更清楚"
+        },
+        {
+          "id": "other",
+          "label": "其他"
+        },
+        {
+          "id": "none",
+          "label": "暂时没有"
+        }
+      ],
+      "limit": 3,
+      "exclusive": [
+        "none"
+      ]
+    },
+    {
+      "id": "comment",
+      "title": "13. 还有什么想对我们说的吗？（选填）",
+      "page": 2,
+      "kind": "text",
+      "required": false,
+      "max_length": 500
+    }
+  ]
+}

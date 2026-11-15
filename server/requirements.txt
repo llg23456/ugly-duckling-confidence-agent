@@ -7,3 +7,5 @@ sqlalchemy>=2.0,<3
 httpx>=0.27,<1
 python-multipart>=0.0.12,<1
 pytest>=8.3,<9
+
+openpyxl==3.1.5

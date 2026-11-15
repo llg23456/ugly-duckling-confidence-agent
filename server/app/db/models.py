@@ -12,6 +12,21 @@ class Base(DeclarativeBase):
     pass
 
 
+class ExperienceFeedback(Base):
+    __tablename__ = "experience_feedback"
+    __table_args__ = (UniqueConstraint("device_id", "client_submission_id"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    device_id: Mapped[str] = mapped_column(String(128), index=True)
+    client_submission_id: Mapped[str] = mapped_column(String(36))
+    survey_version: Mapped[str] = mapped_column(String(40))
+    app_version: Mapped[str] = mapped_column(String(80))
+    identity_snapshot: Mapped[dict] = mapped_column(JSON)
+    answers: Mapped[dict] = mapped_column(JSON)
+    consent: Mapped[bool] = mapped_column(Boolean)
+    payload_hash: Mapped[str] = mapped_column(String(64))
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class Conversation(Base):
     __tablename__ = "conversations"
 

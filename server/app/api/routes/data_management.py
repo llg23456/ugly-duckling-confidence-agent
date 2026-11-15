@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.models import (
     Conversation,
+    ExperienceFeedback,
     DailySummary,
     GrowthEvent,
     Memory,
@@ -46,7 +47,9 @@ def export_data(
     db: Session = Depends(get_db),
 ) -> dict:
     conversation = get_conversation(db, device_id)
+    feedback = list(db.scalars(select(ExperienceFeedback).where(ExperienceFeedback.device_id == device_id)))
     empty = {
+        "experience_feedback": [jsonable_encoder({c.key: getattr(row, c.key) for c in sqlalchemy_inspect(ExperienceFeedback).columns if c.key != "payload_hash"}) for row in feedback],
         "messages": [], "records": [], "growth_events": [], "memories": [],
         "memory_assessments": [],
         "daily_summaries": [], "reviews": [], "support_people": [],
@@ -91,6 +94,7 @@ def export_data(
         ],
     } for alert in stress_alerts]
     data = {
+        "experience_feedback": empty["experience_feedback"],
         "messages": messages,
         "records": _rows(db, UserRecord, conversation.id),
         "growth_events": growth_events,
@@ -114,8 +118,10 @@ def delete_all_data(
     device_id: str = Query(min_length=1, max_length=128),
     db: Session = Depends(get_db),
 ) -> None:
+    db.execute(delete(ExperienceFeedback).where(ExperienceFeedback.device_id == device_id))
     conversation = get_conversation(db, device_id)
     if conversation is None:
+        db.commit()
         return
     conversation_id = conversation.id
     # Dependents first: this works with SQLite foreign keys enabled and remains idempotent.

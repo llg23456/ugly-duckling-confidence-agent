@@ -6,6 +6,7 @@ from app.api.routes.dev_demo import router as dev_demo_router
 from app.core.config import get_settings
 from app.core.cloud_access import require_cloud_access
 from app.api.routes.cloud_auth import router as cloud_auth_router
+from app.api.routes.experience_feedback import router as experience_feedback_router
 
 settings = get_settings()
 
@@ -44,6 +45,7 @@ def health() -> dict[str, str | bool]:
 
 
 protected_api = APIRouter(dependencies=[Depends(require_cloud_access)])
+protected_api.include_router(experience_feedback_router)
 protected_api.include_router(chat_router)
 protected_api.include_router(events_router)
 protected_api.include_router(multimodal_router)
