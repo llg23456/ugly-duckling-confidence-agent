@@ -27,7 +27,7 @@ class MemoryApiClient(private val baseUrl: String? = null) {
     private val resolvedBaseUrl: String get() = baseUrl ?: ServerEndpoint.current()
 
     private fun request(path: String, method: String, body: String? = null): String {
-        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1$path").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}/api/v1$path").openAuthorizedConnection()).apply {
             requestMethod = method
             connectTimeout = 10_000
             readTimeout = 30_000
@@ -39,7 +39,7 @@ class MemoryApiClient(private val baseUrl: String? = null) {
         }
         try {
             if (body != null) connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             val content = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (status !in 200..299) throw IllegalStateException("记忆服务返回 $status")

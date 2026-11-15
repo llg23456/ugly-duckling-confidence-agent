@@ -12,6 +12,10 @@ object ServerEndpoint {
     private var value: String = BuildConfig.API_BASE_URL.trimEnd('/')
 
     fun initialize(context: Context) {
+        if (BuildConfig.CLOUD_TEST) {
+            value = BuildConfig.API_BASE_URL.trimEnd('/')
+            return
+        }
         value = context.applicationContext
             .getSharedPreferences(STORE_NAME, Context.MODE_PRIVATE)
             .getString(KEY_BASE_URL, BuildConfig.API_BASE_URL)
@@ -35,6 +39,9 @@ object ServerEndpoint {
 
     fun save(context: Context, input: String): String {
         val normalized = normalize(input)
+        require(!BuildConfig.CLOUD_TEST || normalized == BuildConfig.API_BASE_URL.trimEnd('/')) {
+            "云测版使用项目指定服务，无需修改地址"
+        }
         context.applicationContext.getSharedPreferences(STORE_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_BASE_URL, normalized).apply()
         value = normalized

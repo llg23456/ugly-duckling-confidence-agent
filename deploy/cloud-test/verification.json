@@ -1,0 +1,332 @@
+{
+  "device_id": "cloud-smoke-20261113",
+  "health": {
+    "status": "ok",
+    "service": "confidence-agent-api",
+    "environment": "production",
+    "mock": true,
+    "ai_configured": false,
+    "live_ai_enabled": false,
+    "api_key_present": false,
+    "chat_model": "qwen3.8-omni-flash",
+    "tts_model": "qwen3-tts-flash"
+  },
+  "http_chat": "passed (mock)",
+  "messages": 4,
+  "record_events": 3,
+  "weekly_review": "passed",
+  "video_script": "passed (mock)",
+  "video_render": "passed",
+  "video_probe": {
+    "programs": [],
+    "streams": [
+      {
+        "codec_name": "h264",
+        "width": 540,
+        "height": 960
+      },
+      {
+        "codec_name": "aac"
+      }
+    ],
+    "format": {
+      "duration": "1.500000"
+    }
+  },
+  "video_sha256": "c6c27aa860ec09617ef9651799a7ed033dc03039f9e3e10678e8644c93772a1b",
+  "export": "passed",
+  "elapsed_seconds": 1.41,
+  "real_ai_tested": true,
+  "android_playback_tested": false,
+  "verified_date": "2026-11-13",
+  "stage": "private server and real AI verified; Android USB/SSH acceptance passed; independent phone network access pending",
+  "server_region": "cn-chengdu",
+  "image_id": "sha256:75f611c007ec5e16789c453bcb2950f29ae34f1ed7ff009cf7fa2aa0d4cba8ba",
+  "pytest": {
+    "passed": 71,
+    "warnings": 1,
+    "seconds": 19.47,
+    "log_sha256": "0cedbc2a4b149ebad44aa503d2f7c1584d0ac9fed8a59d93690585a8cb870e04"
+  },
+  "container_recreate_persistence": true,
+  "sqlite_backup_integrity": "ok",
+  "restore_drill_messages": 4,
+  "wal_online_backup_verified": true,
+  "backup_retention_verified": 7,
+  "backup_schedule": "03:00 Asia/Shanghai daily",
+  "encrypted_local_backup": "Windows DPAPI CurrentUser; decrypt round-trip verified",
+  "host_business_binding": "127.0.0.1:8000",
+  "local_ssh_tunnel_http_status": 200,
+  "public_https_enabled": false,
+  "device_invitation_auth_implemented": false,
+  "phone_connected": true,
+  "real_ai_passed": true,
+  "latest_ai_health": {
+    "status": "ok",
+    "service": "confidence-agent-api",
+    "environment": "production",
+    "mock": false,
+    "ai_configured": true,
+    "live_ai_enabled": true,
+    "api_key_present": true,
+    "chat_model": "qwen3.8-omni-flash",
+    "tts_model": "qwen3-tts-flash"
+  },
+  "real_ai_attempt": {
+    "steps": {
+      "image": {
+        "status": "passed",
+        "seconds": 2.75
+      },
+      "chat": {
+        "status": "passed",
+        "seconds": 2.8
+      },
+      "tts": {
+        "status": "passed",
+        "seconds": 2.88
+      },
+      "audio": {
+        "status": "passed",
+        "seconds": 3.76
+      },
+      "memory": {
+        "status": "passed",
+        "seconds": 2.92
+      }
+    },
+    "key_origin_confirmed_by_user": "Model Studio cn-beijing standard API key"
+  },
+  "previous_real_ai_attempt": {
+    "steps": {
+      "tts": {
+        "status": "failed",
+        "error_type": "RuntimeError",
+        "error": "HTTP 502: {\"detail\":\"语音合成失败：HTTPStatusError\"}",
+        "seconds": 1.1
+      },
+      "image": {
+        "status": "failed",
+        "error_type": "AssertionError",
+        "error": "",
+        "seconds": 1.11
+      },
+      "chat": {
+        "status": "failed",
+        "error_type": "AssertionError",
+        "error": "DashScope call failed: AuthenticationError",
+        "seconds": 1.13
+      },
+      "audio": {
+        "status": "blocked",
+        "prerequisite": "tts"
+      },
+      "memory": {
+        "status": "blocked",
+        "prerequisite": "chat"
+      }
+    },
+    "auth_diagnosis": {
+      "key_format": {
+        "has_sk_prefix": true,
+        "is_ascii": true,
+        "has_whitespace": false,
+        "quote_wrapped": false
+      },
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "tts_url": "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation",
+      "checks": {
+        "chat": {
+          "status": 401,
+          "code": "invalid_api_key",
+          "message": "Incorrect API key provided. For details, see: https://help.aliyun.com/zh/model-studio/error-code#apikey-error"
+        },
+        "tts": {
+          "status": 401,
+          "code": "InvalidApiKey",
+          "message": "Invalid API-key provided."
+        }
+      }
+    },
+    "key_origin_confirmed_by_user": "Model Studio cn-beijing standard API key"
+  },
+  "real_ai_acceptance": {
+    "device_id": "cloud-live-20261113T051832Z",
+    "fixture": "synthetic content only",
+    "steps": {
+      "image": {
+        "status": "passed",
+        "result": {
+          "modality": "image",
+          "user_text": "请客观描述图片中主要的颜色和形状。",
+          "reply": "图片中是一个红色的长方形，背景是白色的。",
+          "model": "qwen3.8-omni-flash",
+          "mock": false,
+          "user_message_id": 9,
+          "assistant_message_id": 10,
+          "evidence": [],
+          "strategy": "listen",
+          "check_in_scheduled": false,
+          "safety_triggered": false
+        },
+        "seconds": 2.75
+      },
+      "chat": {
+        "status": "passed",
+        "result": {
+          "reply": "你好，云测小林。在图书馆安静学习的状态很适合沉淀自己。既然今天已经完整练习了两次，不妨先回顾一下这两次的录音或笔记，看看哪一句表达起来最顺畅、最像真实的你？",
+          "strategy": "listen",
+          "evidence": [],
+          "mock": false,
+          "model": "qwen3.8-omni-flash",
+          "mock_reason": null,
+          "user_message_id": 11,
+          "assistant_message_id": 12,
+          "check_in_scheduled": false,
+          "safety_triggered": false
+        },
+        "seconds": 2.8
+      },
+      "tts": {
+        "status": "passed",
+        "result": {
+          "bytes": 265004,
+          "sha256": "cf6b9ff237c91e5e5036b7729b071c2bb655961f0cf3e604e0fd9bf3635af494",
+          "probe": {
+            "programs": [],
+            "streams": [
+              {
+                "codec_name": "pcm_s16le",
+                "sample_rate": "24000"
+              }
+            ],
+            "format": {
+              "duration": "5.520000"
+            }
+          }
+        },
+        "seconds": 2.88
+      },
+      "audio": {
+        "status": "passed",
+        "result": {
+          "modality": "audio",
+          "user_text": "啊，今天我练习了自我介绍，也向老师请教了一个问题。",
+          "reply": "自我介绍练熟了，还主动问了老师问题？这节奏挺稳的。",
+          "model": "qwen3.8-omni-flash",
+          "mock": false,
+          "user_message_id": 13,
+          "assistant_message_id": 14,
+          "evidence": [],
+          "strategy": "listen",
+          "check_in_scheduled": false,
+          "safety_triggered": false
+        },
+        "seconds": 3.76
+      },
+      "memory": {
+        "status": "passed",
+        "result": {
+          "memories": [
+            {
+              "id": 1,
+              "content": "用户的名字是云测小林",
+              "status": "active",
+              "source_id": 11,
+              "source_date": "2026-11-13",
+              "source_type": "chat",
+              "value_score": 0.605,
+              "sensitivity": "low",
+              "kind": "identity",
+              "confidence": 1.0,
+              "canonical_key": "identity:preferred_name",
+              "source_excerpt": "我叫云测小林",
+              "temporal_scope": "ongoing",
+              "fact_status": "asserted",
+              "last_seen_at": "2026-11-13T05:18:40.883124",
+              "occurrence_count": 1,
+              "supersedes_id": null,
+              "created_at": "2026-11-13T05:18:41.195443"
+            }
+          ],
+          "reply": {
+            "reply": "你叫云测小林。刚才提到你喜欢在图书馆安静学习，今天已经完整练习了两次自我介绍。如果现在想继续打磨，我们可以从你最满意的那一次开始复盘。",
+            "strategy": "listen",
+            "evidence": [
+              {
+                "summary": "用户的名字是云测小林",
+                "source_date": "2026-11-13",
+                "source_type": "chat",
+                "source_id": 11,
+                "source_record_id": null,
+                "memory_id": 1,
+                "kind": "identity",
+                "confidence": 1.0,
+                "relevance_score": 0.5021
+              }
+            ],
+            "mock": false,
+            "model": "qwen3.8-omni-flash",
+            "mock_reason": null,
+            "user_message_id": 15,
+            "assistant_message_id": 16,
+            "check_in_scheduled": false,
+            "safety_triggered": false
+          },
+          "extraction_models": [
+            "qwen3.7-flash"
+          ],
+          "embedding_models": [
+            "qwen3.7-text-embedding-flash"
+          ]
+        },
+        "seconds": 2.92
+      }
+    },
+    "android_playback_tested": false,
+    "started_at": "2026-11-13T05:18:32.809265+00:00",
+    "health": {
+      "status": "ok",
+      "service": "confidence-agent-api",
+      "environment": "production",
+      "mock": false,
+      "ai_configured": true,
+      "live_ai_enabled": true,
+      "api_key_present": true,
+      "chat_model": "qwen3.8-omni-flash",
+      "tts_model": "qwen3-tts-flash"
+    },
+    "completed_at": "2026-11-13T05:20:52.575180+00:00",
+    "all_passed": true,
+    "memory_fixture_note": "The original preference assertion was too broad: the pipeline retained the explicit synthetic name as an active identity memory. Rechecked that fixed identity with source IDs, evidence and real recall; other completed model calls were not repeated.",
+    "previous_memory_check": {
+      "status": "failed",
+      "error_type": "AssertionError",
+      "error": "No extracted library preference found within 65 seconds",
+      "seconds": 65.47
+    }
+  },
+  "android_acceptance": {
+    "device_model": "25060RK16C",
+    "android_version": "16",
+    "package": "com.testconnection.confidence_agent.cloudtest",
+    "app_label": "小丑鸭·云测",
+    "apk_sha256": "1b306de93b2cec5e7727d3701909c95ae877391aad3cb41fdb49af6e1d3323cb",
+    "installed_apk_sha256_matches": true,
+    "jvm_tests_passed": 17,
+    "transport": "USB adb reverse -> Windows localhost:18000 -> SSH -> ECS localhost:8000",
+    "chat_to_real_cloud_model": true,
+    "saved_record_synced_to_cloud": true,
+    "current_week_growth_sources_visible": true,
+    "weekly_report_visible": true,
+    "chat_preserved_after_force_stop_and_reopen": true,
+    "independent_phone_internet_tested": false,
+    "screenshots_sha256": {
+      "phone-chat-confirmed.png": "2e013423e669455049dd9bd95cf828b01da922eee248c547b6ddc25d4a3bccbc",
+      "phone-record-saved.png": "17516e6f300e65c8597f740eb55e04bea6add588c30d222d0325c3cb523f2a67",
+      "phone-week-loaded.png": "97e155e1dd90c26ff621607cee36877fa4bd0b763e2526cb363bde4e76c1fd0e",
+      "phone-week-report.png": "6bf5a9cfb81752031e885a1f5d1fb90d933c2837a4d068560a162c066944444f",
+      "phone-reopened.png": "c32f45cfc56eaad2436986033ed37c3079687e2e0c4d3fb56369136ab5955c2c"
+    }
+  }
+}

@@ -185,7 +185,7 @@ class StressApiClient(private val baseUrl: String? = null) {
     }
 
     private fun request(path: String, method: String, body: JSONObject? = null): JSONObject {
-        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}$path").openConnection() as HttpURLConnection).apply {
+        val connection = (URL("${resolvedBaseUrl.trimEnd('/')}$path").openAuthorizedConnection()).apply {
             requestMethod = method
             connectTimeout = 10_000
             readTimeout = 40_000
@@ -199,7 +199,7 @@ class StressApiClient(private val baseUrl: String? = null) {
             body?.let { payload ->
                 connection.outputStream.use { it.write(payload.toString().toByteArray(Charsets.UTF_8)) }
             }
-            val status = connection.responseCode
+            val status = connection.checkedResponseCode()
             val text = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             if (status !in 200..299) {

@@ -114,6 +114,8 @@ def upgrade_existing_sqlite(engine) -> None:
 
 @lru_cache
 def engine_for_url(database_url: str):
+    from app.core import cloud_access  # Register additive cloud access tables before create_all.
+
     engine = create_engine(
         database_url,
         connect_args={"check_same_thread": False} if database_url.startswith("sqlite") else {},

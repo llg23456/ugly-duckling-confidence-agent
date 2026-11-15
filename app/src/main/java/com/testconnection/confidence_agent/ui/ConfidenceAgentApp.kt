@@ -75,6 +75,11 @@ fun ConfidenceAgentApp(
     onExternalDestinationConsumed: () -> Unit = {},
     onExitRequest: () -> Unit = {},
 ) {
+    val cloudAuthorized by com.testconnection.confidence_agent.data.remote.CloudAccess.authorized.collectAsState()
+    if (com.testconnection.confidence_agent.BuildConfig.CLOUD_TEST && !cloudAuthorized) {
+        com.testconnection.confidence_agent.ui.screens.CloudAccessScreen()
+        return
+    }
     val context = LocalContext.current
     var selectedDestination by rememberSaveable { mutableStateOf(AppDestination.HOME) }
     var communityDetailOpen by rememberSaveable { mutableStateOf(false) }
