@@ -1,5 +1,20 @@
 # 云测服务器：使用、连接与更新
 
+## 当前在线发布（2026-11-15 16:47，北京时间）
+
+本次已按用户授权完成实际 SSH 部署，在线发布为 `20261115-hk07-6f750ce`，业务源提交为 `6f750ce`（已包含 `83e7a21` 的问卷合并修复及同事的压力度量功能）。下方早前“队友部署、未验证SSH”等描述保留为历史记录，不能用于判断本次连接或上线状态。
+
+- 发布前备份：`/opt/ugly-duckling-cloudtest/backups/pre-hk07/confidence-agent-20261115T084402249537Z.sqlite3`；上一版 `20261115-hk06-c9ff668` 保留，可用于回退镜像。
+- 新 Linux 镜像257项后端测试通过、1项跳过（Android题库一致性在本地已通过，后端镜像不含Android源码）。测试使用隔离临时库、禁用网络和模型，不接触生产数据。
+- 在生产备份的独立副本上执行自动升级，原18张表旧列的全部数据保持一致；六张压力相关表和 `messages.image_observation` 字段存在，SQLite完整性及外键检查通过。没有用本地数据库覆盖生产库。
+- 公网受邀业务验收19项通过：自评保存、情绪不直接替代压力分数、真实模型证据、权重调整、异步记录评分、删除来源重算、7/30/365天趋势、问卷导出兼容、数据删除及401/403边界。另有公网5项基础检查通过。
+- Compose显式固定 `NOTIFICATION_MODE=disabled`、`WELLBEING_MODEL_TIMEOUT=15`；云端手机短信启用和领取接口均返回409，通知没有发送。模型Key、数据库及授权沿用服务器现有配置。
+- 验收仅使用独立合成身份，数据已删除、凭据已撤销；本次没有重新进行手机界面验收。健康接口和真实聊天模型均已分别验证，不能将单次响应耗时视作并发性能结论。
+
+可复现脚本为 `deploy/cloud-test/wellbeing-smoke.py`；会产生少量真实模型调用费用，并在结束时清理其测试身份的数据。执行：`docker compose -f deploy/cloud-test/compose.yaml exec -T api python - < deploy/cloud-test/wellbeing-smoke.py`。
+
+本次JSON报告位于本机外层 `../docs/maintenance/2026-11-15/wellbeing-hk07/`，服务器保留 `/backups/wellbeing-verification.json` 及当前发布目录中的升级验证结果。镜像仅发布后端；手机需要运行包含压力功能的云测 `debug` 版。
+
 ## 早前连接检查记录（2026-11-15）
 
 - 公网入口：`https://api.yaligo-growth.top`；仓库记录的香港 ECS 地址：`47.83.165.140`。
