@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -155,11 +156,11 @@ fun GrowthScreen(
         when (state.period) {
             "日" -> {
                 item { DailyOverview(state.anchorDate, state.review) }
-                item { DaySources(state.anchorDate, state.review, ::openMoment, onAddRecord) }
+                item { DaySources(state.anchorDate, state.review, ::openMoment, onAddRecord, state.chatImagePaths) }
             }
             "周" -> {
                 if (isExamWeek) item { ExamWeekStoryHero() }
-                item { GrowthTimeline(state.review?.moments.orEmpty(), ::openMoment) }
+                item { GrowthTimeline(state.review?.moments.orEmpty(), ::openMoment, state.chatImagePaths) }
                 if (isExamWeek) item { ExamWeekStoryClosing() }
                 item {
                     OutlinedButton(
@@ -287,28 +288,18 @@ private fun RangeNavigator(title: String, loading: Boolean, onPrevious: () -> Un
 
 @Composable
 private fun DailyOverview(date: LocalDate, review: ReviewSummary?) {
-    var expanded by remember(date) { mutableStateOf(false) }
     WarmCard {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SectionHeading(if (date == LocalDate.now().minusDays(1)) "昨天的生活回望" else date.format(chineseDate),
-                "当天的一句话")
+            SectionHeading(if (date == LocalDate.now()) "今天的生活回望" else if (date == LocalDate.now().minusDays(1)) "昨天的生活回望" else date.format(chineseDate))
             if (review == null || review.sourceEventIds.isEmpty()) {
-                Text("这一天还没有留下记录。空白也没有关系，生活不需要每天都交作业。",
+                Text("这一天还没有留下记录。",
                     style = MaterialTheme.typography.bodyLarge)
                 return@Column
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    ReviewSection("发生了什么", shortSummary(review))
-                }
-                DuckArt(R.drawable.duck_writing, "翻看一天记录的小鸭", Modifier.size(86.dp))
+                Text(shortSummary(review), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                DuckArt(R.drawable.duck_writing, "翻看一天记录的小鸭", Modifier.size(64.dp))
             }
-            if (expanded) {
-                review.sections.forEach { ReviewSection(it.title, it.content) }
-                if (review.sections.isEmpty()) Text(review.story)
-                Text(review.closing.ifBlank { "愿意留下这些，就已经是在认真看见自己。" }, color = SageDark)
-            }
-            TextButton(onClick = { expanded = !expanded }) { Text(if (expanded) "收起完整回望 ▴" else "展开完整回望 ▾") }
         }
     }
 }
@@ -319,6 +310,7 @@ private fun DaySources(
     review: ReviewSummary?,
     onOpen: (ReviewMoment) -> Unit,
     onAddRecord: (LocalDate) -> Unit,
+    chatImagePaths: Map<Long, String>,
 ) {
     var expanded by remember(date) { mutableStateOf(false) }
     WarmCard {
@@ -329,6 +321,7 @@ private fun DaySources(
             (if (expanded) moments else moments.take(3)).forEach { moment ->
                 Surface(onClick = { onOpen(moment) }, shape = RoundedCornerShape(18.dp), color = SagePale) {
                     Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        moment.sourceMessageId?.let(chatImagePaths::get)?.let { ChatSourceThumbnail(it) }
                         Text(moment.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         Text(sourceLabel(moment), style = MaterialTheme.typography.bodyMedium, color = SageDark)
                     }
@@ -345,7 +338,7 @@ private fun DaySources(
 }
 
 @Composable
-private fun GrowthTimeline(moments: List<ReviewMoment>, onOpen: (ReviewMoment) -> Unit) {
+private fun GrowthTimeline(moments: List<ReviewMoment>, onOpen: (ReviewMoment) -> Unit, chatImagePaths: Map<Long, String> = emptyMap()) {
     var expanded by remember(moments) { mutableStateOf(false) }
     WarmCard {
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -362,7 +355,8 @@ private fun GrowthTimeline(moments: List<ReviewMoment>, onOpen: (ReviewMoment) -
                         modifier = Modifier.padding(start = 12.dp).weight(1f)) {
                         Column {
                             Text(moment.date, style = MaterialTheme.typography.bodyMedium, color = SageDark)
-                            Text(moment.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            moment.sourceMessageId?.let(chatImagePaths::get)?.let { ChatSourceThumbnail(it) }
+                        Text(moment.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -458,10 +452,10 @@ private fun meaningful(value: String, emptyPrefix: String): String =
     value.takeUnless { it.isBlank() || it.startsWith(emptyPrefix) }.orEmpty()
 
 private fun shortSummary(review: ReviewSummary): String {
-    val moments = review.moments
-    if (moments.isEmpty()) return "这一天留下了 ${review.sourceEventIds.size} 条记录。"
-    if (moments.size == 1) return shortText(moments.first().title)
-    return "留下了 ${moments.size} 个片段：${shortText(moments.first().title, 34)}；后来，${shortText(moments.last().title, 34)}"
+    val text = review.oneSentence.ifBlank { review.moments.lastOrNull()?.title.orEmpty() }
+    if (text.isBlank()) return "这一天留下了 ${review.sourceEventIds.size} 条记录。"
+    val sentence = text.split(Regex("[。！？!?\\n]")).firstOrNull { it.isNotBlank() }.orEmpty()
+    return shortText(sentence, 70).trimEnd('。') + "。"
 }
 
 private fun weekCardSummary(review: ReviewSummary?): String {
@@ -489,4 +483,22 @@ private fun rangeTitle(state: GrowthUiState): String = when (state.period) {
     "日" -> state.anchorDate.format(chineseDate)
     "周" -> state.review?.let { "${it.rangeStart} — ${it.rangeEnd}" } ?: "一周"
     else -> "${state.anchorDate.year}年${state.anchorDate.monthValue}月"
+}
+
+@Composable
+private fun ChatSourceThumbnail(path: String) {
+    val bitmap by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, path) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val options = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            android.graphics.BitmapFactory.decodeFile(path, options)
+            options.inSampleSize = maxOf(1, maxOf(options.outWidth, options.outHeight) / 700)
+            options.inJustDecodeBounds = false
+            android.graphics.BitmapFactory.decodeFile(path, options)?.asImageBitmap()
+        }
+    }
+    bitmap?.let {
+        androidx.compose.foundation.Image(it, "发给小鸭的图片", Modifier.fillMaxWidth().height(160.dp),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit)
+        Spacer(Modifier.height(8.dp))
+    }
 }

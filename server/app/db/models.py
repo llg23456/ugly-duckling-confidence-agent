@@ -46,6 +46,7 @@ class Message(Base):
     modality: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text)
     media_ref: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    image_observation: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_mock: Mapped[bool] = mapped_column(default=False)
     used_memory_ids: Mapped[list[int] | None] = mapped_column(JSON, default=list, nullable=True)
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -264,4 +265,80 @@ class StressAlert(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class WellbeingPreference(Base):
+    __tablename__ = "wellbeing_preferences"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), unique=True)
+    reminder_threshold: Mapped[int] = mapped_column(default=70)
+    self_weight: Mapped[int] = mapped_column(default=70)
+    auto_notify: Mapped[bool] = mapped_column(Boolean, default=False)
+    consent_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    consented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DailyCheckIn(Base):
+    __tablename__ = "daily_check_ins"
+    __table_args__ = (UniqueConstraint("conversation_id", "day", name="uq_daily_check_in"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    day: Mapped[str] = mapped_column(String(10))
+    mood: Mapped[int] = mapped_column()
+    pressure: Mapped[int] = mapped_column()
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class WellbeingSignal(Base):
+    __tablename__ = "wellbeing_signals"
+    __table_args__ = (UniqueConstraint("conversation_id", "source_kind", "source_id", name="uq_wellbeing_source"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    source_kind: Mapped[str] = mapped_column(String(16))
+    source_id: Mapped[int] = mapped_column()
+    content_hash: Mapped[str] = mapped_column(String(64))
+    day: Mapped[str] = mapped_column(String(10), index=True)
+    pressure: Mapped[int | None] = mapped_column(nullable=True)
+    assessment: Mapped[dict] = mapped_column(JSON)
+    model: Mapped[str] = mapped_column(String(100))
+    prompt_version: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class TrustedContact(Base):
+    __tablename__ = "trusted_contacts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    support_person_id: Mapped[int] = mapped_column(ForeignKey("support_people.id"), unique=True)
+    phone: Mapped[str] = mapped_column(String(24))
+    verification_kind: Mapped[str] = mapped_column(String(16), default="pending")
+    code_digest: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    code_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(default=0)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DailyStressSnapshot(Base):
+    __tablename__ = "daily_stress_snapshots"
+    __table_args__ = (UniqueConstraint("conversation_id", "day", name="uq_daily_stress"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    day: Mapped[str] = mapped_column(String(10))
+    value: Mapped[dict] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class NotificationOutbox(Base):
+    __tablename__ = "notification_outbox"
+    __table_args__ = (UniqueConstraint("signal_id", "contact_id", name="uq_notification_event_contact"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id"), index=True)
+    signal_id: Mapped[int] = mapped_column(ForeignKey("wellbeing_signals.id"))
+    contact_id: Mapped[int] = mapped_column(ForeignKey("trusted_contacts.id"))
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    attempts: Mapped[int] = mapped_column(default=0)
+    provider_ref: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

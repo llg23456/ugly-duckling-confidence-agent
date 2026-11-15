@@ -27,12 +27,13 @@ data class WeeklyReviewEntry(val start: LocalDate, val end: LocalDate, val revie
 
 data class GrowthUiState(
     val period: String = "日",
-    val anchorDate: LocalDate = LocalDate.now().minusDays(1),
+    val anchorDate: LocalDate = LocalDate.now(),
     val events: List<GrowthEvent> = emptyList(),
     val review: ReviewSummary? = null,
     val dailyReviews: List<DailyReviewEntry> = emptyList(),
     val weeklyReviews: List<WeeklyReviewEntry> = emptyList(),
     val recordIds: Map<Long, String> = emptyMap(),
+    val chatImagePaths: Map<Long, String> = emptyMap(),
     val loading: Boolean = false,
     val refreshing: Boolean = false,
     val error: String? = null,
@@ -53,11 +54,23 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
     private val _state = MutableStateFlow(GrowthUiState())
     private var requestVersion = 0
     private val lastAnchors = mutableMapOf(
-        "日" to LocalDate.now().minusDays(1),
-        "周" to weekStart(LocalDate.now()).minusWeeks(1),
+        "日" to LocalDate.now(),
+        "周" to weekStart(LocalDate.now()),
         "月" to YearMonth.from(LocalDate.now()).atDay(1),
     )
     val state = _state.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            com.testconnection.confidence_agent.data.repository.ChatRepository(application).observeHistory().collect { messages ->
+                _state.update { state -> state.copy(chatImagePaths = messages.mapNotNull { message ->
+                    val id = message.id
+                    val path = message.imagePath
+                    if (id != null && path != null) id to path else null
+                }.toMap()) }
+            }
+        }
+    }
 
     fun localRecordFor(serverId: Long): RecordDraft? {
         val clientId = _state.value.recordIds[serverId] ?: return null
@@ -115,14 +128,14 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
                 api.syncRecords(deviceId, localRecords.load())
             }.onFailure { syncFailed = true }.getOrDefault(emptyList())
             val (eventsResult, periodResult) = coroutineScope {
-                val eventsDeferred = async { runCatching { api.events(deviceId) } }
+                val eventsDeferred = async { runCatching { api.events(deviceId, includeAllSources = true) } }
                 val periodDeferred = async { runCatching { loadPeriod(period, anchor) } }
                 eventsDeferred.await() to periodDeferred.await()
             }
             val events = eventsResult.getOrDefault(_state.value.events)
             if (eventsResult.isSuccess) com.testconnection.confidence_agent.data.preferences.ProfileJourneyStore(getApplication())
-                .reconcile(events, synced.associate { it.serverId to it.clientId })
-            if (eventsResult.isSuccess) runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication(), events) }
+                .reconcile(events.filter { it.id > 0 }, synced.associate { it.serverId to it.clientId })
+            if (eventsResult.isSuccess) runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication(), events.filter { it.id > 0 }) }
             val periodData = periodResult.getOrNull() ?: cachedData
             if (syncFailed || periodResult.isFailure) reviewCache.markDirty()
             if (version != requestVersion) return@launch
@@ -154,7 +167,7 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         val today = LocalDate.now()
         val next = when (state.period) {
-            "日" -> state.anchorDate.plusDays(amount).coerceAtMost(today.minusDays(1))
+            "日" -> state.anchorDate.plusDays(amount).coerceAtMost(today)
             "周" -> weekStart(state.anchorDate).plusWeeks(amount).coerceAtMost(weekStart(today))
             else -> YearMonth.from(state.anchorDate).plusMonths(amount).coerceAtMost(YearMonth.from(today)).atDay(1)
         }
@@ -274,12 +287,12 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
 
     private suspend fun refreshSourceEventsAndRecordIds() {
         val syncedResult = runCatching { api.syncRecords(deviceId, localRecords.load()) }
-        val eventsResult = runCatching { api.events(deviceId) }
+        val eventsResult = runCatching { api.events(deviceId, includeAllSources = true) }
         val events = eventsResult.getOrNull()
         if (events != null) {
             com.testconnection.confidence_agent.data.preferences.ProfileJourneyStore(getApplication())
-                .reconcile(events, syncedResult.getOrNull().orEmpty().associate { it.serverId to it.clientId })
-            runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication(), events) }
+                .reconcile(events.filter { it.id > 0 }, syncedResult.getOrNull().orEmpty().associate { it.serverId to it.clientId })
+            runCatching { WidgetUpdater.refreshGrowthWidgets(getApplication(), events.filter { it.id > 0 }) }
         }
         val synced = syncedResult.getOrNull().orEmpty()
         if (events != null || synced.isNotEmpty()) {

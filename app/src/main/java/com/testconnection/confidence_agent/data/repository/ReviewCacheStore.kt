@@ -8,7 +8,7 @@ class ReviewCacheStore(context: Context) {
     private val preferences = context.applicationContext
         .getSharedPreferences("review_overview_cache", Context.MODE_PRIVATE)
 
-    private fun key(period: String, start: String, end: String) = "$period:$start:$end"
+    private fun key(period: String, start: String, end: String) = "concise-day-v4:$period:$start:$end"
 
     fun load(period: String, start: String, end: String): ReviewOverview? {
         val raw = preferences.getString("json:${key(period, start, end)}", null) ?: return null
@@ -31,7 +31,7 @@ class ReviewCacheStore(context: Context) {
         val generation = preferences.getLong("generation", 0L)
         if (preferences.getLong("generation:$cacheKey", -1L) != generation) return false
         val savedAt = preferences.getLong("saved:$cacheKey", 0L)
-        return savedAt > 0L && System.currentTimeMillis() - savedAt < maxAgeMs
+        return savedAt > 0L && System.currentTimeMillis() - savedAt < if (end == java.time.LocalDate.now().toString()) minOf(maxAgeMs, 15_000L) else maxAgeMs
     }
 
     @Synchronized

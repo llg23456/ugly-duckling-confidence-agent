@@ -1,140 +1,228 @@
-# 受邀云测环境
+# 云测服务器：使用、连接与更新
 
-2026-11-14 已完成公网 HTTPS 和 Android 真机独立联网验收。入口为 `https://api.yaligo-growth.top`，香港 ECS `47.83.165.140`，当前后端发布为 `20261115-hk06-c9ff668`。云测版首次输入一次邀请码，后续可直接联网使用，无需 WireGuard、USB、电脑后端或 SSH 隧道。
+## 早前连接检查记录（2026-11-15）
 
-2026-11-14 23:38（Asia/Shanghai）已将本地合并提交 `3e7e5d1` 的后端部署到香港，发布前完成 SQLite 一致性备份，新镜像隔离运行后端测试 89 项通过。公网 HTTPS 压力趋势验收 11 项通过：无数据返回七天“暂无”、正常记录显示平稳、未触发提醒仍返回压力趋势、较强连续压力触发提醒、删除来源更新趋势、聊天纳入统计、删除全部归零，以及 401/403 认证隔离。测试身份的数据和凭据已清理/撤销，后台任务结束后再次确认无残留。详见 [本轮验收结果](stress-trend-verification.json)。本轮未重新进行手机界面验收。
+- 公网入口：`https://api.yaligo-growth.top`；仓库记录的香港 ECS 地址：`47.83.165.140`。
+- 本轮已验证：公网 5 项基本检查通过，SSH TCP 22 可达，本地 28 项基础后端测试通过。
+- 健康接口报告 `production`、`ai_configured=true`、`mock=false`、`authentication_required=true`。
+- 本轮按确认的分工只做连接与基础接口检查：你负责本地修改、验证和推送源码，队友负责服务器部署，不配置本机 SSH。
+- **未验证且不属于本轮连接检查范围**：SSH 管理登录、服务器实际发布版本/容器/备份状态、带授权的真实模型调用及手机功能。
+- 部署由队友完成，本机没有原部署私钥和已核验主机记录。历史记录中的 `20261114-hk05-3e7e5d1` 是上次记录的版本，不能视为本轮已核实的在线版本。
 
-本轮业务源提交为 `3e7e5d1`，镜像和备份 SHA-256 见验收结果。旧发布 `20261114-hk04` 和发布前备份保留。当前根 `.env` 仅固定 `APP_VERSION=20261114-hk05-3e7e5d1`，`deploy/cloud-test/.env` 继续链接服务器独立保存的 `config/runtime.env`；模型 Key 和现有用户数据库沿用。日常运维仍从 `current` 目录运行 Compose。
+本轮原始检查结果在外层 `docs/maintenance/2026-11-15/`。旧恢复记录和验收 JSON 已移到外层 `docs/archive/2026-11-15-cleanup/deployment-history/`。
 
-可复查的公网验收脚本为 [stress-trend-smoke.py](stress-trend-smoke.py)。在服务器当前发布目录运行 `docker compose -f deploy/cloud-test/compose.yaml exec -T api python - < deploy/cloud-test/stress-trend-smoke.py`；脚本会生成独立测试身份、调用真实记录和聊天接口，并在结束时删除该身份的数据和撤销凭据，可能产生少量模型调用费用。不要用于导入个人数据。
+## 本次功能更新交接（2026-11-15）
 
-此前云测验收证据分别见 [域名及证书](domain-verification.json)、[公网认证接口](access-verification.json) 和 [真机验收](phone-verification.json)。后端测试 80 项、Android JVM 测试 18 项通过。此前新身份记忆提取未落库，以及并发多模态请求约 19–22 秒的问题仍待专项排查；本次单次公网聊天约 1.91 秒，不能据此认定并发性能问题已解决。
+这版同时更新 Android 和后端：压力自评与趋势、危险表达语义复核、按本轮求助需要选择联系人、两页行动卡、每日一句话回望、聊天与图片来源关联。运行素材、图标和许可文件已放在 `app/src` 与 `server/app/assets`；外层 `docs` 只存开发资料和测试报告，构建与运行不依赖该目录。
 
-## 安装与邀请
+- 从本次 `main` 提交发布，先备份生产数据库，再按下文创建新发布目录、构建镜像和启动容器。Git push 不会自动部署。
+- 沿用服务器的 `config/runtime.env`，不复制开发电脑的 `.env` 或数据库。核对 `ENABLE_LIVE_AI=true`、已有百炼 Key 及模型访问权限；如果 Key 开启 IP 白名单，确认允许服务器的实际出口公网 IP。
+- 新配置使用 `NOTIFICATION_MODE=disabled`、`WELLBEING_MODEL_TIMEOUT=15`；`COUNSELING_URL` 是可选的已核验机构 HTTPS 预约页，不配置则不显示入口。保持 Compose 中的 `APP_ENV=production` 和 `CLOUD_AUTH_REQUIRED=true`。
+- 容器启动脚本会创建六张压力/联系人/通知表，并给 `messages` 增补 `image_observation` 字段。现有会话、记录和云测凭据继续使用原数据库；发布前仍需一致性备份，不能以本地库覆盖生产库。
+- **真实手机 SIM 自动短信仍仅用于 `localDebug` + 开发后端。云测 App 和生产 API 都禁用此通道，本次发布不会开启云端短信。** 生产中可以保存手机号、使用联系人建议，但不能开启自动提醒；云端通知需要后续独立适配。
+- 先更新后端，再用最新源码运行云测 `debug` 版 App（保留原应用数据和签名）。本地 `localDebug` 使用独立包名、数据库和设备身份，本地数据不会自动迁到云端。
+- 更新后确认容器 healthy、`/health` 正常、未授权业务请求为 401；再由受邀测试设备验证压力自评、聊天后的联系人选择、日回望和原始记录。健康接口的 `ai_configured` 只表示配置存在，模型是否成功需要检查真实业务响应。
 
-本地交付文件：`artifacts/cloud-test/20261114/ugly-duckling-cloudtest.apk`。包名 `com.testconnection.confidence_agent.cloudtest`，名称“鸭力Go·云测”，与原应用独立保存数据。该文件是受邀测试用 Debug APK，不是应用商店正式发布包。可运行 `build-apk.ps1` 重新构建并运行 Android JVM 测试；默认 SDK 为 `D:\Android\Sdk`。
+提交前已验证干净源码快照：后端 241 项测试通过，Android 两种配置编译通过、各 22 项单元测试通过；另以旧 main 的合成数据库验证自动升级及生产鉴权，新旧数据与凭据保留。本机未安装 Docker，本地 Python 依赖也与部署锁文件存在版本差异；这些结果不能替代 Linux 镜像验证。队友仍需执行下文的镜像构建及镜像内测试，成功后才替换生产容器。
 
-Android Studio 的普通 `Run app`、无参数 `assembleDebug` 与打包脚本已统一为云测入口；不再需要 `-PcloudTest` 或 `-PapiBaseUrl`，也不再提供本地版构建。请确认 IDE 打开的是本分支工作区，Sync 后选择 `app` / `debug` 即可。
+## 服务器如何工作
 
-### 电脑端批量邀请（推荐）
-
-Windows 电脑双击本目录下的 `批量生成邀请码.cmd`，输入数量后回车；直接回车默认生成 20 个。无需打开 Workbench。电脑需有 Windows OpenSSH、部署用 SSH 私钥及已核验的主机记录；当前电脑已配置。新电脑需单独配置其管理员密钥，不要把本机私钥随 APK 或脚本分发。
-
-也可以在项目根目录使用 PowerShell：
-
-```powershell
-.\deploy\cloud-test\generate-invites.ps1 -Count 20
-# 示例：50 个，14 天内兑换，授权到期为生成后的第 45 天
-.\deploy\cloud-test\generate-invites.ps1 -Count 50 -InviteDays 14 -AccessDays 45
+```text
+手机 App
+  │ HTTPS + 设备授权令牌
+  ▼
+api.yaligo-growth.top → 香港 ECS（47.83.165.140）
+  │ Caddy：HTTPS 证书、入口路由、请求大小限制
+  ▼
+127.0.0.1:8000 → Docker 中的 FastAPI
+  ├─ SQLite：聊天、记录、记忆、邀请、授权和配额
+  ├─ 百炼模型：对话、提取、语音等（Key 仅在后端）
+  └─ FFmpeg：成长小片合成
 ```
 
-默认 **7 天内兑换、授权到期为生成后的第 30 天**，两者都从生成时间计算；例如第 7 天兑换，约剩 23 天授权。数量范围 1–200，兑换期限 1–30 天，授权期限 1–90 天，兑换期限不能长于授权期限。每个邀请码只可兑换一次，仅用于新设备首次授权。
+服务器是一台持续开机的远程 Linux 电脑。Docker 将后端代码和依赖装成镜像，Compose 按配置启动容器；Caddy 对外提供 HTTPS，后端端口只绑定服务器本机。手机使用互联网直接请求服务器，你的开发电脑关机不会中断服务。
 
-清单自动保存到项目的 `artifacts/cloud-test/invites/`（已被 Git 忽略），文件名含时间和批次标识；用 Excel 打开即可。字段为 `label`（编号）、`invite_code`（邀请码）、`redeem_before`（兑换截止）、`access_until`（授权到期）、`recipient`（领取人）、`note`（备注）。日期带 `+08:00`，为北京时间。电脑清单仅授予当前 Windows 用户访问权限；完整清单属于管理资料，每次只向一人发送一个邀请码。
+三种凭据用途不同：**SSH 私钥**用于管理服务器；**邀请码/设备令牌**用于 App 授权；**百炼 Key**用于后端调用模型。Git 仓库不保存这些凭据。
 
-服务器在 `/root/cloud-invites/` 保留 root 专用清单。若下载中断，按脚本输出的服务器路径用 SCP 重新下载，避免重复运行而生成另一批。服务器数据库只保存摘要，无法从数据库恢复邀请码明文；明文仅保留在这两份管理清单。
+配置中约定的持久化位置如下，实际状态需登录后核对：
 
-批量工具不调用 AI、不占用模型额度。它通过 SSH 在当前容器内执行运维目录的独立脚本，不需要重新部署应用。服务器首次安装或替换工具（仅组织者）可以从项目根目录执行以下命令；应沿用部署时的 `StrictHostKeyChecking=yes`、`UserKnownHostsFile` 和 `IdentityFile` SSH 选项：
+| 服务器路径 | 用途 |
+| --- | --- |
+| `/opt/ugly-duckling-cloudtest/current` | 指向当前发布目录的软链接 |
+| `/opt/ugly-duckling-cloudtest/releases/` | 每次发布的独立源码目录 |
+| `/opt/ugly-duckling-cloudtest/config/runtime.env` | 独立保存模型和运行配置 |
+| `/opt/ugly-duckling-cloudtest/data/confidence_agent.db` | 持久化 SQLite 主库 |
+| `/opt/ugly-duckling-cloudtest/backups/` | 数据库一致性备份 |
+| `/opt/ugly-duckling-cloudtest/tools/cloud_invites.py` | 批量邀请管理工具 |
+
+代码、配置、数据分开保存。因此常规更新容器不会自动清空用户数据；不要删除数据目录，也不要用本机数据库覆盖服务器。已有文档记录每天北京时间 03:00 定时备份，本轮尚未登录核实定时任务。
+
+## 你怎样使用
+
+手机端继续使用云测版，有授权就直接进入；首次安装需要独立邀请码。Android Studio Run 会更新手机应用，不会更新服务器。电脑无需启动本地 Python 服务。
+
+电脑只做公网基本检查时，在项目根目录运行：
+
+```powershell
+.\deploy\cloud-test\check-public.ps1
+```
+
+该脚本检查健康、站点入口、未授权请求 401 和公网 API 文档 404，不调用模型，不触碰已有数据。`/health` 的 AI 字段只反映配置；某次真实调用是否成功要检查该次响应的 `mock` / `mock_reason`。
+
+## SSH 管理连接
+
+推荐每位维护者使用自己的 SSH 密钥。私钥留在各自电脑，公钥由已有管理员添加到服务器授权列表；服务器主机指纹也应通过队友或已登录的云控制台核验。不要把私钥放进 Git，也不要用关闭主机校验的方法绕过缺少主机记录的问题。
+
+现有脚本默认读取这两个本机文件：
+
+```text
+%USERPROFILE%\.ssh\ugly_duckling_cloudtest
+%USERPROFILE%\.ssh\ugly_duckling_cloudtest_known_hosts
+```
+
+这两个文件不是每台电脑自动拥有的；新维护者需要先完成授权。配置完成后，在 PowerShell 设置连接参数：
 
 ```powershell
 $sshOptions = @('-o','BatchMode=yes','-o','StrictHostKeyChecking=yes',
   '-o',"UserKnownHostsFile=$env:USERPROFILE\.ssh\ugly_duckling_cloudtest_known_hosts",
-  '-o','IdentitiesOnly=yes','-i',"$env:USERPROFILE\.ssh\ugly_duckling_cloudtest")
-ssh @sshOptions root@47.83.165.140 'install -d -m 700 /opt/ugly-duckling-cloudtest/tools'
-scp @sshOptions .\server\app\cloud_invites.py root@47.83.165.140:/opt/ugly-duckling-cloudtest/tools/cloud_invites.py.next
-ssh @sshOptions root@47.83.165.140 'chmod 600 /opt/ugly-duckling-cloudtest/tools/cloud_invites.py.next && mv /opt/ugly-duckling-cloudtest/tools/cloud_invites.py.next /opt/ugly-duckling-cloudtest/tools/cloud_invites.py'
+  '-o','IdentitiesOnly=yes','-o','ConnectTimeout=15',
+  '-i',"$env:USERPROFILE\.ssh\ugly_duckling_cloudtest")
+ssh @sshOptions root@47.83.165.140
 ```
 
-脚本可通过 `-IdentityFile`、`-KnownHostsFile` 和 `-OutputDirectory` 指定本机路径。它严格验证服务器主机密钥，不自动接受未知密钥。保留的 `.cmd` 入口会在结束后暂停，便于查看结果。
-
-批量工具已完成 89 项后端测试、Windows PowerShell 实际下载和公网一次性兑换验证，结果见 [批量邀请验证](invite-tool-verification.json)。独立安装工具时保留了服务器当时的应用发布及现有授权。
-
-### 单人邀请和授权恢复
-
-也可以在香港服务器 Workbench 或 SSH 终端给每名新试用者单独生成邀请码：
+登录后运行以下只读命令检查实际发布和容器（不要直接输出 `runtime.env` 或完整容器环境变量）：
 
 ```bash
 cd /opt/ugly-duckling-cloudtest/current
-docker compose -f deploy/cloud-test/compose.yaml exec -T api python -m app.cloud_admin issue --label tester-01
-```
-
-邀请码仅显示这一次，24 小时内可兑换一次，授权有效期为邀请码创建后的 30 天；分享 APK 时，分别将各人的邀请码发给本人。不要将邀请码或凭据提交到仓库。安装后输入邀请码即可，服务地址已内置。
-
-已有云测数据、清除应用数据或丢失授权的设备，需由组织者核对屏幕上的设备编号，再生成专用邀请码：
-
-```bash
-docker compose -f deploy/cloud-test/compose.yaml exec -T api python -m app.cloud_admin issue --label tester-recovery --device-id DEVICE_ID
-```
-
-普通邀请码不能通过猜测旧设备编号认领其云端数据。专用邀请码兑换后会替换该设备的旧令牌。重新安装导致设备编号改变时，需另行核对迁移，不要批量共用同一设备编号或令牌。
-
-列出已授权设备或撤销某设备授权：
-
-```bash
-docker compose -f deploy/cloud-test/compose.yaml exec -T api python -m app.cloud_admin list
-docker compose -f deploy/cloud-test/compose.yaml exec -T api python -m app.cloud_admin revoke --device-id DEVICE_ID
-```
-
-撤销还会使该设备尚未使用的专用邀请码失效。授权管理仅有 SSH CLI，没有公网管理接口。撤销不会删除该设备已存的数据。
-
-## 访问边界与配额
-
-- 后端启用 `CLOUD_AUTH_REQUIRED=true`。未授权/过期/撤销返回 401，携带他人设备编号返回 403。
-- 服务端仅保存邀请码和高熵令牌的 SHA-256 摘要；Android 使用 Android Keystore 的 AES-GCM 密钥加密保存令牌，凭据文件排除在备份及设备迁移之外。凭据只发送给内置 HTTPS API 源，携带凭据的连接不自动跟随跳转。
-- 每设备每 UTC 日最多 60 次写入或生成请求，全体每天合计 300 次；旧版生成报告的 GET 接口同样计数，普通消息/记录读取不计日配额。失败的已授权生成尝试也可能计数。该配额不是人民币费用硬上限，一个请求可能涉及多次模型调用，仍需关注百炼账单。
-- 每设备每分钟最多 90 次业务请求；每来源地址每分钟最多 5 次激活尝试。视频合成仅允许 1 个并发任务。超出返回 429，日配额耗尽后仍可读取已存聊天和记录。
-- 后端只绑定 `127.0.0.1:8000`，Caddy 对外提供 TCP 80/443；80 用于证书验证及跳转。公网文档及其他未配置路径不开放。健康检查不需要凭据。
-- Caddy 限制激活请求 4 KB、普通 API 16 MB、视频上传 128 MB；应用还会校验媒体类型、文件数量和大小。
-
-`Caddyfile.bootstrap` 是只开放健康检查的初始维护配置；当前使用 `Caddyfile`。`setup-https.sh` 仅用于首次安装或校验初始配置，不用于覆盖已上线的业务网关。证书由 Caddy 自动管理，保存在 `/var/lib/caddy/.local/share/caddy`；保持域名解析、80/443 与持久化目录可用。无需另购 SSL 证书或 CDN。
-
-## 服务、模型与备份
-
-香港实例为 Ubuntu 22.04、2 vCPU / 4 GiB、40 GiB 系统盘；单个 Uvicorn worker。`current` 指向发布目录，配置独立保存在 `/opt/ugly-duckling-cloudtest/config/runtime.env`，仅 root 可读。模型 Key 由后端持有，不能写进 App、截图、聊天、Git 或发布包。
-
-仅在更换 Key 时执行下列命令，并按隐藏输入提示操作；脚本会先进行一次小额真实请求验证：
-
-```bash
-bash /opt/ugly-duckling-cloudtest/current/deploy/cloud-test/configure-ai.sh
-```
-
-当前使用北京百炼入口，项目 Key 的白名单需包含香港实例 IP。ECS 试用额度与百炼费用分别计算。实例 IP 变化时还需同步域名解析与 Key 白名单。
-
-数据库持久化在 `data/confidence_agent.db`，包含业务数据、邀请、授权与日配额。每天 Asia/Shanghai 03:00 在线备份到 `backups`，保留最近七份定时备份。容器以 UID 10001 运行，CPU/内存/进程数受限，日志轮转，开机及退出后自动重启；健康检查本身不会自动修复仍运行的异常进程。
-
-```bash
-cd /opt/ugly-duckling-cloudtest/current
+readlink -f /opt/ugly-duckling-cloudtest/current
 docker compose -f deploy/cloud-test/compose.yaml ps
+curl --fail --silent http://127.0.0.1:8000/health
+systemctl is-active caddy
+```
+
+查看最近日志与手动一致性备份：
+
+```bash
+docker compose -f deploy/cloud-test/compose.yaml logs --tail=80 api
 docker compose -f deploy/cloud-test/compose.yaml exec -T api python backup.py
 ```
 
-升级先备份，再创建新的发布目录和镜像，通过检查后切换 `current`。撤回旧版本时同时考虑数据库和认证开关，不能回退成公网无认证服务。恢复备份必须先停服，复制到新的数据目录、验证 SQLite 完整性后再互换目录；保留原数据库及 WAL/SHM 以便撤回，不能覆盖运行中的主库。恢复旧备份也会恢复当时的授权状态，需复核并重新撤销备份之后已撤销的凭据。
+退出 SSH 输入 `exit`，不会停止后台服务。`open-tunnel.ps1` 只保留给管理员本地排查，手机正常使用不需要隧道。
 
-历史材料：[香港初始恢复](hongkong-recovery.md)、[香港模型冒烟](hongkong-verification.json)、[成都历史验收](verification.json)。历史 USB/SSH 联调包与本次公网云测包不同，不能用旧包验收独立联网。
+## 邀请新测试者
 
-## 体验问卷与 Excel 导出
-
-2026-11-15 已部署三步体验问卷，入口为“我的 → 评价与建议”。包含功能评价、主观变化、困难时刻帮助、负面体验及改进建议。必填项为使用时间、体验功能、总体满意度和当前身份（可选择“暂不透露”），其他选填；提交用途需主动勾选。困难时刻问卷并非心理诊断或疗效量表。
-
-填写时可确认/修改身份，并选填测试代号、性别和年龄段，服务端保存当次快照，不随着日后画像变化。每次独立提交保留一份，同一次断网重试按提交编号去重。服务器接收时间是正式提交时间，Excel 同时提供北京时间和 UTC；设备编号关联的是设备，不保证一个设备只由一人使用。问卷不读取聊天或记录原文。
-
-电脑上双击本目录 **导出评价问卷.cmd**，或在项目根运行：
+SSH 配置好后，在电脑双击 `批量生成邀请码.cmd`，或在项目根目录运行：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File deploy/cloud-test/export-feedback.ps1
+.\deploy\cloud-test\generate-invites.ps1 -Count 20
 ```
 
-默认将文件下载到 `artifacts/feedback/`（已忽略，不上传 Git）。Excel 包含“填写明细、每人最新一份、选项统计、文字建议、题目与口径”五个工作表。默认使用文件内参与编号关联，不导出设备编号；需要私下核对设备时加 `-IncludeDeviceIds`。不要将含身份及文字建议的整份工作簿直接作为公开材料。
+默认生成 20 个，7 天内兑换，授权到期为生成后第 30 天。每个邀请码兑换一次；清单保存在本机 `artifacts/cloud-test/invites/`，服务器在 `/root/cloud-invites/` 留有管理副本。清单已被 Git 忽略，每人只发自己的邀请码。
 
-统计按每设备、每问卷版本最新完整一份计算；跳过、不好判断和未经历等不进入判断分母，多选比例可能超过100%。自由文字作为普通文本写入，防止被 Excel 当作公式执行。用户在“数据导出”中可导出自己的问卷，通过“删除全部数据”可删除已提交问卷并清理本地草稿，即使没有聊天记录也能删除。
-
-仅服务器运维人员可通过 SSH 执行导出，没有公网问卷管理接口。服务器导出方式：
+单人邀请也可在服务器 `current` 目录执行：
 
 ```bash
-cd /opt/ugly-duckling-cloudtest/current
-docker compose -f deploy/cloud-test/compose.yaml exec -T api python -m app.feedback_export --output /backups/feedback/experience-feedback.xlsx
+docker compose -f deploy/cloud-test/compose.yaml exec -T api python -m app.cloud_admin issue --label tester-01
 ```
 
-公网验收脚本为 [feedback-smoke.py](feedback-smoke.py)，结果见 [feedback-verification.json](feedback-verification.json)：12 项通过，测试身份和数据已清理。验收 Excel 为合成样例，不计入真实用户反馈。本轮本地后端115项、Android JVM19项通过，云端镜像114项通过、1项跳过（该项校验 Android 题库一致性，已在本地通过）。APK 构建和 Android 真机测试代码编译通过，未连接手机进行界面验收。
+单人命令默认 24 小时内兑换、授权到期为创建后第 30 天。已有设备丢失授权时，核实设备编号后加 `--device-id DEVICE_ID` 生成专用邀请；不要用普通邀请码认领旧数据。`list` 查看授权，`revoke --device-id DEVICE_ID` 撤销指定设备。撤销授权不会自动删除设备数据。
 
-发布 `20261115-hk06-c9ff668` 对应业务源提交 `c9ff668`，数据库仅新增问卷表；发布前备份在 `/backups/pre-hk06/`，旧镜像及发布目录保留。验收脚本中无模型调用，部署保留已有用户、邀请码、授权和配额配置。
+配额默认每设备每 UTC 日 60 次、全体 300 次写入或生成请求；这些是请求次数限制，不是模型费用的人民币上限。
+
+## 修改后怎样提交
+
+**Git 提交、推送 GitHub、更新服务器是三个独立动作。** 当前仓库未提供自动部署工作流，`git push` 不会自动重启或更新后端。
+
+当前分工：你在本机修改和验证，确认后推送 GitHub；队友拉取指定提交、备份并发布服务器，再进行手机端云端联调。你不需要服务器管理密钥。
+
+云测 `debug/release` 固定访问云端。本地联调请选择已加入的 `localDebug`，在“我的 → 本地测试 · 后端连接”连接电脑；本地测试通过不代表云端已经更新。准备云端验收时应切回新版云测 App。
+
+在 `confidence_agent` 根目录：
+
+```powershell
+git status --short
+git diff --stat
+git diff
+# 按本次修改选择文件；不要添加 .env、数据库、邀请码或私钥。
+git add -- <本次修改的文件或目录>
+git diff --cached
+git commit -m "说明本次修改"
+git push origin main
+```
+
+上面的 `<本次修改的文件或目录>` 是说明占位符，需替换后执行。与队友并行改动时更适合新建功能分支并通过 PR 合入 `main`。是否已部署以服务器实际发布目录及容器状态为准，不能由 Git 提交状态推断。
+
+| 修改内容 | 测试时需要做什么 |
+| --- | --- |
+| `app/` 界面或客户端逻辑 | Android Studio Run 更新手机 |
+| `server/app/` 后端逻辑 | 本地测试后重新发布服务器；接口兼容时手机无需重装 |
+| 前后端接口同时改变 | 协调后端发布与手机更新，避免旧 App 调用不兼容接口 |
+| 外层 `docs/`、PPT 或历史材料 | 不影响服务器；这些文件不在本 Git 仓库内 |
+| 模型 Key/运行配置 | 在服务器更新独立配置并重建容器，不提交 Key |
+
+## 后端发布步骤（操作指引，本轮未执行）
+
+已有管理员完成发布即可，手机测试者不必拥有服务器权限。先提交并核对代码，再从确定的 Git 提交打包后端源码。下面不会生成 Android APK。
+
+Windows 项目根目录，沿用上面的 `$sshOptions`：
+
+```powershell
+$revision = git rev-parse --short HEAD
+$release = (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $revision
+$bundle = Join-Path $env:TEMP "$release.tar"
+git archive --format=tar --output="$bundle" HEAD server deploy/cloud-test .dockerignore
+if ($LASTEXITCODE -ne 0) { throw '源码归档失败' }
+scp @sshOptions $bundle "root@47.83.165.140:/tmp/$release.tar"
+if ($LASTEXITCODE -ne 0) { throw '上传失败' }
+Write-Output "服务器下一步使用的 release：$release"
+```
+
+归档只包含 **已提交的 HEAD**，未提交改动不会进入发布。进入服务器后，将下面 `release` 替换为上一步输出的实际值。先确认当前有可用备份；这个流程面向兼容现有数据库结构的改动，涉及数据库迁移时应单独设计回滚。
+
+```bash
+set -eu
+base=/opt/ugly-duckling-cloudtest
+release=替换为上一步输出的发布名称
+previous=$(readlink -f "$base/current")
+cd "$previous"
+docker compose -f deploy/cloud-test/compose.yaml exec -T api python backup.py
+
+test ! -e "$base/releases/$release"
+mkdir "$base/releases/$release"
+tar -xf "/tmp/$release.tar" -C "$base/releases/$release"
+cd "$base/releases/$release"
+ln -s "$base/config/runtime.env" deploy/cloud-test/.env
+printf 'APP_VERSION=%s\n' "$release" > .env
+docker compose -f deploy/cloud-test/compose.yaml build api
+
+# 新镜像隔离测试，不挂载生产数据库，不传模型 Key。
+docker run --rm --entrypoint python \
+  -e ENABLE_LIVE_AI=false -e CLOUD_AUTH_REQUIRED=false \
+  "ugly-duckling-cloudtest:$release" -m pytest -q -p no:cacheprovider
+
+# 此步会替换运行中的后端，选择测试者空闲时执行。
+docker compose -f deploy/cloud-test/compose.yaml up -d --no-build api
+# 等待约 30 秒后检查 healthy；未健康时不要切换 current。
+docker compose -f deploy/cloud-test/compose.yaml ps
+curl --fail --silent https://api.yaligo-growth.top/health
+```
+
+只有容器显示 `healthy` 且公网检查通过后，再将 `current` 切换到新目录：
+
+```bash
+ln -sfn "$base/releases/$release" "$base/current"
+```
+
+随后运行电脑端 `check-public.ps1` 并进行一次受邀设备业务测试。保留旧发布目录、镜像和备份。新容器异常时，在同一个 SSH 会话中执行以下命令恢复旧镜像（前提是新旧版本数据库兼容）：
+
+```bash
+cd "$previous"
+docker compose -f deploy/cloud-test/compose.yaml up -d --no-build api
+ln -sfn "$previous" "$base/current"
+```
+
+恢复数据库备份需要停服并验证备份完整性，不能直接覆盖运行中的 SQLite 主库；旧备份还会恢复旧授权状态，需要单独核查。
+
+`stress-trend-smoke.py` 保留为可选的管理员专项检查，会创建独立测试身份、调用少量真实模型，并在结束时清理测试数据/撤销凭据。本轮不运行该专项功能测试。
+
+`setup-https.sh` 和 `Caddyfile.bootstrap` 是初次安装工具，不应覆盖已上线的 `Caddyfile`。Caddy 负责证书续期；日常业务代码更新不需要重新安装 HTTPS。

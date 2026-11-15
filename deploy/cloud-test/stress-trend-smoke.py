@@ -22,10 +22,10 @@ from app.db.session import engine_for_url
 
 ORIGIN = "https://api.yaligo-growth.top"
 DEVICE = "trend-smoke-" + uuid.uuid4().hex
-REPORT = Path("/backups/stress-trend-hk05-verification.json")
+REPORT = Path("/backups") / (DEVICE + "-verification.json")
 report = {"started_at": datetime.now(UTC).isoformat(), "origin": ORIGIN,
           "device_id": DEVICE, "fixture": "synthetic acceptance records only",
-          "source_commit": "3e7e5d1c4eebcbf3ca1ea8f773feedfd3e275af5", "checks": {}}
+          "suite": "stress-trend", "checks": {}}
 engine = engine_for_url(get_settings().database_url)
 headers = {}
 code_digest = None

@@ -15,6 +15,8 @@ from app.services.check_in_service import schedule_explicit_follow_up
 from app.services.event_service import process_turn
 from app.services.memory_service import postgraduate_setback_evidence, recall
 from app.services.support_service import explicit_conversation_support, is_postgraduate_setback
+from app.services.wellbeing_service import ingest_source, remove_source
+from app.services.notification_service import dispatch_for_url
 
 router = APIRouter(tags=["chat"])
 
@@ -49,7 +51,7 @@ def chat(request: ChatRequest, background_tasks: BackgroundTasks, db: Session = 
         used_memory_ids=[item.memory_id for item in response.evidence if item.memory_id],
         assistant_model=response.model,
         prompt_version=(
-            "safety-rule-v1" if response.safety_triggered
+            "safety-support-v2" if response.safety_triggered
             else "postgraduate-setback-rule-v1" if response.model == "postgraduate-setback-rule-v1"
             else "postgraduate-start-rule-v1" if response.model == "postgraduate-start-rule-v1"
             else CHAT_PROMPT_VERSION
@@ -57,6 +59,10 @@ def chat(request: ChatRequest, background_tasks: BackgroundTasks, db: Session = 
     )
     response.user_message_id = user_message.id
     response.assistant_message_id = assistant_message.id
+    ingest_source(db, conversation.id, "message", user_message.id, request.message,
+                  user_message.created_at, response.wellbeing)
+    db.commit()
+    background_tasks.add_task(dispatch_for_url, str(db.get_bind().url))
     if not response.safety_triggered and schedule_explicit_follow_up(db, conversation.id, request.message) is not None:
         db.commit()
         response.check_in_scheduled = True
@@ -114,5 +120,8 @@ def delete_message(
     )):
         suggestion.source_message_id = None
 
+    remove_source(db, conversation.id, "message", message_id)
+    from app.api.routes.records import _invalidate_event_derivatives
+    _invalidate_event_derivatives(db, conversation.id, -10 * message_id - 1)
     db.delete(message)
     db.commit()

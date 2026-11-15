@@ -15,6 +15,11 @@ data class SupportPerson(
     val relationship: String,
     val kind: String,
     val scenarios: List<String>,
+    val phone: String = "",
+    val contactId: Long? = null,
+    val emergencyEnabled: Boolean = false,
+    val needsConsentUpdate: Boolean = false,
+    val enrollmentToken: String? = null,
 )
 
 data class SupportSuggestion(
@@ -26,6 +31,8 @@ data class SupportSuggestion(
     val lighterOption: String,
     val situation: String,
     val sourceMessageId: Long?,
+    val messageOptions: List<String> = emptyList(),
+    val actionOptions: List<String> = emptyList(),
 )
 
 data class GrowthEvent(
@@ -73,7 +80,7 @@ class SupportApiClient(private val baseUrl: String? = null) {
             val status = connection.checkedResponseCode()
             val content = (if (status in 200..299) connection.inputStream else connection.errorStream)
                 ?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (status !in 200..299) throw IllegalStateException("支持服务返回 $status")
+            if (status !in 200..299) throw IllegalStateException(runCatching { JSONObject(content).optString("detail") }.getOrDefault("").ifBlank { "支持服务返回 $status" })
             return content
         } finally {
             connection.disconnect()
@@ -85,20 +92,29 @@ class SupportApiClient(private val baseUrl: String? = null) {
         buildList {
             for (index in 0 until array.length()) {
                 val row = array.getJSONObject(index)
-                val scenes = row.optJSONArray("scenarios") ?: JSONArray()
-                add(SupportPerson(
-                    row.getLong("id"), row.getString("name"), row.getString("relationship"), row.getString("kind"),
-                    (0 until scenes.length()).map { scenes.getString(it) },
-                ))
+                add(parsePerson(row))
             }
         }
     }
 
-    suspend fun savePerson(deviceId: String, person: SupportPerson): Unit = withContext(Dispatchers.IO) {
+    private fun parsePerson(row: JSONObject): SupportPerson {
+        val scenes = row.optJSONArray("scenarios") ?: JSONArray()
+        return SupportPerson(row.getLong("id"), row.getString("name"), row.getString("relationship"), row.getString("kind"),
+            (0 until scenes.length()).map { scenes.getString(it) },
+            row.optString("phone").takeUnless { it == "null" }.orEmpty(),
+            row.optLong("contact_id").takeIf { it > 0 }, row.optBoolean("emergency_enabled"),
+            row.optBoolean("needs_consent_update"), row.optString("enrollment_token").takeIf { it.isNotBlank() && it != "null" })
+    }
+
+    suspend fun savePerson(deviceId: String, person: SupportPerson, consent: Boolean = false): SupportPerson = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("device_id", deviceId).put("name", person.name).put("relationship", person.relationship)
             .put("kind", person.kind).put("scenarios", JSONArray(person.scenarios))
-        request(if (person.id > 0) "/support-people/${person.id}" else "/support-people", if (person.id > 0) "PATCH" else "POST", body)
+            .put("contact_version", 2).put("phone", person.phone).put("emergency_enabled", person.emergencyEnabled)
+            .put("contact_consent", consent).put("consent_version", com.testconnection.confidence_agent.data.sms.DeviceSms.CONSENT)
+        val row = JSONObject(request(if (person.id > 0) "/support-people/${person.id}" else "/support-people", if (person.id > 0) "PATCH" else "POST", body))
+        check(row.optInt("contact_version") == 2 && !row.isNull("phone")) { "后端尚未支持联系人手机号，请先更新后端后重试。" }
+        parsePerson(row)
     }
 
     suspend fun deletePerson(deviceId: String, id: Long): Unit = withContext(Dispatchers.IO) {
@@ -114,6 +130,10 @@ class SupportApiClient(private val baseUrl: String? = null) {
             json.getString("reason"), json.getString("editable_message"),
             json.getString("small_step"), json.getString("lighter_option"),
             situation, sourceMessageId,
+            json.optJSONArray("message_options")?.let { options ->
+                (0 until options.length()).map { options.getString(it) }
+            }.orEmpty(),
+            json.optJSONArray("action_options")?.let { options -> (0 until options.length()).map { options.getString(it) } }.orEmpty(),
         )
     }
 

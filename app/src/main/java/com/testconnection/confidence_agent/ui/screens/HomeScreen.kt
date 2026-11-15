@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,6 +36,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -44,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -68,6 +73,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -92,6 +100,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalTime
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun HomeScreen(
     contentPadding: PaddingValues,
@@ -99,6 +108,7 @@ fun HomeScreen(
     userName: String,
     onOpenVoice: () -> Unit,
     onOpenStressAlert: (Long) -> Unit = {},
+    onOpenWellbeing: () -> Unit = {},
     onOpenRecordSource: (Long) -> Unit = {},
     sourceMessageId: Long? = null,
     onSourceLocated: () -> Unit = {},
@@ -144,6 +154,10 @@ fun HomeScreen(
     var imageLoadError by remember { mutableStateOf<String?>(null) }
     var editableSupportMessage by remember(state.supportSuggestion?.id) {
         mutableStateOf(state.supportSuggestion?.editableMessage.orEmpty())
+    }
+    val supportPagerState = rememberPagerState(pageCount = { 2 })
+    LaunchedEffect(state.supportSuggestion?.id, state.supportSuggestion?.sourceMessageId) {
+        supportPagerState.scrollToPage(0)
     }
     var feedbackChoice by remember { mutableStateOf<String?>(null) }
     var effortText by remember { mutableStateOf("") }
@@ -349,6 +363,7 @@ fun HomeScreen(
         }
 
         item {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("$greeting，$userName", style = MaterialTheme.typography.displaySmall)
@@ -364,6 +379,8 @@ fun HomeScreen(
                     description = "正在认真倾听的小鸭",
                     modifier = Modifier.size(138.dp),
                 )
+            }
+            DailyWellbeingCard(refreshKey = state.messages.lastOrNull()?.id, onOpen = onOpenWellbeing)
             }
         }
 
@@ -602,44 +619,101 @@ fun HomeScreen(
                             Text("一起想下一步", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                             TextButton(onClick = viewModel::dismissSupportSuggestion) { Text("收起") }
                         }
-                        Text("可以自己试一小步，也可以请人帮忙。", style = MaterialTheme.typography.bodyMedium)
-                        Text("我自己先试：${suggestion.smallStep}", style = MaterialTheme.typography.bodyLarge)
-                        Text("可以找谁：${suggestion.supporterName}。${suggestion.reason}", style = MaterialTheme.typography.bodyLarge)
-                        Text("更轻的选择：${suggestion.lighterOption}", style = MaterialTheme.typography.bodyMedium)
-                        OutlinedTextField(
-                            value = editableSupportMessage,
-                            onValueChange = { editableSupportMessage = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("可修改的求助话术") },
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("求助话术", editableSupportMessage))
-                            }, modifier = Modifier.weight(1f), shape = AppButtonShape) { Text("复制") }
-                            OutlinedButton(onClick = {
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, editableSupportMessage)
+                        HorizontalPager(
+                            state = supportPagerState,
+                            modifier = Modifier.fillMaxWidth().animateContentSize(),
+                            pageSpacing = 16.dp,
+                            verticalAlignment = Alignment.Top,
+                        ) { page ->
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                if (page == 0) {
+                                    Surface(color = SagePale, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                                        Text(suggestion.smallStep, modifier = Modifier.padding(14.dp), style = MaterialTheme.typography.bodyLarge)
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                        Text("可以找谁", style = MaterialTheme.typography.labelLarge, color = SageDark)
+                                        Text(suggestion.supporterName, style = MaterialTheme.typography.titleMedium)
+                                    }
+                                    if (suggestion.messageOptions.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        suggestion.messageOptions.take(3).forEachIndexed { index, message ->
+                                            FilterChip(selected = editableSupportMessage == message,
+                                                onClick = { editableSupportMessage = message },
+                                                label = { Text(listOf("简短开口", "说清困扰", "具体请求")[index], style = MaterialTheme.typography.labelMedium) })
+                                        }
+                                    }
+                                    OutlinedTextField(
+                                        value = editableSupportMessage,
+                                        onValueChange = { editableSupportMessage = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("想这样开口 · 可修改") },
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(onClick = {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                            clipboard.setPrimaryClip(ClipData.newPlainText("求助话术", editableSupportMessage))
+                                        }, modifier = Modifier.weight(1f), shape = AppButtonShape) { Text("复制") }
+                                        OutlinedButton(onClick = {
+                                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_TEXT, editableSupportMessage)
+                                            }
+                                            context.startActivity(Intent.createChooser(intent, "选择分享方式"))
+                                        }, modifier = Modifier.weight(1f), shape = AppButtonShape) { Text("分享") }
+                                    }
+                                    if (state.supportFeedbackOutcome == null && suggestion.id != null) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            TextButton(onClick = { effortText = ""; helpText = ""; feedbackChoice = "helped" }, modifier = Modifier.weight(1f)) { Text("帮到了") }
+                                            TextButton(onClick = { effortText = ""; helpText = ""; feedbackChoice = "not_helped" }, modifier = Modifier.weight(1f)) { Text("没帮到") }
+                                            TextButton(onClick = { viewModel.submitSupportFeedback("not_contacted", null, null) }, modifier = Modifier.weight(1f)) { Text("没有联系") }
+                                        }
+                                    } else if (state.supportFeedbackOutcome != null) {
+                                        Text("这次反馈已记录。", style = MaterialTheme.typography.bodyMedium, color = SageDark)
+                                    }
+                                } else {
+                                    suggestion.actionOptions.ifEmpty { listOf(suggestion.smallStep) }
+                                        .filter { it.isNotBlank() }.distinct().forEachIndexed { index, action ->
+                                            Surface(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                color = if (index % 2 == 0) SagePale else CreamDeep,
+                                                shape = RoundedCornerShape(16.dp),
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(14.dp),
+                                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                                ) {
+                                                    Surface(color = Color.White, shape = CircleShape, modifier = Modifier.size(28.dp)) {
+                                                        Box(contentAlignment = Alignment.Center) {
+                                                            Text("${index + 1}", style = MaterialTheme.typography.labelLarge, color = SageDark)
+                                                        }
+                                                    }
+                                                    Text(action, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                                                }
+                                            }
+                                        }
                                 }
-                                context.startActivity(Intent.createChooser(intent, "选择分享方式"))
-                            }, modifier = Modifier.weight(1f), shape = AppButtonShape) { Text("分享") }
-                        }
-                        if (state.supportFeedbackOutcome == null && suggestion.id != null) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                TextButton(onClick = { effortText = ""; helpText = ""; feedbackChoice = "helped" }, modifier = Modifier.weight(1f)) { Text("帮到了") }
-                                TextButton(onClick = { effortText = ""; helpText = ""; feedbackChoice = "not_helped" }, modifier = Modifier.weight(1f)) { Text("没帮到") }
-                                TextButton(onClick = { viewModel.submitSupportFeedback("not_contacted", null, null) }, modifier = Modifier.weight(1f)) { Text("没有联系") }
                             }
-                        } else if (state.supportFeedbackOutcome != null) {
-                            Text("这次反馈已记录。", style = MaterialTheme.typography.bodyMedium, color = SageDark)
+                        }
+                        Row(
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                                .background(Color(0xFFD7DAD6), CircleShape)
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                .semantics {
+                                    contentDescription = "建议分页"
+                                    stateDescription = "第 ${supportPagerState.currentPage + 1} 页，共 2 页"
+                                },
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            repeat(2) { page ->
+                                Box(Modifier.size(8.dp).background(
+                                    if (supportPagerState.currentPage == page) Color.White else Color(0xFF92968F),
+                                    CircleShape,
+                                ))
+                            }
                         }
                     }
-                    Text(
-                        "只提供建议，不会自动给任何人发送消息。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         }

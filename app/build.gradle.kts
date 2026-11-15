@@ -25,7 +25,15 @@ android {
     }
 
     buildTypes {
-
+        create("localDebug") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".local"
+            versionNameSuffix = "-local"
+            matchingFallbacks += listOf("debug")
+            buildConfigField("String", "API_BASE_URL", "\"http://127.0.0.1:8000\"")
+            buildConfigField("boolean", "CLOUD_TEST", "false")
+            resValue("string", "app_name", "鸭力Go · 本地")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

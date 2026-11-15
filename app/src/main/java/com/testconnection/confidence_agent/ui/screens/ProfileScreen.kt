@@ -79,7 +79,7 @@ fun ProfileScreen(
     onOpenMemoryCenter: () -> Unit,
     onOpenSupportCircle: () -> Unit,
     onOpenDataTools: () -> Unit,
-    onOpenFeedback: () -> Unit,
+    onServerEndpointChanged: () -> Unit,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -101,6 +101,108 @@ fun ProfileScreen(
     var widgetRecords by remember { mutableStateOf<List<RecordDraft>>(emptyList()) }
     var todayWidgetRecordId by remember { mutableStateOf(widgetPrivacy.selectedTodayRecordId()) }
     var monthWidgetRecordId by remember { mutableStateOf(widgetPrivacy.selectedMonthRecordId()) }
+    var showHelpResources by remember { mutableStateOf(false) }
+    var serverAddress by remember { mutableStateOf(ServerEndpoint.current()) }
+    var serverStatus by remember { mutableStateOf("当前使用：${ServerEndpoint.current()}") }
+    var serverChecking by remember { mutableStateOf(false) }
+
+    fun detectServer() {
+        if (serverChecking) return
+        serverChecking = true
+        serverStatus = "正在检测当前局域网…"
+        coroutineScope.launch {
+            runCatching { ServerConnectionManager.detectOnWifi(context) }
+                .onSuccess { health ->
+                    serverAddress = ServerEndpoint.save(context, health.baseUrl)
+                    serverStatus = "连接成功：${health.baseUrl}\n${health.model}${if (health.liveAi) " · 真实 AI 已启用" else " · 演示回复"}"
+                    onServerEndpointChanged()
+                }
+                .onFailure { error ->
+                    serverStatus = error.message ?: "没有找到可用后端"
+                }
+            serverChecking = false
+        }
+    }
+
+    fun checkAndSaveServer(input: String) {
+        if (serverChecking) return
+        serverChecking = true
+        serverStatus = "正在检测输入的地址…"
+        coroutineScope.launch {
+            runCatching { ServerConnectionManager.check(input) }
+                .onSuccess { health ->
+                    serverAddress = ServerEndpoint.save(context, health.baseUrl)
+                    serverStatus = "连接成功：${health.baseUrl}\n${health.model}${if (health.liveAi) " · 真实 AI 已启用" else " · 演示回复"}"
+                    onServerEndpointChanged()
+                }
+                .onFailure { error ->
+                    serverStatus = error.message ?: "该地址暂时无法连接"
+                }
+            serverChecking = false
+        }
+    }
+
+    if (showHelpResources) AlertDialog(
+        onDismissRequest = { if (!serverChecking) showHelpResources = false },
+        containerColor = Cream,
+        shape = RoundedCornerShape(30.dp),
+        title = { Text(if (com.testconnection.confidence_agent.BuildConfig.CLOUD_TEST) "帮助与求助资源" else "后端连接与帮助") },
+        text = {
+            Column(
+                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text("遇到紧急危险时，请优先联系身边可信任的人或当地紧急援助。小鸭不会替你自动发送消息。")
+                HorizontalDivider()
+                if (com.testconnection.confidence_agent.BuildConfig.CLOUD_TEST) {
+                    Text("受邀云测", style = MaterialTheme.typography.titleMedium)
+                    Text("已连接项目云端服务，可直接使用手机网络。遇到连接或授权问题时，请联系测试组织者。")
+                } else {
+                Text("后端连接 · 测试工具", style = MaterialTheme.typography.titleMedium)
+                Text("同一热点 / Wi-Fi：电脑后端需要启用局域网监听，再点击一键检测。也可以输入电脑的局域网地址。")
+                Text("USB：电脑执行 adb reverse tcp:8000 tcp:8000 后，点击下方 USB 连接。", style = MaterialTheme.typography.bodySmall, color = InkMuted)
+                OutlinedTextField(
+                    value = serverAddress,
+                    onValueChange = { serverAddress = it; serverStatus = "地址尚未检测" },
+                    enabled = !serverChecking,
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("服务器地址") },
+                    placeholder = { Text("http://192.168.1.10:8000") },
+                )
+                Button(
+                    onClick = ::detectServer,
+                    enabled = !serverChecking,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = AppButtonShape,
+                    colors = ButtonDefaults.buttonColors(containerColor = SageDark),
+                ) { Text("一键检测局域网") }
+                TextButton(
+                    onClick = { checkAndSaveServer(serverAddress) },
+                    enabled = !serverChecking,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("检测并保存输入地址") }
+                TextButton(
+                    onClick = { checkAndSaveServer("http://127.0.0.1:8000") },
+                    enabled = !serverChecking,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("连接 USB 本地后端") }
+                if (serverChecking) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(22.dp).align(Alignment.CenterHorizontally),
+                        color = SageDark,
+                        strokeWidth = 2.dp,
+                    )
+                }
+                Text(serverStatus, style = MaterialTheme.typography.bodyMedium, color = InkMuted)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { showHelpResources = false }, enabled = !serverChecking) { Text("收好") }
+        },
+    )
+
     if (showWidgetPrivacy) AlertDialog(
         onDismissRequest = { showWidgetPrivacy = false },
         title = { Text("桌面展示许可") },
@@ -231,6 +333,23 @@ fun ProfileScreen(
     ) {
         item { Text("我的", style = MaterialTheme.typography.displaySmall) }
 
+        if (!com.testconnection.confidence_agent.BuildConfig.CLOUD_TEST) {
+            item {
+                WarmCard {
+                    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("本地测试 · 后端连接", style = MaterialTheme.typography.titleMedium)
+                        Text(serverStatus, style = MaterialTheme.typography.bodySmall, color = InkMuted)
+                        Button(onClick = ::detectServer, enabled = !serverChecking, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (serverChecking) "正在检测…" else "一键检测局域网")
+                        }
+                        TextButton(onClick = { showHelpResources = true }, enabled = !serverChecking) {
+                            Text("手动地址 / USB 连接设置")
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             WarmCard {
                 Row(
@@ -259,7 +378,7 @@ fun ProfileScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限" || entry.title == "数据导出" || entry.title == "评价与建议") {
+                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限" || entry.title == "数据导出" || entry.title == "帮助与求助资源") {
                                     when (entry.title) {
                                         "记忆中心" -> onOpenMemoryCenter()
                                         "支持圈" -> onOpenSupportCircle()
@@ -272,7 +391,11 @@ fun ProfileScreen(
                                             showWidgetPrivacy = true
                                         }
                                         "数据导出" -> onOpenDataTools()
-                                        "评价与建议" -> onOpenFeedback()
+                                        "帮助与求助资源" -> {
+                                            serverAddress = ServerEndpoint.current()
+                                            serverStatus = "当前使用：${ServerEndpoint.current()}"
+                                            showHelpResources = true
+                                        }
                                     }
                                 }
                                 .padding(horizontal = 18.dp, vertical = 16.dp),

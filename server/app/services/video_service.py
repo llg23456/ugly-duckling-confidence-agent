@@ -205,13 +205,14 @@ def generate_captions(events: list[GrowthEvent]) -> tuple[DailyCaptions, str | N
             "own_effort": item.own_effort,
             "attempt": item.attempt,
             "support_received": item.support_received,
+            "original_source": getattr(item, "source_excerpt", ""),
         } for item in day_events],
     } for day, day_events in groups]
     client = OpenAI(api_key=settings.dashscope_api_key, base_url=settings.dashscope_base_url, timeout=35, max_retries=0)
     response = client.chat.completions.create(
         model=settings.chat_model,
         messages=[
-            {"role": "system", "content": "为成长小片按天整理故事摘要。输入已按日期分组；一天只输出一页，日期、event_ids、页数与顺序必须完全一致。只输出 JSON：{\"pages\":[{\"date\":\"YYYY-MM-DD\",\"event_ids\":[整数],\"text\":\"一句话摘要\"}]}。一句话可以用逗号和分号串联，但必须清楚覆盖当天输入中的每一件事，包括重要感受、自己的尝试和实际获得的支持；不能漏掉事件，也不得添加、调换或夸大事实。文字自然、适合口播，不把多天内容合并。"},
+            {"role": "system", "content": "为成长小片按天整理故事摘要。聊天原话中的计划、提问和感受不可写成已完成；图片观察是待核实的AI识别，不把截图里他人的表达当作用户事实。输入已按日期分组；一天只输出一页，日期、event_ids、页数与顺序必须完全一致。只输出 JSON：{\"pages\":[{\"date\":\"YYYY-MM-DD\",\"event_ids\":[整数],\"text\":\"一句话摘要\"}]}。一句话可以用逗号和分号串联，但必须清楚覆盖当天输入中的每一件事，包括重要感受、自己的尝试和实际获得的支持；不能漏掉事件，也不得添加、调换或夸大事实。文字自然、适合口播，不把多天内容合并。"},
             {"role": "user", "content": json.dumps({"days": days}, ensure_ascii=False)},
         ],
         response_format={"type": "json_object"}, temperature=0,

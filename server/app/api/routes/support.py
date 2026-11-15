@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.db.models import GrowthEvent, Message, SupportFeedback, SupportPerson, SupportSuggestion
+from app.db.models import Conversation, GrowthEvent, Message, SupportFeedback, SupportPerson, SupportSuggestion, WellbeingSignal
 from app.db.repository import get_conversation, get_or_create_conversation
 from app.db.session import get_db
 from app.schemas.support import (
@@ -10,7 +10,10 @@ from app.schemas.support import (
     SupportFeedbackResponse, SupportSuggestionRequest, SupportSuggestionResponse,
 )
 from app.services.support_service import build_suggestion, choose_person, explicit_support_person, next_study_support_kind
+from app.services.support_intent import infer_support_intent
 from app.services.check_in_service import evaluate_check_in
+from app.services.next_steps import personalize
+from app.services.wellbeing_assessment import rule_assessment, support_action
 
 router = APIRouter(prefix="/support", tags=["support"])
 
@@ -22,7 +25,12 @@ def suggest_support(request: SupportSuggestionRequest, db: Session = Depends(get
         source = db.get(Message, request.source_message_id)
         if not conversation or not source or source.conversation_id != conversation.id or source.role != "user":
             raise HTTPException(status_code=404, detail="来源消息不存在")
-    people = list(db.scalars(select(SupportPerson).where(SupportPerson.conversation_id == conversation.id))) if conversation else []
+        request = request.model_copy(update={"situation": source.content})
+    signal = db.scalar(select(WellbeingSignal).where(
+        WellbeingSignal.conversation_id == conversation.id, WellbeingSignal.source_kind == "message",
+        WellbeingSignal.source_id == request.source_message_id)) if conversation and request.source_message_id else None
+    rules = rule_assessment(request.situation)
+    assessment = dict(signal.assessment) if signal else {**rules.model_dump(), "action": support_action(rules)}
     contacted_kinds: set[str] = set()
     if conversation:
         contacted_kinds = set(db.scalars(
@@ -33,19 +41,47 @@ def suggest_support(request: SupportSuggestionRequest, db: Session = Depends(get
                 SupportFeedback.outcome.in_(("helped", "not_helped")),
             )
         ).all())
+    history = []
+    conversation_id = conversation.id if conversation else None
+    if conversation:
+        query = select(Message).where(Message.conversation_id == conversation_id)
+        if request.source_message_id:
+            query = query.where(Message.id <= request.source_message_id)
+        history = [{"role": item.role, "content": item.content}
+                   for item in reversed(db.scalars(query.order_by(Message.id.desc()).limit(8)).all())]
+    db.commit()  # Release the read transaction before the model request.
+    intent = infer_support_intent(request.situation, history, assessment)
+    # Fetch current user-configured purposes after inference, without sending names
+    # or phone numbers to the intent classifier. The model cannot invent a contact.
+    people = list(db.scalars(select(SupportPerson).where(SupportPerson.conversation_id == conversation_id))) if conversation_id else []
     explicit = explicit_support_person(request.situation, people)
-    required_kind = None if explicit else next_study_support_kind(request.situation, contacted_kinds)
-    person = choose_person(request, people, required_kind=required_kind)
-    result = build_suggestion(request, person, required_kind=required_kind)
+    required_kind = None if explicit or intent.need == "emotional" else next_study_support_kind(request.situation, contacted_kinds)
+    person = choose_person(request, people, required_kind=required_kind, assessment=assessment, resolved_need=intent.need)
+    if not person or person.kind != required_kind:
+        required_kind = None
+    result = build_suggestion(request, person, required_kind=required_kind, resolved_need=intent.need, focus=intent.focus)
     if explicit:
         result.reason = f"你这次明确想联系{explicit.name}，先按你的选择，问问对方是否方便。"
     elif required_kind == "teacher":
         result.reason = "你已经和师兄或师姐交流过，下一步可以请老师帮你确认专业方向或复习重点。"
     elif required_kind == "family":
         result.reason = "你已经向老师请教过具体问题，下一步可以让家人了解你的压力和需要的陪伴。"
-    if conversation:
+    person_id = person.id if person else None
+    person_snapshot = (person.name, person.relationship, person.kind, list(person.scenarios or [])) if person else None
+    assessment = {**assessment, "support_need": intent.need, "support_focus": intent.focus}
+    db.commit()
+    result = personalize(result, request, history, assessment)
+    if conversation_id:
+        if db.get(Conversation, conversation_id) is None:
+            raise HTTPException(status_code=404, detail="会话已删除")
+        if request.source_message_id and db.get(Message, request.source_message_id) is None:
+            raise HTTPException(status_code=404, detail="来源消息已删除")
+        if person_id:
+            current = db.get(SupportPerson, person_id)
+            if not current or (current.name, current.relationship, current.kind, list(current.scenarios or [])) != person_snapshot:
+                raise HTTPException(status_code=409, detail="支持者已更新，请重试")
         saved = SupportSuggestion(
-            conversation_id=conversation.id, support_person_id=person.id if person else None,
+            conversation_id=conversation_id, support_person_id=person_id,
             source_message_id=request.source_message_id, situation=request.situation.strip(),
             supporter_type=result.supporter_type, supporter_name=result.supporter_name,
             reason=result.reason, editable_message=result.editable_message,

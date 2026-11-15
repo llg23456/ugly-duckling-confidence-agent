@@ -16,6 +16,8 @@ class MultimodalChatResponse(BaseModel):
     strategy: str | None = None
     check_in_scheduled: bool = False
     safety_triggered: bool = False
+    wellbeing: dict | None = None
+    image_observation: str = ""
 
 
 class SpeechSynthesisRequest(BaseModel):

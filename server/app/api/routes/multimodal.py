@@ -14,6 +14,8 @@ from app.services.event_service import process_turn
 from app.services.memory_service import recall
 from app.services.chat_service import CHAT_PROMPT_VERSION, suppress_memory_for_message
 from app.services.support_service import explicit_conversation_support
+from app.services.wellbeing_service import ingest_source
+from app.services.notification_service import dispatch_for_url
 
 
 router = APIRouter(prefix="/multimodal", tags=["multimodal"])
@@ -76,10 +78,15 @@ async def image_chat(
         is_mock=result.mock,
         used_memory_ids=[item.memory_id for item in result.evidence if item.memory_id],
         assistant_model=result.model,
-        prompt_version="safety-rule-v1" if result.safety_triggered else CHAT_PROMPT_VERSION,
+        prompt_version="safety-support-v2" if result.safety_triggered else CHAT_PROMPT_VERSION,
     )
     result.user_message_id = user_message.id
     result.assistant_message_id = assistant_message.id
+    user_message.image_observation = result.image_observation or None
+    ingest_source(db, conversation.id, "message", user_message.id, user_message.content,
+                  user_message.created_at, result.wellbeing)
+    db.commit()
+    background_tasks.add_task(dispatch_for_url, str(db.get_bind().url))
     if not result.safety_triggered and schedule_explicit_follow_up(db, conversation.id, prompt) is not None:
         db.commit()
         result.check_in_scheduled = True
@@ -125,10 +132,14 @@ async def audio_chat(
         is_mock=result.mock,
         used_memory_ids=[item.memory_id for item in result.evidence if item.memory_id],
         assistant_model=result.model,
-        prompt_version="safety-rule-v1" if result.safety_triggered else CHAT_PROMPT_VERSION,
+        prompt_version="safety-support-v2" if result.safety_triggered else CHAT_PROMPT_VERSION,
     )
     result.user_message_id = user_message.id
     result.assistant_message_id = assistant_message.id
+    ingest_source(db, conversation.id, "message", user_message.id, user_message.content,
+                  user_message.created_at, result.wellbeing)
+    db.commit()
+    background_tasks.add_task(dispatch_for_url, str(db.get_bind().url))
     if not result.safety_triggered and schedule_explicit_follow_up(db, conversation.id, result.user_text) is not None:
         db.commit()
         result.check_in_scheduled = True

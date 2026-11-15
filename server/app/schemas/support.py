@@ -14,14 +14,17 @@ class SupportPersonCreate(BaseModel):
     relationship: str = Field(min_length=1, max_length=120)
     kind: SupporterType
     scenarios: list[str] = Field(default_factory=list, max_length=10)
+    # Old clients can still maintain name-only support records. The integrated
+    # contact editor opts into v2, where phone is mandatory on create and update.
+    contact_version: Literal[2] | None = None
+    phone: str | None = Field(default=None, max_length=24)
+    emergency_enabled: bool = False
+    contact_consent: bool = False
+    consent_version: str | None = None
 
 
-class SupportPersonUpdate(BaseModel):
-    device_id: str = Field(min_length=1, max_length=128)
-    name: str = Field(min_length=1, max_length=120)
-    relationship: str = Field(min_length=1, max_length=120)
-    kind: SupporterType
-    scenarios: list[str] = Field(default_factory=list, max_length=10)
+class SupportPersonUpdate(SupportPersonCreate):
+    pass
 
 
 class SupportPersonItem(BaseModel):
@@ -31,6 +34,12 @@ class SupportPersonItem(BaseModel):
     kind: SupporterType
     scenarios: list[str]
     created_at: datetime
+    contact_version: int = 2
+    phone: str | None = None
+    contact_id: int | None = None
+    emergency_enabled: bool = False
+    needs_consent_update: bool = False
+    enrollment_token: str | None = None
 
 
 class SupportPeopleResponse(BaseModel):
@@ -48,6 +57,8 @@ class SupportSuggestionResponse(BaseModel):
     supporter_type: SupporterType
     reason: str
     editable_message: str
+    message_options: list[str] = Field(default_factory=list, max_length=3)
+    action_options: list[str] = Field(default_factory=list, max_length=4)
     small_step: str = "先试一个很小的步骤。"
     lighter_option: str = "先问问对方是否方便，不必马上说明全部。"
     supporter_id: int | None = None

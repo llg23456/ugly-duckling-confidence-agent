@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.testconnection.confidence_agent.R
+import com.testconnection.confidence_agent.data.sms.DeviceSms
 import com.testconnection.confidence_agent.data.preferences.DeviceIdStore
 import com.testconnection.confidence_agent.data.remote.SupportApiClient
 import com.testconnection.confidence_agent.data.remote.SupportFeedbackRecord
@@ -40,6 +41,11 @@ private val kindLabels = listOf(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SupportCircleScreen(onBack: () -> Unit) {
+    var showTrustedContacts by remember { mutableStateOf(false) }
+    if (showTrustedContacts) {
+        TrustedContactScreen(onBack = { showTrustedContacts = false })
+        return
+    }
     BackHandler(onBack = onBack)
     val context = LocalContext.current
     val deviceId = remember { DeviceIdStore(context.applicationContext).get() }
@@ -52,11 +58,6 @@ fun SupportCircleScreen(onBack: () -> Unit) {
     var editing by remember { mutableStateOf<SupportPerson?>(null) }
     var showingEditor by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf<SupportPerson?>(null) }
-    var name by remember { mutableStateOf("") }
-    var relationship by remember { mutableStateOf("") }
-    var kind by remember { mutableStateOf("classmate") }
-    var scenarios by remember { mutableStateOf("") }
-
     fun reload() {
         scope.launch {
             loading = true
@@ -69,74 +70,15 @@ fun SupportCircleScreen(onBack: () -> Unit) {
     }
     fun openEditor(person: SupportPerson?) {
         editing = person
-        name = person?.name.orEmpty()
-        relationship = person?.relationship.orEmpty()
-        kind = person?.kind ?: "classmate"
-        scenarios = person?.scenarios?.joinToString("、").orEmpty()
         showingEditor = true
     }
 
     LaunchedEffect(Unit) { reload() }
 
     if (showingEditor) {
-        AlertDialog(
-            onDismissRequest = { showingEditor = false },
-            title = {
-                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(if (editing == null) "添加一位支持者" else "修改支持者", fontWeight = FontWeight.Bold)
-                    Text("只填写你愿意记住的信息", style = MaterialTheme.typography.bodySmall, color = InkMuted)
-                }
-            },
-            text = {
-                LazyColumn(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    item {
-                        OutlinedTextField(
-                            value = name, onValueChange = { name = it }, modifier = Modifier.fillMaxWidth(),
-                            label = { Text("称呼") }, singleLine = true, shape = RoundedCornerShape(16.dp),
-                        )
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = relationship, onValueChange = { relationship = it }, modifier = Modifier.fillMaxWidth(),
-                            label = { Text("与你的关系") }, singleLine = true, shape = RoundedCornerShape(16.dp),
-                        )
-                    }
-                    item {
-                        Text("支持者类型", style = MaterialTheme.typography.labelLarge, color = SageDark)
-                        Spacer(Modifier.height(7.dp))
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(7.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                            kindLabels.forEach { (value, label) ->
-                                FilterChip(selected = kind == value, onClick = { kind = value }, label = { Text(label) })
-                            }
-                        }
-                    }
-                    item {
-                        OutlinedTextField(
-                            value = scenarios, onValueChange = { scenarios = it }, modifier = Modifier.fillMaxWidth(),
-                            label = { Text("适合帮忙的场景") }, placeholder = { Text("如：做决定、情绪低落、专业问题") },
-                            minLines = 2, shape = RoundedCornerShape(16.dp),
-                        )
-                    }
-                }
-            },
-            dismissButton = { TextButton(onClick = { showingEditor = false }) { Text("取消") } },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (name.isNotBlank() && relationship.isNotBlank()) scope.launch {
-                        val person = SupportPerson(
-                            editing?.id ?: 0,
-                            name.trim(),
-                            relationship.trim(),
-                            kind,
-                            scenarios.split('、', ',', '，').map(String::trim).filter(String::isNotBlank),
-                        )
-                        runCatching { api.savePerson(deviceId, person) }
-                            .onSuccess { showingEditor = false; reload() }
-                            .onFailure { error = "保存失败，请检查内容后重试。" }
-                    }
-                }) { Text("保存", color = SageDark) }
-            },
-        )
+        SupportContactEditor(deviceId, editing, onBack = { showingEditor = false },
+            onSaved = { showingEditor = false; reload() })
+        return
     }
 
     deleting?.let { person ->
@@ -148,7 +90,7 @@ fun SupportCircleScreen(onBack: () -> Unit) {
                 TextButton(onClick = {
                     scope.launch {
                         runCatching { api.deletePerson(deviceId, person.id) }
-                            .onSuccess { deleting = null; reload() }
+                            .onSuccess { DeviceSms.removeContact(context, person.contactId); deleting = null; reload() }
                             .onFailure { error = "移除失败，请重试。" }
                     }
                 }) { Text("移除") }
@@ -171,6 +113,11 @@ fun SupportCircleScreen(onBack: () -> Unit) {
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            item {
+                OutlinedButton(onClick = { showTrustedContacts = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text("可信联系人 · 自动安全提醒")
+                }
+            }
             item { SupportHero() }
             item { Text("遇到紧急危险时，请优先联系身边可信任的人或当地紧急援助。小鸭不会替你自动发送消息。", color = InkMuted) }
 
@@ -276,7 +223,7 @@ private fun PrivacyNote() {
                 Text("✓", color = Color.White, style = MaterialTheme.typography.labelMedium)
             }
             Spacer(Modifier.width(9.dp))
-            Text("只保存你主动填写的信息，不读取通讯录，也不会自动联系任何人。", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+            Text("不读取通讯录；开启紧急提醒后，才会按设置自动通知。", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -316,6 +263,7 @@ private fun SupportPersonCard(person: SupportPerson, onEdit: () -> Unit, onRemov
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text(person.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(person.relationship, style = MaterialTheme.typography.bodyMedium, color = InkMuted)
+                    Text(maskContactPhone(person.phone), style = MaterialTheme.typography.bodySmall, color = InkMuted)
                 }
                 Surface(color = SagePale, shape = RoundedCornerShape(10.dp)) {
                     Text(kindLabel(person.kind), Modifier.padding(horizontal = 10.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, color = SageDark)

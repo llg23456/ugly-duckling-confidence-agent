@@ -34,6 +34,7 @@ data class ReviewSummary(
     val sourceEventIds: List<Long>, val closing: String,
     val sections: List<ReviewSection> = emptyList(),
     val affirmation: String = "",
+    val oneSentence: String = "",
 )
 
 data class SyncedRecord(val serverId: Long, val clientId: String)
@@ -100,8 +101,9 @@ class ReviewApiClient(private val baseUrl: String? = null) {
         }
     }
 
-    suspend fun events(deviceId: String): List<GrowthEvent> = withContext(Dispatchers.IO) {
-        val rows = JSONObject(request("/events?device_id=${Uri.encode(deviceId)}", "GET")).getJSONArray("events")
+    suspend fun events(deviceId: String, includeAllSources: Boolean = false): List<GrowthEvent> = withContext(Dispatchers.IO) {
+        val path = if (includeAllSources) "/reviews/materials" else "/events"
+        val rows = JSONObject(request("$path?device_id=${Uri.encode(deviceId)}", "GET")).getJSONArray("events")
         (0 until rows.length()).map { index ->
             val row = rows.getJSONObject(index)
             GrowthEvent(
@@ -278,6 +280,7 @@ class ReviewApiClient(private val baseUrl: String? = null) {
                 rangeEnd = row.optString("range_end"),
                 title = row.getString("title"),
                 story = row.optString("story"),
+                oneSentence = row.optString("one_sentence"),
                 ownEffort = row.getString("own_effort"),
                 supportReceived = row.getString("support_received"),
                 pauseOrRestart = row.optString("pause_or_restart"),
@@ -285,7 +288,7 @@ class ReviewApiClient(private val baseUrl: String? = null) {
                 moments = (0 until moments.length()).map { index ->
                     moments.getJSONObject(index).let { item ->
                         ReviewMoment(
-                            item.optLong("event_id").takeIf { it > 0 }, item.getString("date"), item.getString("title"),
+                            item.optLong("event_id").takeIf { it != 0L }, item.getString("date"), item.getString("title"),
                             item.optLong("source_id").takeIf { it > 0 },
                             item.optLong("source_feedback_id").takeIf { it > 0 },
                             item.optLong("source_record_id").takeIf { it > 0 },
