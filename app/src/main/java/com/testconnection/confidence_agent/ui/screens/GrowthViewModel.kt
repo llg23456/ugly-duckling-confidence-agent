@@ -336,7 +336,7 @@ class GrowthViewModel(application: Application) : AndroidViewModel(application) 
             detail.contains("Failed to connect", ignoreCase = true) ||
                 detail.contains("Connection refused", ignoreCase = true) ||
                 detail.contains("connect", ignoreCase = true) ->
-                "暂时连不上后端。请确认电脑端服务已启动，并在“我的—帮助与求助资源”检测当前地址。"
+                "暂时无法连接云端，请检查网络；若授权失效，请重新输入邀请码，或联系测试组织者。"
             detail.contains("404") || detail.contains("405") -> "后端还是旧版本，请重启电脑端服务后再试。"
             else -> "回望暂时无法生成，点重试继续。"
         }

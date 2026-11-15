@@ -36,6 +36,7 @@ fun CloudAccessScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(28.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Text("鸭力Go · 受邀云测", style = MaterialTheme.typography.headlineMedium)
+        Text("遇到连接问题请先检查网络；授权失效或无法恢复时，请联系测试组织者。")
         Text("输入组织者提供的邀请码，开始本次测试。授权保存在本设备，之后打开即可继续使用。")
         OutlinedTextField(value = code, onValueChange = { code = it.take(64); error = null },
             label = { Text("邀请码") }, singleLine = true, enabled = !busy,

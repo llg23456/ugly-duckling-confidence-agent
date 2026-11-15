@@ -89,6 +89,7 @@ fun ConfidenceAgentApp(
     var showSupportCircle by rememberSaveable { mutableStateOf(false) }
     var showVideoStudio by rememberSaveable { mutableStateOf(false) }
     var showWeeklyReport by rememberSaveable { mutableStateOf(false) }
+    var showExperienceFeedback by rememberSaveable { mutableStateOf(false) }
     var showDataTools by rememberSaveable { mutableStateOf(false) }
     var showStressAlert by rememberSaveable { mutableStateOf(false) }
     var stressAlertId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -163,6 +164,7 @@ fun ConfidenceAgentApp(
             showSupportCircle = false
             showWeeklyReport = false
             showVideoStudio = false
+            showExperienceFeedback = false
             showDataTools = false
             showVoiceCall = false
             supportFromMemory = false
@@ -271,6 +273,11 @@ fun ConfidenceAgentApp(
             onBack = { showWeeklyReport = false },
             onShare = { showVideoStudio = true },
         )
+        return
+    }
+
+    if (showExperienceFeedback) {
+        com.testconnection.confidence_agent.ui.screens.ExperienceFeedbackScreen(onBack = { showExperienceFeedback = false })
         return
     }
 
@@ -486,10 +493,7 @@ fun ConfidenceAgentApp(
                     onOpenMemoryCenter = { userProfile = onboardingStore.loadProfile(); showMemoryCenter = true },
                     onOpenSupportCircle = { showSupportCircle = true },
                     onOpenDataTools = { showDataTools = true },
-                    onServerEndpointChanged = {
-                        homeViewModel.refreshHistory()
-                        if (selectedDestination == AppDestination.GROWTH) growthViewModel.forceRefresh()
-                    },
+                    onOpenFeedback = { showExperienceFeedback = true },
                 )
             }
         }

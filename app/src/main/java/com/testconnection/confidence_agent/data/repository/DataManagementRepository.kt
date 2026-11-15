@@ -158,6 +158,7 @@ class DataManagementRepository(private val context: Context) {
                     .put("daily_summary", "0.52 <= value_score < 0.72")
                     .put("ignore", "value_score < 0.52 or no concrete fact")))
             .put("daily_chats", dailyChats)
+            .put("experience_feedback", data.optJSONArray("experience_feedback") ?: JSONArray())
             .put("saved_records", savedRecords)
             .put("community_posts", localCommunityPosts)
             .put("community_profile", communityPosts.exportProfileJson())
@@ -231,6 +232,7 @@ class DataManagementRepository(private val context: Context) {
             File(appContext.cacheDir, name).deleteRecursively()
         }
         listOf(
+            "experience_feedback",
             "duck_onboarding",
             "duck_voice_preferences",
             "duck_widget_privacy",

@@ -32,6 +32,6 @@ object FakeConfidenceRepository {
         SettingEntry(R.drawable.ic_profile_memory, "记忆中心", "查看小鸭形象、关键词和画像变化"),
         SettingEntry(R.drawable.ic_profile_privacy, "隐私与权限", "图片、语音、云端处理与桌面展示"),
         SettingEntry(R.drawable.ic_profile_export, "数据导出", "导出自己的记录与成长故事"),
-        SettingEntry(R.drawable.ic_profile_help, "帮助与求助资源", "需要时找到可信联系人和专业支持"),
+        SettingEntry(R.drawable.ic_profile_help, "评价与建议", "说说使用感受，帮助鸭力Go变得更好"),
     )
 }

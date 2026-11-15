@@ -79,7 +79,7 @@ fun ProfileScreen(
     onOpenMemoryCenter: () -> Unit,
     onOpenSupportCircle: () -> Unit,
     onOpenDataTools: () -> Unit,
-    onServerEndpointChanged: () -> Unit,
+    onOpenFeedback: () -> Unit,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -101,102 +101,6 @@ fun ProfileScreen(
     var widgetRecords by remember { mutableStateOf<List<RecordDraft>>(emptyList()) }
     var todayWidgetRecordId by remember { mutableStateOf(widgetPrivacy.selectedTodayRecordId()) }
     var monthWidgetRecordId by remember { mutableStateOf(widgetPrivacy.selectedMonthRecordId()) }
-    var showHelpResources by remember { mutableStateOf(false) }
-    var serverAddress by remember { mutableStateOf(ServerEndpoint.current()) }
-    var serverStatus by remember { mutableStateOf("当前使用：${ServerEndpoint.current()}") }
-    var serverChecking by remember { mutableStateOf(false) }
-
-    fun detectServer() {
-        if (serverChecking) return
-        serverChecking = true
-        serverStatus = "正在检测当前局域网…"
-        coroutineScope.launch {
-            runCatching { ServerConnectionManager.detectOnWifi(context) }
-                .onSuccess { health ->
-                    serverAddress = ServerEndpoint.save(context, health.baseUrl)
-                    serverStatus = "连接成功 · ${health.model}${if (health.liveAi) " · 云端 AI 已启用" else " · 演示回复"}"
-                    onServerEndpointChanged()
-                }
-                .onFailure { error ->
-                    serverStatus = error.message ?: "没有找到可用后端"
-                }
-            serverChecking = false
-        }
-    }
-
-    fun checkAndSaveServer() {
-        if (serverChecking) return
-        serverChecking = true
-        serverStatus = "正在检测输入的地址…"
-        coroutineScope.launch {
-            runCatching { ServerConnectionManager.check(serverAddress) }
-                .onSuccess { health ->
-                    serverAddress = ServerEndpoint.save(context, health.baseUrl)
-                    serverStatus = "连接成功 · ${health.model}${if (health.liveAi) " · 云端 AI 已启用" else " · 演示回复"}"
-                    onServerEndpointChanged()
-                }
-                .onFailure { error ->
-                    serverStatus = error.message ?: "该地址暂时无法连接"
-                }
-            serverChecking = false
-        }
-    }
-
-    if (showHelpResources) AlertDialog(
-        onDismissRequest = { if (!serverChecking) showHelpResources = false },
-        containerColor = Cream,
-        shape = RoundedCornerShape(30.dp),
-        title = { Text("帮助与求助资源") },
-        text = {
-            Column(
-                modifier = Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text("遇到紧急危险时，请优先联系身边可信任的人或当地紧急援助。小鸭不会替你自动发送消息。")
-                HorizontalDivider()
-                if (com.testconnection.confidence_agent.BuildConfig.CLOUD_TEST) {
-                    Text("受邀云测", style = MaterialTheme.typography.titleMedium)
-                    Text("已连接项目云端服务，可直接使用手机网络。遇到连接或授权问题时，请联系测试组织者。")
-                } else {
-                Text("后端连接 · 测试工具", style = MaterialTheme.typography.titleMedium)
-                Text("手机和电脑连接同一 Wi-Fi，或电脑连接当前手机热点时，可以自动找到并保存后端地址。")
-                OutlinedTextField(
-                    value = serverAddress,
-                    onValueChange = { serverAddress = it; serverStatus = "地址尚未检测" },
-                    enabled = !serverChecking,
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("服务器地址") },
-                    placeholder = { Text("http://192.168.1.10:8000") },
-                )
-                Button(
-                    onClick = ::detectServer,
-                    enabled = !serverChecking,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = AppButtonShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = SageDark),
-                ) { Text("一键检测局域网") }
-                TextButton(
-                    onClick = ::checkAndSaveServer,
-                    enabled = !serverChecking,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("检测并保存输入地址") }
-                if (serverChecking) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp).align(Alignment.CenterHorizontally),
-                        color = SageDark,
-                        strokeWidth = 2.dp,
-                    )
-                }
-                Text(serverStatus, style = MaterialTheme.typography.bodyMedium, color = InkMuted)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { showHelpResources = false }, enabled = !serverChecking) { Text("收好") }
-        },
-    )
-
     if (showWidgetPrivacy) AlertDialog(
         onDismissRequest = { showWidgetPrivacy = false },
         title = { Text("桌面展示许可") },
@@ -355,7 +259,7 @@ fun ProfileScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限" || entry.title == "数据导出" || entry.title == "帮助与求助资源") {
+                                .noRippleClickable(enabled = entry.title == "记忆中心" || entry.title == "支持圈" || entry.title == "隐私与权限" || entry.title == "数据导出" || entry.title == "评价与建议") {
                                     when (entry.title) {
                                         "记忆中心" -> onOpenMemoryCenter()
                                         "支持圈" -> onOpenSupportCircle()
@@ -368,11 +272,7 @@ fun ProfileScreen(
                                             showWidgetPrivacy = true
                                         }
                                         "数据导出" -> onOpenDataTools()
-                                        "帮助与求助资源" -> {
-                                            serverAddress = ServerEndpoint.current()
-                                            serverStatus = "当前使用：${ServerEndpoint.current()}"
-                                            showHelpResources = true
-                                        }
+                                        "评价与建议" -> onOpenFeedback()
                                     }
                                 }
                                 .padding(horizontal = 18.dp, vertical = 16.dp),

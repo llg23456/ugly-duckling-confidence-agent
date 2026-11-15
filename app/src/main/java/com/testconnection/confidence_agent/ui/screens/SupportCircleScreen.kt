@@ -172,6 +172,7 @@ fun SupportCircleScreen(onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item { SupportHero() }
+            item { Text("遇到紧急危险时，请优先联系身边可信任的人或当地紧急援助。小鸭不会替你自动发送消息。", color = InkMuted) }
 
             error?.let { message ->
                 item {
