@@ -76,6 +76,7 @@ object CloudAccess {
         expiresAt = 0
         mutableAuthorized.value = false
         if (::preferences.isInitialized) preferences.edit().clear().apply()
+        if (::appContext.isInitialized) com.testconnection.confidence_agent.data.repository.CommunityImageCache.clearAll(appContext)
     }
 
     fun tokenFor(url: URL): String? {

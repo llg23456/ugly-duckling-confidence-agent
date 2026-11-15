@@ -13,6 +13,8 @@ class CommunityHttpException(val status: Int, message: String) : Exception(messa
 
 /** Uses the same device-bound credential as private APIs. Never puts credentials in image URLs. */
 class CommunityApiClient(private val deviceId: String) {
+    // Isolate local image data by both server and reader; never put a bearer token in the key.
+    val imageCacheScope: String get() = ServerEndpoint.current().trimEnd('/') + "\n" + deviceId
     private fun url(path: String, query: Map<String, String> = emptyMap()): URL {
         val values = query + ("device_id" to deviceId)
         return URL(ServerEndpoint.current().trimEnd('/') + "/api/v1/community" + path + "?" +

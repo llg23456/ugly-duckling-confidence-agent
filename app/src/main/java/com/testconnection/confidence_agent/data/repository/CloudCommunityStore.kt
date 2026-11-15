@@ -49,7 +49,11 @@ class CloudCommunityStore(context: Context) {
     fun cache(rows: List<JSONObject>) { prefs.edit().putString("feed", JSONArray(rows.take(100)).toString()).apply() }
     fun cache(): List<JSONObject> = runCatching { JSONArray(prefs.getString("feed", "[]")).objects() }.getOrDefault(emptyList())
     fun clearFeed() { prefs.edit().remove("feed").commit() }
-    fun clearAll() { prefs.edit().clear().commit(); directory.deleteRecursively() }
+    fun clearAll() {
+        prefs.edit().clear().commit()
+        directory.deleteRecursively()
+        CommunityImageCache.clearAll(app)
+    }
 
     suspend fun importPicture(uri: Uri): String = withContext(Dispatchers.IO) {
         val resolver = app.contentResolver

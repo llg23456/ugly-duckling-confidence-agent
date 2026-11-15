@@ -84,6 +84,12 @@ class CloudCommunityInstrumentedTest {
         val file = File(context.getExternalFilesDir(null), "$name.png")
         instrumentation.uiAutomation.takeScreenshot().let { bitmap -> file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
     }
+    private fun imageRequestCount(): Int? {
+        val endpoint = InstrumentationRegistry.getArguments().getString("community_cache_metrics_url") ?: return null
+        val url = java.net.URL(endpoint + "?device_id=" + android.net.Uri.encode(DeviceIdStore(context).get()))
+        val connection = url.openConnection().apply { connectTimeout = 5_000; readTimeout = 5_000 }
+        return connection.getInputStream().bufferedReader().use { JSONObject(it.readText()).getInt("media_gets") }
+    }
 
     @Test fun profileDraftPublishCommentAndDeleteUseRealBackend() {
         show(); phase("open-profile"); compose.onNodeWithText("社区名片").performClick()
@@ -170,12 +176,40 @@ class CloudCommunityInstrumentedTest {
         compose.onNodeWithText("从我的记录导入").performClick(); compose.onNodeWithText("一张户外照片").performClick()
         scroll("检查并发布"); compose.onNodeWithText("检查并发布").performClick(); compose.onNodeWithText("确认发布").performClick()
         waitText("分享详情"); waitText("友善地说一句（最多500字）")
-        runBlocking {
+        val uploadedPost = runBlocking {
             val post = api.request("GET", "/posts",query=mapOf("mine" to "true")).getJSONArray("posts").getJSONObject(0)
             Assert.assertEquals(1,post.getJSONArray("media_ids").length())
             Assert.assertFalse(post.toString().contains("private-photo-id"))
+            post
         }
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("社区分享图片").fetchSemanticsNodes().isNotEmpty() }
+        val firstDownloads = imageRequestCount()
+        firstDownloads?.let { Assert.assertEquals(1, it) }
+        scroll("‹ 返回社区"); compose.onNodeWithText("‹ 返回社区").performClick(); waitText("一起成长")
+        scroll("一张户外照片"); compose.onNodeWithText("一张户外照片").performClick()
+        waitText("分享详情")
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("社区分享图片").fetchSemanticsNodes().isNotEmpty() }
+        Assert.assertEquals(firstDownloads, imageRequestCount())
+        Assert.assertTrue(CommunityImageCache(context).diskBytes() > 0)
+        // Force a different screen instance and an empty memory cache: persisted bytes must suffice.
+        instrumentation.runOnMainSync { host?.finish(); host = null }
+        instrumentation.waitForIdleSync()
+        CommunityImageCache.trimMemory()
+        show(); scroll("一张户外照片"); compose.onNodeWithText("一张户外照片").performClick(); waitText("分享详情")
+        compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("社区分享图片").fetchSemanticsNodes().isNotEmpty() }
+        Assert.assertEquals(firstDownloads, imageRequestCount())
+        phase("image-cache-verified-downloads=" + (imageRequestCount()?.toString() ?: "metrics-disabled"))
         scroll("一张户外照片"); screenshot("community-photo-detail")
+        // A later server deletion must beat cached pixels when the detail is opened again.
+        runBlocking { api.request("DELETE", "/posts/${uploadedPost.getString("id")}") }
+        scroll("‹ 返回社区"); compose.onNodeWithText("‹ 返回社区").performClick(); waitText("一起成长")
+        scroll("一张户外照片"); compose.onNodeWithText("一张户外照片").performClick()
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithText("一起成长").fetchSemanticsNodes().isNotEmpty() &&
+                compose.onAllNodesWithText("一张户外照片").fetchSemanticsNodes().isEmpty()
+        }
+        Assert.assertEquals(0L, CommunityImageCache(context).diskBytes())
+        phase("server-deletion-evicts-cached-picture")
         photo.delete()
     }
 }

@@ -10,6 +10,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,6 +61,7 @@ fun CommunityScreen(
     val context = LocalContext.current
     val api = remember { CommunityApiClient(DeviceIdStore(context).get()) }
     val store = remember { CloudCommunityStore(context) }
+    val imageCache = remember { CommunityImageCache(context) }
     val localStore = remember { CommunityPostStore(context) }
     val scope = rememberCoroutineScope()
     var page by remember { mutableStateOf("feed") }
@@ -69,6 +71,8 @@ fun CommunityScreen(
     var query by remember { mutableStateOf("") }
     var topic by remember { mutableStateOf("") }
     var cached by remember { mutableStateOf(posts.isNotEmpty()) }
+    var imageRevision by remember { mutableIntStateOf(0) }
+    var imageScope by remember { mutableStateOf(api.imageCacheScope) }
     var profile by remember { mutableStateOf<JSONObject?>(null) }
     var selected by remember { mutableStateOf<JSONObject?>(null) }
     var detailReady by remember { mutableStateOf(false) }
@@ -114,6 +118,7 @@ fun CommunityScreen(
         posts = if (append) (posts + rows).distinctBy { it.getString("id") } else rows
         nextCursor = result.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
         cached = false
+        imageScope = api.imageCacheScope; imageRevision += 1
         if (!myOnly && query.isBlank() && topic.isBlank()) store.cache(posts)
     }
     suspend fun loadComments(append: Boolean = false) {
@@ -126,6 +131,8 @@ fun CommunityScreen(
         commentCursor = result.optString("next_cursor").takeIf { it.isNotBlank() && it != "null" }
     }
     fun updatePost(value: JSONObject) {
+        val previous = (posts + listOfNotNull(selected)).firstOrNull { it.optString("id") == value.optString("id") }
+        imageCache.evict(imageScope, previous?.optJSONArray("media_ids").strings() - value.optJSONArray("media_ids").strings().toSet())
         posts = posts.map { if (it.optString("id") == value.optString("id")) value else it }
         if (selected?.optString("id") == value.optString("id")) selected = value
         store.clearFeed() // A changed or removed item must never survive as an older offline snapshot.
@@ -178,9 +185,16 @@ fun CommunityScreen(
             snapshotFlow { busy }.first { !it }
             run {
                 val id = selected?.getString("id") ?: return@run
-                try { selected = api.request("GET", "/posts/$id"); detailReady = true; loadComments() }
+                try {
+                    selected = api.request("GET", "/posts/$id")
+                    imageScope = api.imageCacheScope; imageRevision += 1
+                    detailReady = true; loadComments()
+                }
                 catch (e: CommunityHttpException) {
-                    if (e.status == 404) { posts = posts.filterNot { it.getString("id") == id }; store.clearFeed(); page = "feed"; selected = null }
+                    if (e.status == 404) {
+                        imageCache.evict(imageScope, selected?.optJSONArray("media_ids").strings())
+                        posts = posts.filterNot { it.getString("id") == id }; store.clearFeed(); page = "feed"; selected = null
+                    }
                     throw e
                 }
             }
@@ -215,7 +229,7 @@ fun CommunityScreen(
                     save(draft.copy(uploaded = draft.uploaded + id))
                 }
                 val posted = api.request("POST", "/posts", draft.payload())
-                store.clearDraft(); draft = CloudCommunityDraft(); selected = posted; page = "detail"
+                store.clearDraft(); draft = CloudCommunityDraft(); detailReady = false; selected = posted; page = "detail"
                 loadFeed(); notice = "已发布，其他体验者现在可以看到"
             }
         }) { Text(if (draft.pending) "重试这次发布" else "确认发布") } },
@@ -259,6 +273,8 @@ fun CommunityScreen(
     deleting?.let { target -> AlertDialog(onDismissRequest = { deleting = null }, title = { Text("删除后无法恢复，确认删除？") },
         confirmButton = { TextButton(enabled = !busy, onClick = { run {
             api.request("DELETE", if (target.kind == "post") "/posts/${target.id}" else "/comments/${target.id}")
+            if (target.kind == "post") imageCache.evict(imageScope,
+                (posts + listOfNotNull(selected)).filter { it.optString("id") == target.id }.flatMap { it.optJSONArray("media_ids").strings() })
             deleting = null; store.clearFeed()
             if (target.kind == "post") { selected = null; page = "feed"; loadFeed() }
             else { loadComments(); selected?.let { updatePost(api.request("GET", "/posts/${it.getString("id")}")) } }
@@ -267,6 +283,7 @@ fun CommunityScreen(
         text = { Text("不再显示此作者的帖子与评论。你可在“屏蔽管理”中解除。") },
         confirmButton = { TextButton(enabled = !busy, onClick = { run {
             api.request("PUT", "/blocks/${target.author}"); blocking = null; selected = null
+            withContext(Dispatchers.IO) { CommunityImageCache.clearAll(context) }
             posts = emptyList(); store.clearFeed(); page = "feed"; loadFeed()
         } }) { Text("确认屏蔽") } }, dismissButton = { TextButton(onClick = { blocking = null }) { Text("取消") } }) }
     reporting?.let { target -> AlertDialog(onDismissRequest = { reporting = null }, title = { Text("举报内容") }, text = {
@@ -323,7 +340,7 @@ fun CommunityScreen(
             }
             if (posts.isEmpty() && !busy) item(key = "community-section-6", contentType = "section-6") { Text("这里暂时没有帖子。可以刷新，或分享你的第一小步。", Modifier.padding(vertical = 24.dp)) }
             items(posts, key = { "post-" + it.getString("id") }) { post ->
-                CloudPostCard(post, api, cached, detail = false, onOpen = { if (!busy) { selected = post; page = "detail" } },
+                CloudPostCard(post, api, imageCache, imageScope, imageRevision, cached, detail = false, onOpen = { if (!busy) { detailReady = false; selected = post; page = "detail" } },
                     onLike = { run { updatePost(api.request(if (post.optBoolean("liked")) "DELETE" else "PUT", "/posts/${post.getString("id")}/like")) } },
                     onMenu = { menu = post.target("post") }, enabled = !busy && !cached)
             }
@@ -361,10 +378,14 @@ fun CommunityScreen(
             }
         } else if (page == "detail") {
             if (!detailReady && !busy) item(key = "community-section-10", contentType = "section-10") { OutlinedButton(onClick = { run {
-                selected?.let { selected = api.request("GET", "/posts/${it.getString("id")}"); detailReady = true; loadComments() }
+                selected?.let {
+                    selected = api.request("GET", "/posts/${it.getString("id")}")
+                    imageScope = api.imageCacheScope; imageRevision += 1
+                    detailReady = true; loadComments()
+                }
             } }) { Text("重新加载详情") } }
             selected?.takeIf { detailReady }?.let { post ->
-                item(key = "community-section-11", contentType = "section-11") { CloudPostCard(post, api, cached = false, detail = true, onOpen = {}, enabled = !busy,
+                item(key = "community-section-11", contentType = "section-11") { CloudPostCard(post, api, imageCache, imageScope, imageRevision, cached = false, detail = true, onOpen = {}, enabled = !busy,
                     onLike = { run { updatePost(api.request(if (post.optBoolean("liked")) "DELETE" else "PUT", "/posts/${post.getString("id")}/like")) } },
                     onMenu = { menu = post.target("post") }) }
                 if (post.optString("status") == "published") {
@@ -439,7 +460,8 @@ private fun CommunityAuthor(author: JSONObject) {
 }
 
 @Composable
-private fun CloudPostCard(post: JSONObject, api: CommunityApiClient, cached: Boolean, detail: Boolean,
+private fun CloudPostCard(post: JSONObject, api: CommunityApiClient, imageCache: CommunityImageCache,
+                          imageScope: String, imageRevision: Int, cached: Boolean, detail: Boolean,
                           onOpen: () -> Unit, onLike: () -> Unit, onMenu: () -> Unit, enabled: Boolean) {
     ElevatedCard(onClick = onOpen, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -447,7 +469,7 @@ private fun CloudPostCard(post: JSONObject, api: CommunityApiClient, cached: Boo
             Text(post.optString("title"), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
             Text(post.optString("content"), maxLines = if (detail) Int.MAX_VALUE else 5)
             val media = post.optJSONArray("media_ids").strings()
-            (if (detail) media else media.take(1)).forEach { id -> CloudCommunityPicture(api, id, cached) }
+            (if (detail) media else media.take(1)).forEach { id -> CloudCommunityPicture(api, imageCache, imageScope, imageRevision, id, cached) }
             if (!detail && media.size > 1) Text("共${media.size}张图片，点开查看", style = MaterialTheme.typography.bodySmall)
             Text("${post.optString("topic")} · ${cloudTime(post.optString("created_at"))}", style = MaterialTheme.typography.bodySmall)
             if (post.optString("status") == "hidden") Text("此帖已下架：${post.optString("reason")}", color = MaterialTheme.colorScheme.error)
@@ -461,18 +483,32 @@ private fun CloudPostCard(post: JSONObject, api: CommunityApiClient, cached: Boo
 }
 
 @Composable
-private fun CloudCommunityPicture(api: CommunityApiClient, id: String, offline: Boolean) {
-    var bitmap by remember(id, offline) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var failed by remember(id, offline) { mutableStateOf(false) }
-    LaunchedEffect(id, offline) {
+private fun CloudCommunityPicture(api: CommunityApiClient, cache: CommunityImageCache, scope: String,
+                                  revision: Int, id: String, offline: Boolean) {
+    var bitmap by remember(id, scope, offline) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var failed by remember(id, scope, offline) { mutableStateOf(false) }
+    var retry by remember(id) { mutableIntStateOf(0) }
+    LaunchedEffect(id, scope, offline, revision, retry) {
+        failed = false
         if (offline) { failed = true; return@LaunchedEffect }
-        try { val bytes = api.media(id); bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }; failed = bitmap == null }
+        try {
+            check(api.imageCacheScope == scope) { "请刷新帖子后再查看图片" }
+            bitmap = cache.load(scope, id) {
+                api.media(id).also { check(api.imageCacheScope == scope) { "服务地址已变化，请刷新" } }
+            }
+        }
         catch (e: CancellationException) { throw e }
-        catch (_: Exception) { failed = true }
+        catch (e: Exception) {
+            if (e is CommunityHttpException && e.status in listOf(401, 403, 404)) {
+                cache.evict(scope, listOf(id)); bitmap = null
+            }
+            failed = true
+        }
     }
     val image = bitmap
     if (image != null) Image(image.asImageBitmap(), "社区分享图片", Modifier.fillMaxWidth().heightIn(max = 360.dp), contentScale = ContentScale.Fit)
-    else Text(if (failed) "图片暂不可用，请联网刷新查看" else "图片加载中…", style = MaterialTheme.typography.bodySmall)
+    else Text(if (failed) { if (offline) "联网刷新后可查看已缓存图片" else "图片暂不可用，点此重试" } else "图片加载中…",
+        modifier = Modifier.clickable(enabled = failed && !offline) { retry += 1 }, style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable
