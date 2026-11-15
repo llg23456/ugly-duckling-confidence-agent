@@ -4,6 +4,8 @@ Android 成长陪伴 App，客户端使用 Kotlin / Jetpack Compose，服务端�
 
 当前 Android 云测版固定连接 **https://api.yaligo-growth.top**。香港服务器提供后端，电脑只用于开发和运维；手机正常使用时电脑可以关机。
 
+受邀云测社区已支持共享图文、评论点赞、举报屏蔽与私有后台管理；使用、部署和验收记录见 [社区说明](deploy/cloud-test/COMMUNITY.md)。
+
 ## 目录
 
 - `app/`：Android 代码、界面、资源与测试。

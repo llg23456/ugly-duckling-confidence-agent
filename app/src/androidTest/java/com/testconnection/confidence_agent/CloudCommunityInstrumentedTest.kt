@@ -2,8 +2,8 @@ package com.testconnection.confidence_agent
 
 import android.graphics.Bitmap
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.material3.MaterialTheme
+import androidx.activity.ComponentActivity
+import androidx.compose.material3.Scaffold
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -17,6 +17,7 @@ import com.testconnection.confidence_agent.data.remote.CommunityApiClient
 import com.testconnection.confidence_agent.data.remote.ReviewApiClient
 import com.testconnection.confidence_agent.data.repository.*
 import com.testconnection.confidence_agent.ui.screens.CommunityScreen
+import com.testconnection.confidence_agent.ui.theme.ConfidenceAgentTheme
 import java.io.File
 import java.io.FileInputStream
 import kotlinx.coroutines.runBlocking
@@ -29,35 +30,50 @@ class CloudCommunityInstrumentedTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private lateinit var api: CommunityApiClient
-    private var activity: MainActivity? = null
+    private var host: ComponentActivity? = null
     private var backendUrl = "http://127.0.0.1:8769"
+    private fun phase(value: String) { instrumentation.sendStatus(2, android.os.Bundle().apply { putString("phase", value) }) }
 
     @Before fun setup() = runBlocking {
         Assume.assumeTrue(context.packageName.endsWith(".local"))
+        phase("setup-start")
         backendUrl = InstrumentationRegistry.getArguments().getString("community_test_url") ?: backendUrl
         ServerEndpoint.save(context, backendUrl)
         context.getSharedPreferences("duck_device", android.content.Context.MODE_PRIVATE).edit().clear().commit()
         api = CommunityApiClient(DeviceIdStore(context).get())
+        phase("delete-isolated-data")
         ReviewApiClient().deleteAllData(DeviceIdStore(context).get())
+        phase("delete-completed")
         CloudCommunityStore(context).clearAll()
         CommunityPostStore(context).clearAll()
         LocalRecordRepository(context).clearAll()
+        phase("setup-completed")
     }
     @After fun cleanup() = runBlocking {
         if (context.packageName.endsWith(".local") && ::api.isInitialized) {
-            instrumentation.runOnMainSync { activity?.finish() }
+            instrumentation.runOnMainSync { host?.finish() }
             ServerEndpoint.save(context, backendUrl)
             ReviewApiClient().deleteAllData(DeviceIdStore(context).get())
             CloudCommunityStore(context).clearAll()
         }
     }
     private fun show() {
-        instrumentation.uiAutomation.executeShellCommand("am start -W -n ${context.packageName}/${MainActivity::class.java.name}")
+        phase("launch-empty-host")
+        instrumentation.uiAutomation.executeShellCommand("am start -W -n ${context.packageName}/com.testconnection.confidence_agent.CommunityTestActivity")
             .use { FileInputStream(it.fileDescriptor).readBytes() }
-        instrumentation.runOnMainSync {
-            activity = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).filterIsInstance<MainActivity>().first()
-            activity!!.setContent { MaterialTheme { CommunityScreen(PaddingValues(), "PRIVATE-NAME-MUST-NOT-BE-PUBLIC") } }
+        val deadline = android.os.SystemClock.uptimeMillis() + 10_000
+        while (host == null && android.os.SystemClock.uptimeMillis() < deadline) {
+            instrumentation.runOnMainSync {
+                host = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                    .filterIsInstance<ComponentActivity>().firstOrNull { it.javaClass.simpleName == "CommunityTestActivity" }
+            }
+            if (host == null) android.os.SystemClock.sleep(100)
         }
+        checkNotNull(host) { "Empty community test host did not resume" }
+        instrumentation.runOnMainSync {
+            host!!.setContent { ConfidenceAgentTheme { Scaffold { padding -> CommunityScreen(padding, "PRIVATE-NAME-MUST-NOT-BE-PUBLIC") } } }
+        }
+        phase("host-content-ready")
         waitText("写分享")
         compose.waitUntil(20_000) { compose.onAllNodes(hasText("写分享") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
     }
@@ -70,14 +86,17 @@ class CloudCommunityInstrumentedTest {
     }
 
     @Test fun profileDraftPublishCommentAndDeleteUseRealBackend() {
-        show(); compose.onNodeWithText("社区名片").performClick()
+        show(); phase("open-profile"); compose.onNodeWithText("社区名片").performClick()
+        phase("type-nickname")
         compose.onNode(hasSetTextAction() and hasText("昵称", substring = true)).performTextReplacement("验收小鸭")
-        compose.onNodeWithText("保存名片").performClick()
+        phase("save-profile"); compose.onNodeWithText("保存名片").performClick()
         compose.waitUntil(20_000) { compose.onAllNodesWithText("设置社区名片").fetchSemanticsNodes().isEmpty() }
-        compose.onNodeWithText("写分享").performClick()
-        compose.onNode(hasSetTextAction() and hasText("标题", substring = true)).performTextInput("真机社区小步")
+        compose.waitUntil(20_000) { compose.onAllNodes(hasText("写分享") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+        phase("open-composer"); compose.onNodeWithText("写分享").performClick()
+        phase("type-title"); compose.onNode(hasSetTextAction() and hasText("标题", substring = true)).performTextInput("真机社区小步")
         compose.onNode(hasSetTextAction() and hasText("想分享的经历", substring = true)).performTextInput("今天请教了师姐，也出去走了走。")
-        compose.onNodeWithText("‹ 返回社区").performClick(); compose.onNodeWithText("写分享").performClick()
+        scroll("‹ 返回社区"); compose.onNodeWithText("‹ 返回社区").performClick()
+        waitText("一起成长"); compose.onNodeWithText("写分享").performClick()
         compose.onNodeWithText("今天请教了师姐，也出去走了走。").assertExists()
         scroll("检查并发布"); screenshot("community-composer")
         compose.onNodeWithText("检查并发布").performClick(); compose.onNodeWithText("确认发布").performClick()

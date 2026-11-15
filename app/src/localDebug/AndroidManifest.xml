@@ -4,5 +4,6 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <application>
         <receiver android:name=".data.sms.DeviceSmsReceiptReceiver" android:exported="false" />
+        <activity android:name="com.testconnection.confidence_agent.CommunityTestActivity" android:exported="true" />
     </application>
 </manifest>

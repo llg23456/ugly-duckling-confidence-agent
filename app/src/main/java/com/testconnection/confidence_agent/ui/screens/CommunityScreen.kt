@@ -235,8 +235,8 @@ fun CommunityScreen(
         val records = remember { LocalRecordRepository(context).load().mapNotNull { CommunityRecordImport.from(it) } }
         AlertDialog(onDismissRequest = { importRecords = false }, title = { Text("选择一条记录作为草稿") },
             text = { LazyColumn(Modifier.heightIn(max = 400.dp)) {
-                item { Text("仅复制你选中的文字和照片。导入后可删改，确认发布前不会上传。选择后替换当前草稿。") }
-                if (records.isEmpty()) item { Text("暂无可导入的已保存记录") }
+                item(key = "community-section-1", contentType = "section-1") { Text("仅复制你选中的文字和照片。导入后可删改，确认发布前不会上传。选择后替换当前草稿。") }
+                if (records.isEmpty()) item(key = "community-section-2", contentType = "section-2") { Text("暂无可导入的已保存记录") }
                 items(records) { record -> TextButton(onClick = {
                     run {
                         val path = record.sourcePhotoPath?.let { store.importPicture(Uri.fromFile(File(it))) }
@@ -285,7 +285,7 @@ fun CommunityScreen(
     key(page) {
     LazyColumn(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(contentPadding).imePadding(),
         contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
+        item(key = "community-section-3", contentType = "section-3") {
             Column {
                 if (page != "feed") TextButton(onClick = { page = "feed"; selected = null }) { Text("‹ 返回社区") }
                 Text(when (page) { "compose" -> "写一篇分享"; "detail" -> "分享详情"; "legacy" -> "本机旧帖"; "blocks" -> "屏蔽管理"; else -> "一起成长" },
@@ -296,7 +296,7 @@ fun CommunityScreen(
             }
         }
         if (page == "feed") {
-            item {
+            item(key = "community-section-4", contentType = "section-4") {
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(enabled = !busy, onClick = { page = "compose" }) { Text("写分享") }
                     OutlinedButton(enabled = !busy, onClick = { openProfile() }) { Text("社区名片") }
@@ -304,7 +304,7 @@ fun CommunityScreen(
                     OutlinedButton(enabled = !busy, onClick = { run { blockedUsers = api.request("GET", "/blocks").optJSONArray("profiles").objects(); page = "blocks" } }) { Text("屏蔽管理") }
                 }
             }
-            item {
+            item(key = "community-section-5", contentType = "section-5") {
                 OutlinedTextField(query, { if (it.length <= 100) query = it }, Modifier.fillMaxWidth(), label = { Text("搜索标题或正文") }, singleLine = true)
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
                     TextButton(enabled = !busy, onClick = { run { myOnly = false; loadFeed() } }) { Text(if (!myOnly) "● 最新" else "最新") }
@@ -321,15 +321,15 @@ fun CommunityScreen(
                 if (cached) Text("显示上次加载的内容；联网刷新后更新。离线时不能发布或互动。", style = MaterialTheme.typography.bodySmall)
                 if (profile?.optBoolean("restricted") == true) Text("社区发布功能已受限。你仍可阅读，私人陪伴功能不受影响。")
             }
-            if (posts.isEmpty() && !busy) item { Text("这里暂时没有帖子。可以刷新，或分享你的第一小步。", Modifier.padding(vertical = 24.dp)) }
+            if (posts.isEmpty() && !busy) item(key = "community-section-6", contentType = "section-6") { Text("这里暂时没有帖子。可以刷新，或分享你的第一小步。", Modifier.padding(vertical = 24.dp)) }
             items(posts, key = { "post-" + it.getString("id") }) { post ->
                 CloudPostCard(post, api, cached, detail = false, onOpen = { if (!busy) { selected = post; page = "detail" } },
                     onLike = { run { updatePost(api.request(if (post.optBoolean("liked")) "DELETE" else "PUT", "/posts/${post.getString("id")}/like")) } },
                     onMenu = { menu = post.target("post") }, enabled = !busy && !cached)
             }
-            if (nextCursor != null && !cached) item { OutlinedButton(enabled = !busy, onClick = { run { loadFeed(true) } }, modifier = Modifier.fillMaxWidth()) { Text("加载更多") } }
+            if (nextCursor != null && !cached) item(key = "community-section-7", contentType = "section-7") { OutlinedButton(enabled = !busy, onClick = { run { loadFeed(true) } }, modifier = Modifier.fillMaxWidth()) { Text("加载更多") } }
         } else if (page == "compose") {
-            item {
+            item(key = "community-section-8", contentType = "section-8") {
                 Text("草稿保存在这台手机。只会发布下面可见的文字和图片，最多3张；本轮不支持视频。")
                 if (profile?.optBoolean("configured") != true) OutlinedButton(enabled = !busy, onClick = ::openProfile) { Text("先设置独立社区昵称") }
                 if (draft.pending) Text("上次发布尚未确认。为避免重复或内容错位，草稿已锁定，请重试原请求；也可先在“我的帖子”查看。", color = MaterialTheme.colorScheme.primary)
@@ -352,7 +352,7 @@ fun CommunityScreen(
                     TextButton(enabled = !busy && !draft.pending, onClick = { save(draft.copy(pictures = draft.pictures - path, uploaded = emptyList())) }) { Text("移除这张图片") }
                 }
             }
-            item {
+            item(key = "community-section-9", contentType = "section-9") {
                 Button(enabled = !busy && profile?.optBoolean("configured") == true && profile?.optBoolean("restricted") != true &&
                     draft.title.isNotBlank() && (draft.content.isNotBlank() || draft.pictures.isNotEmpty()),
                     onClick = { confirmPublish = true }, modifier = Modifier.fillMaxWidth()) { Text(if (draft.pending) "重试原发布" else "检查并发布") }
@@ -360,16 +360,16 @@ fun CommunityScreen(
                 Text("返回不会丢失草稿，也不会自动发布。", style = MaterialTheme.typography.bodySmall)
             }
         } else if (page == "detail") {
-            if (!detailReady && !busy) item { OutlinedButton(onClick = { run {
+            if (!detailReady && !busy) item(key = "community-section-10", contentType = "section-10") { OutlinedButton(onClick = { run {
                 selected?.let { selected = api.request("GET", "/posts/${it.getString("id")}"); detailReady = true; loadComments() }
             } }) { Text("重新加载详情") } }
             selected?.takeIf { detailReady }?.let { post ->
-                item { CloudPostCard(post, api, cached = false, detail = true, onOpen = {}, enabled = !busy,
+                item(key = "community-section-11", contentType = "section-11") { CloudPostCard(post, api, cached = false, detail = true, onOpen = {}, enabled = !busy,
                     onLike = { run { updatePost(api.request(if (post.optBoolean("liked")) "DELETE" else "PUT", "/posts/${post.getString("id")}/like")) } },
                     onMenu = { menu = post.target("post") }) }
                 if (post.optString("status") == "published") {
-                    item { Text("评论", style = MaterialTheme.typography.titleLarge) }
-                    if (comments.isEmpty() && !busy) item { Text("还没有评论，可以留下一句支持。") }
+                    item(key = "community-section-12", contentType = "section-12") { Text("评论", style = MaterialTheme.typography.titleLarge) }
+                    if (comments.isEmpty() && !busy) item(key = "community-section-13", contentType = "section-13") { Text("还没有评论，可以留下一句支持。") }
                     items(comments, key = { "comment-" + it.getString("id") }) { row ->
                         ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) {
                             CommunityAuthor(row.getJSONObject("author")); Text(row.optString("content"))
@@ -377,8 +377,8 @@ fun CommunityScreen(
                                 TextButton(enabled = !busy, onClick = { menu = row.target("comment") }) { Text("操作") } }
                         } }
                     }
-                    if (commentCursor != null) item { TextButton(enabled = !busy, onClick = { run { loadComments(true) } }) { Text("更多评论") } }
-                    item {
+                    if (commentCursor != null) item(key = "community-section-14", contentType = "section-14") { TextButton(enabled = !busy, onClick = { run { loadComments(true) } }) { Text("更多评论") } }
+                    item(key = "community-section-15", contentType = "section-15") {
                         OutlinedTextField(comment, { if (it.length <= 500) comment = it }, enabled = !busy && !pendingComment,
                             modifier = Modifier.fillMaxWidth(), label = { Text("友善地说一句（最多500字）") }, minLines = 2)
                         if (pendingComment) Text("评论尚未确认，可重试相同内容，避免重复。")
@@ -395,9 +395,9 @@ fun CommunityScreen(
                 }
             }
         } else if (page == "legacy") {
-            item { Text("以下仅来自这台手机，以前的点赞和评论数不会上传。点选后进入可编辑草稿，确认发布后才进入共享社区。") }
+            item(key = "community-section-16", contentType = "section-16") { Text("以下仅来自这台手机，以前的点赞和评论数不会上传。点选后进入可编辑草稿，确认发布后才进入共享社区。") }
             val oldPosts = localStore.loadOwnPosts()
-            if (oldPosts.isEmpty()) item { Text("暂无本机旧帖") }
+            if (oldPosts.isEmpty()) item(key = "community-section-17", contentType = "section-17") { Text("暂无本机旧帖") }
             items(oldPosts, key = { "legacy-" + it.id }) { old ->
                 ElevatedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
                     Text(old.title, style = MaterialTheme.typography.titleMedium); Text(old.content)
@@ -413,7 +413,7 @@ fun CommunityScreen(
                 } }
             }
         } else if (page == "blocks") {
-            if (blockedUsers.isEmpty()) item { Text("你尚未屏蔽任何作者") }
+            if (blockedUsers.isEmpty()) item(key = "community-section-18", contentType = "section-18") { Text("你尚未屏蔽任何作者") }
             items(blockedUsers, key = { it.getString("id") }) { author ->
                 Row(Modifier.fillMaxWidth()) {
                     Column(Modifier.weight(1f)) { CommunityAuthor(author) }
@@ -424,7 +424,7 @@ fun CommunityScreen(
                 }
             }
         }
-        item { Spacer(Modifier.height(24.dp)) }
+        item(key = "community-section-19", contentType = "section-19") { Spacer(Modifier.height(24.dp)) }
     }
     }
 }

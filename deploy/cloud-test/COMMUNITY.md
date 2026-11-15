@@ -60,4 +60,26 @@ docker exec ugly-duckling-cloudtest-api-1 python backup.py --output /backups
 - Android：`CloudCommunityInstrumentedTest` 仅在 `.local` 安装运行，对接独立临时 FastAPI 数据库；`CloudCommunityStoreInstrumentedTest` 使用独立偏好/目录验证发布编号跨实例恢复。
 - 真机使用 `localDebug` 的仪器测试时临时设置 `android.testBuildType = 'localDebug'`，正式云测仍用默认 `debug`。构建分别执行并使用单编译进程，避免本机Kapt多个变体的服务注册冲突。
 
+本地仪器测试构建命令（不会切换正常云测构建的配置）：
+
+```powershell
+.\gradlew.bat -I deploy/cloud-test/community-test.init.gradle :app:assembleLocalDebug :app:assembleLocalDebugAndroidTest --no-parallel --max-workers=1 "-Pkotlin.compiler.execution.strategy=out-of-process"
+```
+
+测试端点默认为手机本机 `http://127.0.0.1:8769`，通过 `adb reverse tcp:8769 tcp:8769` 连接电脑上的独立FastAPI实例。该实例必须设置临时SQLite路径、`CLOUD_AUTH_REQUIRED=false`、`ENABLE_LIVE_AI=false` 和独立媒体目录。安装生成的两个localDebug APK后，仅运行 `CloudCommunityInstrumentedTest`、`CloudCommunityStoreInstrumentedTest`；它们会清理本地测试安装与临时后端中本次身份的数据，禁止指向真实用户库。
+
 验证输出、截图和部署记录放在本机仓库外的维护文档目录，不提交用户数据、凭据或生成媒体。
+
+## 2026-11-15 实施与验收
+
+- 分支 `codex/cloud-community`；云端后端发布 `20261115-hk08-6eefebf`，镜像源提交 `6eefebf96ff6075e498d12eb5db9021e64395f77`。后续客户端修复不改变已部署后端的业务代码。
+- Windows后端全套268项通过；Linux新镜像隔离测试267项通过、1项跳过（容器不包含Android源文件，跳过客户端问卷选项对照检查；该项在Windows仓库内通过）；新增10项社区/备份测试包含并发请求去重、删除后额度保持、图片容量与权限、审核及备份轮换。
+- 生产库副本升级：原有24张表的行数和值指纹均保持不变，增加11张社区表，integrity/foreign_key检查通过。上线前备份在 `/backups/pre-hk08`，上线后成对备份已生成；未修改真实用户记录。
+- 公网双受邀身份HTTP验收16项通过，涵盖授权绑定、上传与EXIF清理、发布/评论重试、点赞、作者权限、屏蔽/解除、审核与图片访问、限制发布、本人导出、删除及公网管理入口关闭；临时身份撤销，临时内容删除。正常管理员账号保留。
+- Android云测/本地两个APK构建通过，22项JVM测试通过。Redmi真机7项社区流程在正常屏幕和约280dp窄屏均通过；核验帖子/评论通过实际API写入，未使用演示帖子。测试使用独立本地包和临时数据库，云测安装只覆盖更新、不清空数据。
+- 真机发现旧Compose 1.7.0的失活节点测量崩溃，BOM更新为 `2024.10.01`（Compose 1.7.5、Material3 1.3.1），并明确列表页面/区块身份；修复后完整发布、输入及图片流程通过。上游修复说明：[Compose Foundation 1.7.4](https://developer.android.com/jetpack/androidx/releases/compose-foundation#1.7.4)。
+- Android 16复核曾出现旧Espresso等待布局时的重入异常；测试依赖更新为Espresso 3.7.0 / AndroidX JUnit 1.3.0后，完整7项重新通过。这些依赖仅用于测试；本地测试宿主也仅编入localDebug，云测安装不包含测试宿主。
+- 正式云测安装已读取香港共享信息流，首次发布要求独立昵称，编辑页系统返回键回到社区并恢复底部导航；未代替用户发布帖子。SSH隧道私有管理页面HTTP200验证通过，临时验证隧道已关闭。
+- 本轮仍不包含视频上传、多端账户找回、私信或关注。这些入口不以虚构数据替代。社区人工审核由管理员负责，页面在处理前即时可见。
+
+完整日志与截图：本机 `E:\docs\maintenance\2026-11-15\community-hk08`。初始管理员密码保存在本机仅当前用户可读的 `.codex_tmp/community-admin-credentials.json`，以及服务器root私有文件 `/root/yaligo-community-admin.json`；密码未写入Git或验收日志。

@@ -8,7 +8,9 @@ import argparse
 from io import BytesIO
 import json
 import secrets
+import sys
 import time
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
@@ -16,11 +18,21 @@ from PIL import Image
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+sys.path.insert(
+    0,
+    str(
+        Path("/srv/app")
+        if Path("/srv/app/app").is_dir()
+        else Path(__file__).resolve().parents[2] / "server"
+    ),
+)
+
 from app.core.cloud_access import issue_invite, digest, CloudCredential, CloudInvite
 from app.core.config import get_settings
 from app.db.session import engine_for_url
 from app.db.community import CommunityAdmin, CommunityAdminSession, CommunityQuota
 from app.api.routes.community_admin import password_hash
+from app.services.community_service import erase_community
 
 
 def main():
@@ -43,6 +55,7 @@ def main():
 
     def req(client, method, path, device=None, status=200, **kwargs):
         if device:
+            kwargs["params"] = {**kwargs.get("params", {}), "device_id": device}
             if method == "GET":
                 kwargs["params"] = {**kwargs.get("params", {}), "device_id": device}
             elif "files" in kwargs:
@@ -218,26 +231,13 @@ def main():
             req(outsider, "GET", root + "/posts", ua, status=401)
             req(outsider, "GET", "/community-admin/", status=404)
         checked.append("public_admin_and_unauthenticated_api_denied")
-        print(
-            json.dumps(
-                {
-                    "passed": True,
-                    "checks": checked,
-                    "count": len(checked),
-                    "synthetic_only": True,
-                    "cleanup": True,
-                },
-                ensure_ascii=False,
-            )
-        )
     finally:
-        for client, user in zip(clients, users):
-            try:
-                req(client, "DELETE", "/api/v1/data", user, status=204)
-            finally:
-                client.close()
+        for client in clients:
+            client.close()
         private.close()
         with Session(engine) as db:
+            for user in users:
+                erase_community(db, user)
             db.execute(
                 delete(CommunityAdminSession).where(
                     CommunityAdminSession.username == name
@@ -253,6 +253,18 @@ def main():
                 )
             )
             db.commit()
+    print(
+        json.dumps(
+            {
+                "passed": True,
+                "checks": checked,
+                "count": len(checked),
+                "synthetic_only": True,
+                "cleanup": True,
+            },
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":

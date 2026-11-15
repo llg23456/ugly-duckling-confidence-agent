@@ -1,0 +1,8 @@
+// Select the isolated local package for device tests without changing the normal cloud build.
+gradle.beforeProject { project ->
+    if (project.path == ':app') {
+        project.plugins.withId('com.android.application') {
+            project.android.testBuildType = 'localDebug'
+        }
+    }
+}
