@@ -1,0 +1,27 @@
+{
+  "verified_on": "2026-11-16",
+  "active_release": "20261116-hk09-unlimited",
+  "base_release": "20261115-hk08-6eefebf",
+  "daily_per_device": 0,
+  "daily_global": 0,
+  "zero_means_unlimited": true,
+  "applies_to_existing_and_future_users": true,
+  "exhausted_users_with_1_billion_usage_allowed": true,
+  "running_image_validation_database": "isolated in-memory; production user data untouched",
+  "daily_usage_does_not_increment_when_unlimited": true,
+  "unchanged_other_application_source_files": 78,
+  "only_application_change": "core/cloud_access.py quota guard",
+  "quota_tests": {
+    "passed": 21,
+    "warnings": 1,
+    "live_ai_calls": 0
+  },
+  "authentication_required": true,
+  "cross_device_rejected_403": true,
+  "public_unauthenticated_rejected_401": true,
+  "per_device_rate_limit_per_minute": 90,
+  "video_render_concurrency": 1,
+  "production_cloud_access_sha256": "7d72eff65d2a42633ea96e6efdd41ae4d10c83164039824fbef08c25ebbf0b5c",
+  "public_health_ok": true,
+  "model_mock": false
+}

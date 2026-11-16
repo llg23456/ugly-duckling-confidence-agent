@@ -238,3 +238,33 @@ def test_batch_transaction_rolls_back_on_duplicate_codes(cloud, monkeypatch):
             cloud_invites.issue_batch(db, 'atomic-batch', 2)
         db.rollback()
         assert db.scalar(select(access.CloudInvite).where(access.CloudInvite.label.like('atomic-batch-%'))) is None
+
+
+def test_unlimited_daily_quotas_include_already_exhausted_users(cloud):
+    client, settings, session, _, activate = cloud
+    first = activate('quota-first'); second = activate('quota-second')
+    settings.cloud_daily_requests = settings.cloud_global_daily_requests = 0
+    day = time.strftime('%Y-%m-%d', time.gmtime())
+    keys = [f'{day}:quota-first', f'{day}:quota-second', f'{day}:*']
+    with session() as db:
+        db.add_all([access.CloudUsage(key=key, used=1_000_000) for key in keys])
+        db.commit()
+    for device, headers in [('quota-first', first), ('quota-second', second)]:
+        for _ in range(2):
+            assert client.post('/api/v1/chat', headers=headers,
+                               json={'device_id': device, 'message': '今天好'}).status_code == 200
+    with session() as db:
+        assert all(db.get(access.CloudUsage, key).used == 1_000_000 for key in keys)
+    assert client.get('/api/v1/conversations/quota-second/messages', headers=first).status_code == 403
+    assert client.get('/api/v1/conversations/quota-first/messages').status_code == 401
+
+
+@pytest.mark.parametrize('per_device,global_limit', [(0, 1), (1, 0)])
+def test_daily_quota_switches_are_independent(cloud, per_device, global_limit):
+    client, settings, _, _, activate = cloud
+    headers = activate()
+    settings.cloud_daily_requests = per_device
+    settings.cloud_global_daily_requests = global_limit
+    payload = {'device_id': 'owner', 'message': '今天好'}
+    assert client.post('/api/v1/chat', headers=headers, json=payload).status_code == 200
+    assert client.post('/api/v1/chat', headers=headers, json=payload).status_code == 429

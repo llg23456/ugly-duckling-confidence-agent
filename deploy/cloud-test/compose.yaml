@@ -12,6 +12,8 @@ services:
     environment:
       APP_ENV: production
       CLOUD_AUTH_REQUIRED: "true"
+      CLOUD_DAILY_REQUESTS: "0"
+      CLOUD_GLOBAL_DAILY_REQUESTS: "0"
       DATABASE_URL: sqlite:////data/confidence_agent.db
       FFMPEG_PATH: /usr/bin/ffmpeg
       TZ: Asia/Shanghai

@@ -150,6 +150,8 @@ async def require_cloud_access(request: Request, db: Session = Depends(get_db)) 
         day = time.strftime("%Y-%m-%d", time.gmtime())
         for key, limit in [(f"{day}:{credential.device_id}", settings.cloud_daily_requests),
                            (f"{day}:*", settings.cloud_global_daily_requests)]:
+            if limit <= 0:  # Zero disables this quota, including for already exhausted users.
+                continue
             db.execute(insert(CloudUsage).values(key=key, used=0).on_conflict_do_nothing())
             result = db.execute(update(CloudUsage).where(CloudUsage.key == key, CloudUsage.used < limit)
                                 .values(used=CloudUsage.used + 1))
