@@ -1,5 +1,7 @@
 # 小丑鸭 Confidence Agent
 
+产品官网已上线：[鸭力Go](https://yaligo-growth.top/)，提供产品介绍、安装说明和 [Android APK 下载](https://yaligo-growth.top/download/android)。官网独立部署，版本发布与回退见 [官网运维说明](deploy/product-site/README.md)。
+
 香港后端已完成 `api.yaligo-growth.top` 的可信 HTTPS 和 Android 真机独立联网验收。当前云测版自动接入，无需邀请码、WireGuard 或电脑隧道；安装见 [云测说明](deploy/cloud-test/README.md)，历史受邀版本的证据见 [公网接口验收](deploy/cloud-test/access-verification.json) 和 [真机验收](deploy/cloud-test/phone-verification.json)。原验收后端 80 项、Android JVM 18 项测试通过。新身份记忆提取和并发响应耗时仍待专项排查，历史记录见 [香港模型冒烟](deploy/cloud-test/hongkong-verification.json)。
 
 2026-11-16 已取消邀请码和授权有效期：新版 APK 首次打开自动接入云端，所有用户不限每日调用次数。设备之间的数据仍隔离。新版安装包位于 `artifacts/cloud-test/20261116-open/yaligo-cloudtest-open.apk`，云端及构建验证见 [自动接入验证](deploy/cloud-test/open-enrollment-verification.json)。旧 APK 需升级才能移除邀请码页面与本机到期检查。

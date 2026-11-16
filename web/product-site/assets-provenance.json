@@ -1,0 +1,32 @@
+{
+  "duck-main.webp": {
+    "source_path": "app/src/main/res/drawable-nodpi/duck_main.png",
+    "source_commit": "5e4b17937a3ab94304ef4e0755ff94982f703783",
+    "source_sha256": "d6316774d858461c68d33a08b65939fa94f88b14c0ce12d59c2a83683bd66e52",
+    "web_bytes": 145222
+  },
+  "duck-listening.webp": {
+    "source_path": "app/src/main/res/drawable-nodpi/duck_listening.png",
+    "source_commit": "5e4b17937a3ab94304ef4e0755ff94982f703783",
+    "source_sha256": "e1c87f6018f1e5973f4fce27185cdfd0f55f1a713901b7b13d836315657ee44b",
+    "web_bytes": 207892
+  },
+  "duck-writing.webp": {
+    "source_path": "app/src/main/res/drawable-nodpi/duck_writing.png",
+    "source_commit": "5e4b17937a3ab94304ef4e0755ff94982f703783",
+    "source_sha256": "6b7595a86ea21afe2ba2383fb4d0d4990a5bf72e65eaba9e48f237566cff20ff",
+    "web_bytes": 208820
+  },
+  "duck-growth.webp": {
+    "source_path": "app/src/main/res/drawable-nodpi/duck_growth_try_v3.png",
+    "source_commit": "5e4b17937a3ab94304ef4e0755ff94982f703783",
+    "source_sha256": "1a26eb78d9a6458824e519a3acaa9ae9ea14f898c82ecad4859fd3cbd5983ebf",
+    "web_bytes": 289666
+  },
+  "duck-community.webp": {
+    "source_path": "app/src/main/res/drawable-nodpi/duck_community_header.png",
+    "source_commit": "5e4b17937a3ab94304ef4e0755ff94982f703783",
+    "source_sha256": "16afb5a8a84a2e744dd1964cf540ac77f4d5db438bee94b433147d1d44d0ae28",
+    "web_bytes": 149720
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "verified_at": "2026-11-16T03:06:22.631162+00:00",
+  "url": "https://yaligo-growth.top/",
+  "https_trust_validation": true,
+  "www_redirect_308": true,
+  "http_redirect_308": true,
+  "all_page_assets_accessible": 8,
+  "apk_size_bytes": 65716497,
+  "apk_sha256": "a2d0959a225ba792eaf4b80076645ca62b6867a03b3ca111b1209cc2af0863b6",
+  "full_download_hash_matches_approved_apk": true,
+  "range_start_and_end_206": true,
+  "get_and_head_stable_download_redirect_302": true,
+  "private_paths_and_directory_listing_404": true,
+  "api_health_and_authentication_preserved": true,
+  "metadata": {
+    "version_name": "1.0-cloudtest",
+    "package_name": "com.testconnection.confidence_agent.cloudtest",
+    "size_bytes": 65716497,
+    "published_at": "2026-11-16T11:02:32.956050+08:00",
+    "sha256": "a2d0959a225ba792eaf4b80076645ca62b6867a03b3ca111b1209cc2af0863b6",
+    "download_url": "/downloads/yaligo-cloudtest-20261116-a2d0959a225b.apk",
+    "min_android": "8.0",
+    "channel": "Android 云测版",
+    "invitation_required": false
+  },
+  "deployment": {
+    "api_config_preserved_byte_for_byte": true,
+    "api_image": "ugly-duckling-cloudtest:20261116-hk10-open",
+    "api_release": "/opt/ugly-duckling-cloudtest/releases/20261116-hk10-open",
+    "site_release": "/opt/ugly-duckling-site/releases/site-20261116-110232-19d5fb",
+    "original_api_caddy_sha256": "704e63846ff2941aeb57a0bc6c405e573a275a66db3a4fbb388117f5d259c1eb"
+  },
+  "dns": {
+    "records_added": [
+      "@",
+      "www"
+    ],
+    "type": "A",
+    "value": "47.83.165.140",
+    "ttl_seconds": 600,
+    "original_api_record_preserved": true,
+    "public_resolution_verified": true
+  },
+  "browser_visual_checks": {
+    "browser": "Lenovo Chromium browser via native CUA",
+    "desktop_page_and_qr_visible": true,
+    "mobile_viewport_widths_checked": [
+      400,
+      390,
+      320
+    ],
+    "horizontal_clipping_observed": false,
+    "mobile_fixed_download_button_visible": true,
+    "faq_expands_and_displays_installation_answer": true,
+    "dynamic_version_and_size_visible": true,
+    "physical_phone_installation_tested": false,
+    "in_app_browser_preview": "Timed out twice; desktop and mobile browser QA used the existing browser instead."
+  },
+  "download_ui_unit_checks_passed": 5,
+  "api_regression": {
+    "public_automatic_bootstrap": true,
+    "expired_credentials_accepted": true,
+    "cross_device_denied_403": true,
+    "synthetic_credentials_removed": true,
+    "ai_calls": 0
+  }
+}

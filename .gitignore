@@ -54,6 +54,7 @@ server/tts-test.*
 /.codex_build/
 /.codex_tmp/
 /artifacts/cloud-test/
+/artifacts/product-site/
 /.chart-data-*/
 
 # Local presentation, submission and generated documentation artifacts

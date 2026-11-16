@@ -1,0 +1,35 @@
+yaligo-growth.top {
+    header {
+        Cache-Control "no-cache"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Content-Security-Policy "default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+    }
+    encode gzip
+    handle /download/android {
+        header Cache-Control "no-store"
+        redir * /downloads/__APK_FILENAME__ 302
+    }
+    handle /downloads/latest.json {
+        root * /opt/ugly-duckling-site/current
+        header Cache-Control "no-store"
+        rewrite * /release.json
+        file_server
+    }
+    handle /downloads/*.apk {
+        root * /opt/ugly-duckling-site
+        header {
+            Content-Type "application/vnd.android.package-archive"
+            Content-Disposition "attachment; filename=\"yaligo-cloudtest.apk\""
+            Cache-Control "public, max-age=31536000, immutable"
+        }
+        file_server
+    }
+    handle {
+        root * /opt/ugly-duckling-site/current/public
+        file_server
+    }
+}
+www.yaligo-growth.top {
+    redir https://yaligo-growth.top{uri} 308
+}
