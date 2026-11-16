@@ -107,7 +107,9 @@ def credential_for(request: Request, db: Session) -> CloudCredential:
     authorization = request.headers.get("authorization", "")
     scheme, _, token = authorization.partition(" ")
     credential = db.get(CloudCredential, digest(token)) if scheme.lower() == "bearer" and token and len(token) < 256 else None
-    if not credential or credential.revoked_at is not None or credential.expires_at <= int(time.time()):
+    if not credential or credential.revoked_at is not None or (
+        credential.expires_at <= int(time.time()) and not get_settings().cloud_open_enrollment
+    ):
         raise HTTPException(401, "云测授权已失效，请输入新的邀请码", headers={"WWW-Authenticate": "Bearer"})
     return credential
 

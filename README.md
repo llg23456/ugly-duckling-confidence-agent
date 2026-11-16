@@ -1,8 +1,8 @@
 # 小丑鸭 Confidence Agent
 
-香港后端已完成 `api.yaligo-growth.top` 的可信 HTTPS、受邀设备认证与 Android 真机独立联网验收。云测版输入一次邀请码后可直接使用，无需 WireGuard 或电脑隧道；安装及邀请码管理见 [云测说明](deploy/cloud-test/README.md)，证据见 [公网接口验收](deploy/cloud-test/access-verification.json) 和 [真机验收](deploy/cloud-test/phone-verification.json)。后端 80 项、Android JVM 18 项测试通过。新身份记忆提取和并发响应耗时仍待专项排查，历史记录见 [香港模型冒烟](deploy/cloud-test/hongkong-verification.json)。
+香港后端已完成 `api.yaligo-growth.top` 的可信 HTTPS 和 Android 真机独立联网验收。当前云测版自动接入，无需邀请码、WireGuard 或电脑隧道；安装见 [云测说明](deploy/cloud-test/README.md)，历史受邀版本的证据见 [公网接口验收](deploy/cloud-test/access-verification.json) 和 [真机验收](deploy/cloud-test/phone-verification.json)。原验收后端 80 项、Android JVM 18 项测试通过。新身份记忆提取和并发响应耗时仍待专项排查，历史记录见 [香港模型冒烟](deploy/cloud-test/hongkong-verification.json)。
 
-邀请新测试者：双击 `deploy/cloud-test/批量生成邀请码.cmd`，输入数量即可自动下载 CSV 清单，默认 20 个、7 天内兑换、授权到期为生成后的第 30 天。完整清单仅供组织者保管，逐人分发独立邀请码；具体参数及 SSH 配置见云测说明。
+2026-11-16 已取消邀请码和授权有效期：新版 APK 首次打开自动接入云端，所有用户不限每日调用次数。设备之间的数据仍隔离。新版安装包位于 `artifacts/cloud-test/20261116-open/yaligo-cloudtest-open.apk`，云端及构建验证见 [自动接入验证](deploy/cloud-test/open-enrollment-verification.json)。旧 APK 需升级才能移除邀请码页面与本机到期检查。
 
 一款面向缺乏自信用户的温情 AI 成长陪伴 Android 应用。当前版本已打通多模态会话、分层记忆、支持圈与求助反馈、日周月回望、压力趋势提醒、本机演示社区、成长小片、桌面组件和可信数据导出主链路。
 
@@ -66,7 +66,7 @@
 1. 使用 Android Studio 打开 `codex/cloud-test-hongkong` 分支所在的本目录，等待 Gradle Sync 完成。
 2. 选择 `app` 运行配置和 `debug` 构建类型，点击 Run。
 3. 默认安装“小丑鸭·云测”，包名为 `com.testconnection.confidence_agent.cloudtest`，后端固定为 `https://api.yaligo-growth.top`；Debug 与 Release 均使用相同云测身份，不再构建本地版。
-4. 首次使用输入独立邀请码，之后直接联网使用。升级已有云测应用会保留授权及数据；旧普通版数据不自动迁入。无需启动电脑后端或与电脑连接同一 Wi-Fi。
+4. 首次使用自动连接云端，无需邀请码，设备凭据不再到期。升级已有云测应用会保留授权及数据；旧普通版数据不自动迁入。无需启动电脑后端或与电脑连接同一 Wi-Fi。
 
 无需额外传入 Gradle 参数。旧的 `cloudTest`、`apiBaseUrl`、`isolatedP0Test` 参数已不再参与 Android 构建；Kotlin 2 Kapt 配置已写入项目属性，Android Studio 与命令行保持一致。
 

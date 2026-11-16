@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     database_url: str = "sqlite:///./confidence_agent.db"
     cloud_auth_required: bool = False
+    cloud_open_enrollment: bool = False
     # Non-positive values disable the corresponding daily quota.
     cloud_daily_requests: int = 60
     cloud_global_daily_requests: int = 300

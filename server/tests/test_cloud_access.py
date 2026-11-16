@@ -268,3 +268,36 @@ def test_daily_quota_switches_are_independent(cloud, per_device, global_limit):
     payload = {'device_id': 'owner', 'message': '今天好'}
     assert client.post('/api/v1/chat', headers=headers, json=payload).status_code == 200
     assert client.post('/api/v1/chat', headers=headers, json=payload).status_code == 429
+
+
+def test_open_enrollment_without_invitation_and_device_isolation(cloud, monkeypatch):
+    from app.api.routes import cloud_auth
+    client, settings, session, _, activate = cloud
+    old_headers = activate('previous-owner')
+    with session() as db:
+        old = db.scalar(select(access.CloudCredential).where(access.CloudCredential.device_id == 'previous-owner'))
+        old.expires_at = int(time.time()) - 1
+        db.add(Conversation(device_id='history-without-credential'))
+        db.commit()
+    settings.cloud_open_enrollment = True
+    monkeypatch.setattr(cloud_auth, 'get_settings', lambda: settings)
+    response = client.post('/api/v1/cloud-auth/bootstrap', json={'device_id': 'new-open-device'})
+    assert response.status_code == 200
+    assert response.json()['expires_at'] == cloud_auth.PERMANENT_ACCESS
+    headers = {'Authorization': 'Bearer ' + response.json()['access_token']}
+    assert client.get('/api/v1/conversations/new-open-device/messages', headers=headers).status_code == 200
+    assert client.get('/api/v1/conversations/previous-owner/messages', headers=headers).status_code == 403
+    assert client.get('/api/v1/cloud-auth/me', headers=old_headers).status_code == 200
+    renewed = client.post('/api/v1/cloud-auth/bootstrap', headers=old_headers, json={'device_id': 'previous-owner'})
+    assert renewed.status_code == 200 and renewed.json()['expires_at'] == cloud_auth.PERMANENT_ACCESS
+    assert client.post('/api/v1/cloud-auth/bootstrap', json={'device_id': 'previous-owner'}).status_code == 401
+    assert client.post('/api/v1/cloud-auth/bootstrap', headers=headers, json={'device_id': 'previous-owner'}).status_code == 403
+    assert client.post('/api/v1/cloud-auth/bootstrap', json={'device_id': 'history-without-credential'}).status_code == 409
+    with session() as db:
+        row = db.scalar(select(access.CloudCredential).where(access.CloudCredential.device_id == 'new-open-device'))
+        row.revoked_at = int(time.time()); db.commit()
+    assert client.get('/api/v1/cloud-auth/me', headers=headers).status_code == 401
+
+
+def test_bootstrap_disabled_by_default(cloud):
+    assert cloud[0].post('/api/v1/cloud-auth/bootstrap', json={'device_id': 'new'}).status_code == 403

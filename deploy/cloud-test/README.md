@@ -4,7 +4,19 @@
 
 证据分别见 [域名及证书](domain-verification.json)、[公网认证接口](access-verification.json) 和 [真机验收](phone-verification.json)。后端测试 80 项、Android JVM 测试 18 项通过。此前新身份记忆提取未落库，以及并发多模态请求约 19–22 秒的问题仍待专项排查；本次单次公网聊天约 1.91 秒，不能据此认定并发性能问题已解决。
 
-## 安装与邀请
+## 当前安装与自动接入
+
+2026-11-16 已上线 `20261116-hk10-open`：当前公开测试无需邀请码，设备授权无有效期。首次启动自动创建设备凭据，之后直接使用；已有设备持有的过期凭据也可继续使用。每日调用额度仍为不限次，瞬时频率保护保留。
+
+请安装 `artifacts/cloud-test/20261116-open/yaligo-cloudtest-open.apk`（同包名、同调试签名，可覆盖升级）。它以最新应用提交 `5e4b179` 为基础构建，保留同期功能，并移除了邀请码页面和手机端到期检查。已有旧版仍显示邀请码页或本机到期提示时，需要升级。原手机数据应通过覆盖安装保留，不要先卸载或清除数据。
+
+23 项后端访问控制测试、22 项 Android JVM 测试、新设备公网自动接入、过期凭据接续和设备隔离验证通过，见 [自动接入验证](open-enrollment-verification.json)。本次未进行实体手机界面验收。
+
+服务仍使用设备私有凭据隔离数据：自动接入不允许仅凭旧设备编号找回他人的数据。清除应用数据或丢失设备凭据后，如需恢复旧数据，仍需组织者核验并恢复设备身份。
+
+以下为历史受邀测试流程及运维工具，当前公开测试无需生成或发放邀请码。
+
+## 历史安装与邀请流程
 
 本地交付文件：`artifacts/cloud-test/20261114/ugly-duckling-cloudtest.apk`。包名 `com.testconnection.confidence_agent.cloudtest`，名称“小丑鸭·云测”，与原应用独立保存数据。该文件是受邀测试用 Debug APK，不是应用商店正式发布包。可运行 `build-apk.ps1` 重新构建并运行 Android JVM 测试；默认 SDK 为 `D:\Android\Sdk`。
 
@@ -73,9 +85,9 @@ docker compose -f deploy/cloud-test/compose.yaml exec -T api python -m app.cloud
 
 ## 访问边界与配额
 
-- 后端启用 `CLOUD_AUTH_REQUIRED=true`。未授权/过期/撤销返回 401，携带他人设备编号返回 403。
+- 后端启用 `CLOUD_AUTH_REQUIRED=true` 和 `CLOUD_OPEN_ENROLLMENT=true`：新设备自动接入，无需邀请码，设备凭据没有有效期。缺失或撤销的凭据返回 401，携带他人设备编号返回 403。
 - 服务端仅保存邀请码和高熵令牌的 SHA-256 摘要；Android 使用 Android Keystore 的 AES-GCM 密钥加密保存令牌，凭据文件排除在备份及设备迁移之外。凭据只发送给内置 HTTPS API 源，携带凭据的连接不自动跟随跳转。
-- 按组织者要求，2026-11-16 起取消全部云测用户的每日次数额度：`CLOUD_DAILY_REQUESTS=0`、`CLOUD_GLOBAL_DAILY_REQUESTS=0`。非正数表示该项不限次；此前已耗尽日额度的用户同样可继续使用，无需清空历史计数。邀请码/授权到期时间仍按原规则计算。验证见 [不限次配置验证](unlimited-quota-verification.json)。
+- 按组织者要求，2026-11-16 起取消全部云测用户的每日次数额度：`CLOUD_DAILY_REQUESTS=0`、`CLOUD_GLOBAL_DAILY_REQUESTS=0`。非正数表示该项不限次；此前已耗尽日额度的用户同样可继续使用，无需清空历史计数。验证见 [不限次配置验证](unlimited-quota-verification.json)。
 - 每设备每分钟最多 90 次业务请求；每来源地址每分钟最多 5 次激活尝试。视频合成仅允许 1 个并发任务。超出返回 429。这些是瞬时负载保护，业务服务仍受模型供应商的调用限制。
 - 后端只绑定 `127.0.0.1:8000`，Caddy 对外提供 TCP 80/443；80 用于证书验证及跳转。公网文档及其他未配置路径不开放。健康检查不需要凭据。
 - Caddy 限制激活请求 4 KB、普通 API 16 MB、视频上传 128 MB；应用还会校验媒体类型、文件数量和大小。

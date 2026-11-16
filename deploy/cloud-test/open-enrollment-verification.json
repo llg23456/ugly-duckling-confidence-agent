@@ -1,0 +1,34 @@
+{
+  "verified_on": "2026-11-16",
+  "active_release": "20261116-hk10-open",
+  "base_release": "20261116-hk09-unlimited",
+  "invitation_required": false,
+  "authorization_expires": false,
+  "automatic_device_credentials": true,
+  "existing_expired_credentials_accepted": true,
+  "device_credentials_required_for_existing_data": true,
+  "new_device_public_bootstrap_200": true,
+  "same_device_credential_refresh_200": true,
+  "guessed_existing_device_cannot_bootstrap": true,
+  "cross_device_rejected_403": true,
+  "synthetic_credentials_removed": true,
+  "unlimited_daily_quotas_preserved": true,
+  "backend_security_tests_passed": 23,
+  "ai_calls_during_validation": 0,
+  "other_application_source_files_unchanged": 76,
+  "public_health_ok": true,
+  "legacy_client_note": "Install the new APK to remove the invitation screen and local credential expiry checks.",
+  "android": {
+    "base_commit": "5e4b17937a3ab94304ef4e0755ff94982f703783",
+    "modified_source_files": {
+      "app/src/main/java/com/testconnection/confidence_agent/data/remote/CloudAccess.kt": "b4b768aef231214d05ae232015adfe3a6d7cf0d004e6626ee88838e18d4ea5b4",
+      "app/src/main/java/com/testconnection/confidence_agent/ui/screens/CloudAccessScreen.kt": "9e4e7af718ef73661db34ff2d62eb6617a549a6199dc7e1f33df84d02fc777a0"
+    },
+    "build_and_unit_tests_passed": true,
+    "unit_tests_passed": 22,
+    "apk_sha256": "a2d0959a225ba792eaf4b80076645ca62b6867a03b3ca111b1209cc2af0863b6",
+    "apk_bytes": 65716497,
+    "physical_device_ui_acceptance_performed": false,
+    "reproduce": "Checkout base_commit, overlay the two modified source files from this change, run :app:assembleDebug :app:testDebugUnitTest with JDK 21."
+  }
+}

@@ -42,7 +42,6 @@ object CloudAccess {
             require(json.getString("server") == BuildConfig.API_BASE_URL.trimEnd('/'))
             require(json.getString("device_id") == DeviceIdStore(appContext).get())
             expiresAt = json.getLong("expires_at")
-            require(expiresAt > System.currentTimeMillis() / 1000)
             accessToken = json.getString("access_token")
             mutableAuthorized.value = true
         }.onFailure { invalidate() }
@@ -80,15 +79,11 @@ object CloudAccess {
 
     fun tokenFor(url: URL): String? {
         if (!BuildConfig.CLOUD_TEST || !CloudUrlPolicy.isApiUrl(url, BuildConfig.API_BASE_URL)) return null
-        if (expiresAt <= System.currentTimeMillis() / 1000) {
-            invalidate()
-            return null
-        }
         return accessToken
     }
 
-    suspend fun activate(code: String) = withContext(Dispatchers.IO) {
-        val url = URL("${BuildConfig.API_BASE_URL.trimEnd('/')}/api/v1/cloud-auth/activate")
+    suspend fun connect() = withContext(Dispatchers.IO) {
+        val url = URL("${BuildConfig.API_BASE_URL.trimEnd('/')}/api/v1/cloud-auth/bootstrap")
         require(url.protocol == "https") { "云测需要安全连接" }
         val connection = (url.openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
@@ -100,7 +95,7 @@ object CloudAccess {
         }
         var phase = "request"
         try {
-            connection.outputStream.use { it.write(JSONObject().put("invite_code", code.trim())
+            connection.outputStream.use { it.write(JSONObject()
                 .put("device_id", DeviceIdStore(appContext).get()).toString().toByteArray(Charsets.UTF_8)) }
             val status = connection.responseCode
             val text = (if (status in 200..299) connection.inputStream else connection.errorStream)
